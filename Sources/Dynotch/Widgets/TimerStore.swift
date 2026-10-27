@@ -72,6 +72,19 @@ final class TimerStore: ObservableObject {
         refreshTicker()
     }
 
+    /// More time on a timer, running or paused: the glance's "+1 min".
+    func extend(_ countdown: Countdown, by seconds: TimeInterval) {
+        guard let index = countdowns.firstIndex(where: { $0.id == countdown.id }) else { return }
+        let left = countdowns[index].remaining(at: .now)
+        countdowns[index].duration += seconds
+        if let end = countdowns[index].endDate {
+            countdowns[index].endDate = end.addingTimeInterval(seconds)
+        } else {
+            countdowns[index].pausedRemaining = left + seconds
+        }
+        refreshTicker()
+    }
+
     func togglePause(_ countdown: Countdown) {
         guard let index = countdowns.firstIndex(where: { $0.id == countdown.id }) else { return }
         let now = Date.now

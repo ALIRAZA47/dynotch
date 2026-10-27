@@ -1,46 +1,43 @@
 import SwiftUI
 
-/// Named timers started from text like "tea 4m", and a stopwatch, next to the Pomodoro.
-/// Rows are compact, so three timers fit between the field and the stopwatch.
-struct TimersWidget: View {
+/// Named timers started from text like "tea 4m", and a stopwatch, beside the Pomodoro's dial on
+/// the Focus tab. The timers take what's left between the title and the stopwatch.
+struct TimersList: View {
     @ObservedObject private var store = TimerStore.shared
     @ViewState private var draft = ""
     @ViewState private var isInvalid = false
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
-        WidgetCard(title: "Timers", symbol: "hourglass") {
-            if !store.countdowns.isEmpty {
-                Text("\(store.countdowns.count)")
-                    .font(NotchFont.numeric(9.5, .bold))
+        VStack(alignment: .leading, spacing: 4) {
+            CardTitle(title: "Timers", symbol: "hourglass") {
+                if !store.countdowns.isEmpty {
+                    Text("\(store.countdowns.count)")
+                        .font(NotchFont.numeric(10.5))
+                }
             }
-        } content: {
-            VStack(alignment: .leading, spacing: 4) {
-                CardField(placeholder: "tea 4m, nap 20", text: $draft, isInvalid: isInvalid, onSubmit: submit)
-                    .onChange(of: draft) { isInvalid = false }
-                    .help("A name and a time: tea 4m, eggs 90s, nap 1h30. A number on its own is minutes.")
-                if store.countdowns.isEmpty {
-                    Text("Type a name and a time, like tea 4m or laundry 45.")
-                        .font(NotchFont.footnote)
-                        .foregroundStyle(theme.tertiary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 4)
-                        .padding(.top, 2)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                } else {
-                    // Takes what's left between the field and the stopwatch, however many timers there are.
-                    Scroller(.vertical, fadesOverflow: true) {
-                        VStack(alignment: .leading, spacing: 1) {
-                            ForEach(store.countdowns) { countdown in
-                                row(countdown)
-                                    .transition(.opacity.combined(with: .move(edge: .top)))
-                            }
+            if store.countdowns.isEmpty {
+                Text("Type a name and a time, like tea 4m or laundry 45.")
+                    .font(NotchFont.footnote)
+                    .foregroundStyle(theme.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                Scroller(.vertical, fadesOverflow: true) {
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(store.countdowns) { countdown in
+                            row(countdown)
+                                .transition(.opacity.combined(with: .move(edge: .top)))
                         }
                     }
-                    .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
                 }
-                stopwatchRow
+                .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
             }
+            stopwatchRow
+            CardField(placeholder: "tea 4m, nap 20", text: $draft, isInvalid: isInvalid, onSubmit: submit)
+                .onChange(of: draft) { isInvalid = false }
+                .help("A name and a time: tea 4m, eggs 90s, nap 1h30. A number on its own is minutes.")
         }
     }
 
@@ -78,7 +75,7 @@ struct TimersWidget: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .help(countdown.name)
             Text(Format.duration(countdown.remaining(at: store.now).rounded(.up)))
-                .font(NotchFont.numeric(11.5))
+                .font(NotchFont.numeric(12))
                 .foregroundStyle(running ? TimerStore.tint : theme.secondary)
                 .layoutPriority(1)
             SmallButton(help: "Cancel", action: {
@@ -90,7 +87,7 @@ struct TimersWidget: View {
             }
         }
         .padding(.horizontal, 1)
-        .frame(height: 20)
+        .frame(height: 22)
     }
 
     private var stopwatchRow: some View {

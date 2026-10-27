@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var hotKey: HotKey?
     private var muteHotKey: HotKey?
+    private var commandHotKey: HotKey?
     private let profilesMenu = NSMenu(title: "Profiles")
     private var cancellables = Set<AnyCancellable>()
 
@@ -84,6 +85,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.muteHotKey?.unregister()
                 self?.muteHotKey = enabled
                     ? HotKey(keyCode: kVK_ANSI_M, modifiers: controlKey | optionKey) { MicMonitor.shared.toggleMute() }
+                    : nil
+            }
+            .store(in: &cancellables)
+        settings.$commandShortcut
+            .sink { [weak self] enabled in
+                self?.commandHotKey?.unregister()
+                self?.commandHotKey = enabled
+                    ? HotKey(keyCode: kVK_ANSI_K, modifiers: controlKey | optionKey) { NotchManager.shared.openCommand() }
                     : nil
             }
             .store(in: &cancellables)

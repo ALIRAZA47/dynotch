@@ -109,6 +109,17 @@ enum FileActions {
         return converted ? destination : nil
     }
 
+    /// Files and folders picked in an Open panel, or none if it was cancelled.
+    static func chooseFiles(prompt: String) -> [URL] {
+        NSApp.activate(ignoringOtherApps: true)
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = true
+        panel.allowsMultipleSelection = true
+        panel.prompt = prompt
+        return panel.runModal() == .OK ? panel.urls : []
+    }
+
     static func chooseFolder(prompt: String) -> URL? {
         NSApp.activate(ignoringOtherApps: true)
         let panel = NSOpenPanel()

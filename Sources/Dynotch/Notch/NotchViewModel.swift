@@ -99,7 +99,8 @@ struct ClosedLayout: Equatable {
 @MainActor
 final class NotchViewModel: ObservableObject {
     enum Phase: Equatable {
-        case closed, hovering, open
+        /// `glance`: the live thing with a control or two, from resting the pointer on the notch.
+        case closed, hovering, glance, open
     }
 
     @Published private(set) var geometry: NotchGeometry
@@ -112,6 +113,13 @@ final class NotchViewModel: ObservableObject {
     @Published private(set) var secondary: CompactActivity?
     /// A context menu is open; the notch must not close under it.
     @Published var isMenuOpen = false
+    /// The command field covers the tabs. The panel takes the keyboard while it's up.
+    @Published private(set) var isCommandMode = false
+    @Published var commandQuery = "" {
+        didSet { commandResults = CommandEngine.results(for: commandQuery, in: self) }
+    }
+    /// What the command field offers for `commandQuery`, worked out as it changes.
+    @Published private(set) var commandResults: [CommandResult] = []
 
     /// Something was dragged out of the tray and the drag hasn't ended yet.
     var isDraggingOut = false
@@ -140,6 +148,7 @@ final class NotchViewModel: ObservableObject {
     }
 
     var isOpen: Bool { phase == .open }
+    var isGlancing: Bool { phase == .glance }
 
     var shouldStayOpen: Bool { isMenuOpen || isDraggingFiles || isDraggingOut }
 
@@ -149,7 +158,22 @@ final class NotchViewModel: ObservableObject {
 
     /// The notch is drawn as a faint line: a virtual notch set to one, closed, with nothing to show.
     var isLine: Bool {
-        geometry.isLine && phase != .open && activity == .idle && secondary == nil
+        geometry.isLine && (phase == .closed || phase == .hovering) && activity == .idle && secondary == nil
+    }
+
+    /// What the glance shows, from what's live right now.
+    var glanceContent: GlanceContent {
+        GlanceContent(activity: activity)
+    }
+
+    /// The open notch with the command field up: tall enough for its rows, at least as tall as the tabs.
+    static func commandHeight(rows: Int, closedHeight: CGFloat) -> CGFloat {
+        closedHeight + 92 + 32 * CGFloat(min(max(rows, 1), CommandEngine.maximumResults))
+    }
+
+    /// The tallest the open notch gets, so its panel always has room.
+    static func tallestOpenHeight(closedHeight: CGFloat) -> CGFloat {
+        max(AppSettings.shared.openHeight, commandHeight(rows: CommandEngine.maximumResults, closedHeight: closedHeight))
     }
 
     /// The tab on screen: the tray while files are dragged in, otherwise the chosen one if it's enabled.
@@ -167,8 +191,17 @@ final class NotchViewModel: ObservableObject {
         switch phase {
         case .open:
             let theme = settings.theme
-            return NotchMetrics(width: settings.openWidth, height: settings.openHeight,
+            var height = settings.openHeight
+            if isCommandMode {
+                height = max(height, Self.commandHeight(rows: commandResults.count, closedHeight: geometry.closedSize.height))
+            }
+            return NotchMetrics(width: settings.openWidth, height: height,
                                 topRadius: theme.topRadius, bottomRadius: theme.bottomRadius)
+        case .glance:
+            let closed = geometry.closedSize
+            return NotchMetrics(width: min(settings.openWidth, closed.width + GlanceContent.earWidth * 2),
+                                height: closed.height + glanceContent.extraHeight,
+                                topRadius: 8, bottomRadius: 22)
         case .closed, .hovering:
             let hovering = phase == .hovering
             if isLine {
@@ -193,19 +226,68 @@ final class NotchViewModel: ObservableObject {
         NowPlayingService.shared.refresh()
     }
 
+    /// Grows the hovered notch into a glance at what's live.
+    func glance() {
+        guard phase == .closed || phase == .hovering else { return }
+        withAnimation(.notchGlance) { phase = .glance }
+    }
+
     func close() {
         guard phase != .closed else { return }
         withAnimation(.notchClose) {
             phase = .closed
             isDraggingFiles = false
+            isCommandMode = false
         }
+        commandQuery = ""
     }
 
     func setHovering(_ hovering: Bool) {
-        guard phase != .open else { return }
+        guard phase == .closed || phase == .hovering else { return }
         let next: Phase = hovering ? .hovering : .closed
         guard next != phase else { return }
         withAnimation(.notchHover) { phase = next }
+    }
+
+    // MARK: Command field
+
+    /// Puts the command field over the tabs, with `text` typed into it.
+    func beginCommand(_ text: String = "") {
+        commandQuery = text
+        isCommandMode = true
+        // The shortcuts are commands too, and they're only listed once asked for.
+        if ShortcutsService.shared.all.isEmpty {
+            Task { await ShortcutsService.shared.reload() }
+        }
+    }
+
+    /// Back to the tab that was showing.
+    func endCommand() {
+        guard isCommandMode else { return }
+        isCommandMode = false
+        commandQuery = ""
+    }
+
+    /// Escape: clears what's typed, then leaves the field.
+    func escapeCommand() {
+        if commandQuery.isEmpty {
+            withAnimation(.notchTab) { endCommand() }
+        } else {
+            commandQuery = ""
+        }
+    }
+
+    /// Runs a result, then gets out of the way: the notch closes unless the result opened a tab.
+    func run(_ result: CommandResult) {
+        guard let action = result.action else { return }
+        switch action(self) {
+        case .close:
+            close()
+        case .stay:
+            withAnimation(.notchTab) { endCommand() }
+        case .fill(let text):
+            commandQuery = text
+        }
     }
 
     func update(geometry: NotchGeometry) {
@@ -217,11 +299,13 @@ final class NotchViewModel: ObservableObject {
     // MARK: Snapshots
 
     func stage(phase: Phase, activity: ClosedActivity, secondary: CompactActivity? = nil, tab: NotchTab = .home,
-               draggingFiles: Bool = false) {
+               draggingFiles: Bool = false, command: String? = nil) {
         self.phase = phase
         self.activity = activity
         self.secondary = secondary
         self.tab = tab
         isDraggingFiles = draggingFiles
+        isCommandMode = command != nil
+        commandQuery = command ?? ""
     }
 }
