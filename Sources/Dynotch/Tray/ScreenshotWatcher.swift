@@ -68,6 +68,12 @@ final class ScreenshotWatcher: ObservableObject {
         folders().map { FileManager.default.displayName(atPath: $0.path) }.joined(separator: " and ")
     }
 
+    /// Where the Screenshot app saves screenshots, which is where Dynotch's own captures go too.
+    static func saveFolder() -> URL {
+        CFPreferencesAppSynchronize(domain)
+        return folder(preferring: "location-screenshot")
+    }
+
     // MARK: Private
 
     private func watch() {

@@ -321,6 +321,8 @@ private struct NotchStep: View {
 
 private struct HighlightsStep: View {
     private let highlights = [
+        InfoTile(symbol: "rectangle.dashed.badge.record", title: "Capture",
+                 detail: "⌃⌥S freezes the screen: select a region, mark it up, then copy, save or pin it", tint: .purple),
         InfoTile(symbol: "magnifyingglass", title: "Command field",
                  detail: "⌃⌥K: start a timer, add a note or a reminder, work out a sum", tint: Palette.lavender),
         InfoTile(symbol: "mic.slash.fill", title: "Mute and on air",
@@ -333,12 +335,14 @@ private struct HighlightsStep: View {
                  detail: "Work, Home, Presenting: switch the whole setup at once", tint: .teal),
         InfoTile(symbol: "cloud.sun.rain.fill", title: "Weather and notes",
                  detail: "Rain alerts, and notes that sync through iCloud Drive", tint: .blue),
+        InfoTile(symbol: "minus", title: "Line notch",
+                 detail: "On a display without a notch, a faint line that only grows when needed", tint: .gray),
     ]
 
     var body: some View {
         SettingsSection(title: "Highlights",
                         footer: "Also new: black or glass themes in your accent color, the volume and brightness keys without the system's HUD, an equalizer that follows the music, an output switcher, Quick Look and screenshots in the Tray, connecting Bluetooth devices from the Control tab, and a second activity as a glyph in the right ear.") {
-            TileGrid(items: highlights, columns: 3) { InfoTileView(tile: $0) }
+            TileGrid(items: highlights, columns: 4) { InfoTileView(tile: $0) }
         }
     }
 }

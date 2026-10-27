@@ -274,6 +274,78 @@ enum SnapshotRenderer {
         renderThemes(into: folder)
         renderProfiles(into: folder)
         renderWelcome(into: folder)
+        renderCapture(into: folder)
+    }
+
+    // MARK: Capture
+
+    /// The capture editor over a made-up display: a bare selection, the toolbar with marks of every
+    /// kind, a text mark being typed, and a pinned capture.
+    private static func renderCapture(into folder: URL) {
+        guard let display = CaptureController.syntheticDisplay(id: 1, frame: CGRect(x: 0, y: 0, width: 1280, height: 800), scale: 2)
+        else { return }
+        var count = 0
+        let editor = CaptureEditor(displays: [display], accent: AppSettings.shared.theme.accent)
+        let selection = CGRect(x: 118, y: 150, width: 700, height: 430)
+        editor.stage(selection: selection, on: display.id)
+        let window = CaptureOverlayWindow(display: display, editor: editor)
+        window.setFrameOrigin(NSPoint(x: -20_000, y: -60_000))
+        window.orderFrontRegardless()
+        RunLoop.main.run(until: .now + 1.2)
+        if save(window, to: folder.appendingPathComponent("capture-1-selection.png")) { count += 1 }
+
+        // The blur first, so the arrow over it stays whole.
+        let marks: [Annotation] = [
+            Annotation(kind: .blur(CGRect(x: 180, y: 384, width: 400, height: 56)), color: .red, width: 4),
+            Annotation(kind: .arrow(from: CGPoint(x: 560, y: 470), to: CGPoint(x: 395, y: 352)), color: .red, width: 4),
+            Annotation(kind: .rectangle(CGRect(x: 180, y: 268, width: 420, height: 44)), color: .orange, width: 3),
+            Annotation(kind: .marker(points: [CGPoint(x: 188, y: 366), CGPoint(x: 540, y: 366)]), color: .yellow, width: 4),
+            Annotation(kind: .counter(center: CGPoint(x: 160, y: 290), number: 1), color: .blue, width: 4),
+            Annotation(kind: .counter(center: CGPoint(x: 160, y: 366), number: 2), color: .blue, width: 4),
+            Annotation(kind: .ellipse(CGRect(x: 690, y: 200, width: 110, height: 110)), color: .green, width: 5),
+            Annotation(kind: .pencil(points: stride(from: 0, through: 24, by: 1).map {
+                CGPoint(x: 620 + Double($0) * 7, y: 520 + sin(Double($0) / 2.2) * 18)
+            }), color: .purple, width: 3),
+            Annotation(kind: .text(origin: CGPoint(x: 600, y: 420), string: "Ship it"), color: .black, width: 8),
+        ]
+        editor.stage(selection: selection, on: display.id, annotations: marks)
+        editor.tool = .arrow
+        RunLoop.main.run(until: .now + 1.0)
+        if save(window, to: folder.appendingPathComponent("capture-2-editor-dark.png")) { count += 1 }
+        window.appearance = NSAppearance(named: .aqua)
+        RunLoop.main.run(until: .now + 0.8)
+        if save(window, to: folder.appendingPathComponent("capture-2-editor-light.png")) { count += 1 }
+        window.appearance = NSAppearance(named: .darkAqua)
+
+        // A text mark being typed, in the color and width picked. Typed through the window, as a
+        // person would, so the field shows an insertion point rather than a selection.
+        editor.tool = .text
+        editor.color = .yellow
+        editor.width = 6
+        window.makeKey()
+        editor.mouseDown(at: CGPoint(x: 640, y: 236), on: display.id)
+        editor.mouseUp(at: CGPoint(x: 640, y: 236), on: display.id)
+        RunLoop.main.run(until: .now + 0.5)
+        CaptureSelfTest.type("Review this", into: window)
+        RunLoop.main.run(until: .now + 1.0)
+        if save(window, to: folder.appendingPathComponent("capture-3-text.png")) { count += 1 }
+        editor.discardText()
+        window.orderOut(nil)
+        window.close()
+
+        if let output = editor.render() {
+            for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+                let pin = PinnedCaptureWindow(output: output, frame: CGRect(x: -21_000, y: -61_000, width: output.pointSize.width,
+                                                                              height: output.pointSize.height))
+                pin.appearance = NSAppearance(named: appearance)
+                pin.orderFrontRegardless()
+                RunLoop.main.run(until: .now + 1.0)
+                if save(pin, to: folder.appendingPathComponent("capture-4-pinned-\(suffix).png")) { count += 1 }
+                pin.orderOut(nil)
+                pin.close()
+            }
+        }
+        print("Wrote \(count) capture snapshots to \(folder.path)")
     }
 
     /// Puts a theme in the settings, where the notch reads it. Only writes what differs.

@@ -10,10 +10,13 @@ import SwiftUI
 ///     dynotch://timer/start            start, pause, toggle, reset or skip
 ///     dynotch://tray/add?path=/a/file&path=/another/file&show=1
 ///     dynotch://profile?name=Work      switches to a saved profile
+///     dynotch://capture                freezes the screen to capture a region, like ⌃⌥S
 ///
 /// Anything on the Mac can open these links, so they only do what the user could see and undo:
 /// notices carry a terminal badge, Tray adds point at files without copying them and skip
-/// ~/Library, and nothing reads a protected database on a link's behalf.
+/// ~/Library, and nothing reads a protected database on a link's behalf. A capture link only
+/// opens the editor over the screen: nothing is copied or saved until the user acts, and Esc
+/// closes it.
 @MainActor
 enum URLCommands {
     static func handle(_ url: URL) {
@@ -42,6 +45,8 @@ enum URLCommands {
             if value("show") == "1" { NotchManager.shared.open(tab: .tray) }
         case "profile":
             ProfileStore.shared.switchTo(named: value("name") ?? "")
+        case "capture":
+            CaptureController.shared.begin()
         default:
             // Only the command, since the query may carry text that shouldn't end up in a log.
             NSLog("Dynotch: ignoring dynotch://%@", path.joined(separator: "/"))
