@@ -44,7 +44,7 @@ final class MediaKeyTap: ObservableObject {
     }
 
     /// Where one press of a volume or brightness key lands: the next sixteenth, or sixty-fourth with ⇧⌥,
-    /// as in macOS. It's at least three quarters of a step away, so every press shows.
+    /// as in macOS. It's at least a quarter of a step away, so a level just short of a step still moves a whole one.
     nonisolated static func step(from value: Float, up: Bool, fine: Bool) -> Float {
         let steps: Float = fine ? 64 : 16
         let position = value * steps
