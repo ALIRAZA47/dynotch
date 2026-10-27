@@ -2,7 +2,8 @@ import AudioToolbox
 import CoreAudio
 import Foundation
 
-/// Watches the default output device's volume and mute, and shows them in the notch.
+/// Watches the default output device's volume and mute and shows them in the notch. It also changes
+/// them, for the media keys when the system HUD is replaced and for scrolling over the artwork.
 @MainActor
 final class VolumeMonitor: ObservableObject {
     static let shared = VolumeMonitor()
