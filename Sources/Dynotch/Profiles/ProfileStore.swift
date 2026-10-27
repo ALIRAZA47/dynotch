@@ -245,8 +245,9 @@ final class ProfileStore: ObservableObject {
 
     /// Switches a profile on by hand. Rules leave it alone until their Focus or display changes again.
     func switchTo(_ profile: Profile) {
+        guard let index = index(of: profile) else { return }
         restore = nil
-        apply(profile)
+        apply(profiles[index])
         persistState()
     }
 

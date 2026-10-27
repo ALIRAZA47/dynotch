@@ -34,10 +34,6 @@ extension Cadence {
     static let countdown = Cadence(name: "Timer countdown", every: 0.5, onBattery: 0.5, lowPower: 1)
     /// Accessibility is granted in System Settings, which doesn't tell the app.
     static let accessibilityCheck = Cadence(name: "Accessibility check", every: 2, onBattery: 2, lowPower: 4)
-
-    static let all: [Cadence] = [.systemStats, .focusSchedules, .bluetoothBatteries, .weather, .downloadMoving,
-                                 .downloadStalled, .downloadDormant, .eventAlerts, .screenshotFolder, .countdown,
-                                 .accessibilityCheck]
 }
 
 /// Keeps Dynotch quiet when nobody's looking. Polls pause while the displays sleep, the screen is
