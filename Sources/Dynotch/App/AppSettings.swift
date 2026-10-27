@@ -181,6 +181,10 @@ final class AppSettings: ObservableObject {
     @Published var showAllDayEvents: Bool = AppSettings.value("showAllDayEvents", true) {
         didSet { save("showAllDayEvents", showAllDayEvents) }
     }
+    /// Where notes are kept as Markdown files. Empty for Dynotch's own folder.
+    @Published var notesFolderPath: String = AppSettings.value("notesFolderPath", "") {
+        didSet { save("notesFolderPath", notesFolderPath) }
+    }
 
     // MARK: Tray
 

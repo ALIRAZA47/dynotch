@@ -457,11 +457,72 @@ struct NookSettings: View {
                 }
                 .onChange(of: settings.showAllDayEvents) { CalendarService.shared.reload() }
             }
+            SettingsSection(title: "Notes",
+                            footer: "Each note is a Markdown file named after its first line. Keep them in iCloud Drive to have them on all your Macs. Leaving Dynotch's own folder takes your notes along.") {
+                NotesFolderCard()
+            }
             SettingsSection(title: "Pinned shortcuts", trailing: "\(settings.pinnedShortcuts.count) of 4",
                             footer: "Pin up to four. They show in the Shortcuts widget.") {
                 ShortcutPins()
             }
         }
+    }
+}
+
+/// Where notes are kept, and ways to move them.
+private struct NotesFolderCard: View {
+    @ObservedObject private var store = NotesStore.shared
+
+    var body: some View {
+        SettingsCard {
+            HStack(spacing: 12) {
+                SymbolBadge(symbol: store.isInICloud ? "icloud.fill" : "folder.fill", tint: store.isInICloud ? .blue : .yellow,
+                            size: 26)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(store.isUsingDefaultFolder ? "Dynotch's folder" : FileManager.default.displayName(atPath: store.folder.path))
+                        .font(.system(size: 13, weight: .medium))
+                    Text(Self.describe(store.folder))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                .accessibilityElement(children: .combine)
+                Spacer(minLength: 12)
+                Text(store.notes.filter(\.isOnDisk).count == 1 ? "1 note" : "\(store.notes.filter(\.isOnDisk).count) notes")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+            CardDivider()
+            HStack(spacing: 8) {
+                CapsuleButton(title: "Choose Folder…", symbol: "folder") {
+                    if let folder = FileActions.chooseFolder(prompt: "Keep Notes Here") { store.useFolder(folder) }
+                }
+                if let iCloud = store.iCloudFolder, !store.isInICloud {
+                    CapsuleButton(title: "Use iCloud Drive", symbol: "icloud") { store.useFolder(iCloud) }
+                }
+                if !store.isUsingDefaultFolder {
+                    CapsuleButton(title: "Use Dynotch's Folder", symbol: "arrow.uturn.backward") { store.useFolder(nil) }
+                }
+                Spacer(minLength: 0)
+                CapsuleButton(title: "Show in Finder", symbol: "arrow.up.forward") { NSWorkspace.shared.open(store.folder) }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 11)
+        }
+    }
+
+    /// "iCloud Drive › Dynotch Notes", or the path with ~ for the home folder.
+    private static func describe(_ folder: URL) -> String {
+        let drive = "/Library/Mobile Documents/com~apple~CloudDocs"
+        if let range = folder.path.range(of: drive) {
+            let rest = folder.path[range.upperBound...].split(separator: "/").joined(separator: " › ")
+            return rest.isEmpty ? "iCloud Drive" : "iCloud Drive › " + rest
+        }
+        return (folder.path as NSString).abbreviatingWithTildeInPath
     }
 }
 

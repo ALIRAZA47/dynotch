@@ -82,8 +82,8 @@ enum SnapshotRenderer {
     // MARK: Settings
 
     /// Renders every settings page, light and dark, in a real window parked off screen. A page
-    /// that scrolls gets a second image scrolled to the end. ImageRenderer can't draw the
-    /// AppKit-backed views a settings page is made of.
+    /// that scrolls gets a second image scrolled to the end, and one for each screenful in between
+    /// ("-2", "-3"...). ImageRenderer can't draw the AppKit-backed views a settings page is made of.
     private static func renderSettings(into folder: URL) {
         var count = 0
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
@@ -102,7 +102,18 @@ enum SnapshotRenderer {
                 let name = String(format: "settings-%d-%@-%@", page.number, page.rawValue, suffix)
                 if save(window, to: folder.appendingPathComponent(name + ".png")) { count += 1 }
                 if let scrollView = window.contentView.flatMap(overflowingScrollView), let document = scrollView.documentView {
-                    let end = document.isFlipped ? document.frame.height - scrollView.contentView.bounds.height : 0
+                    let viewport = scrollView.contentView.bounds.height
+                    let end = document.isFlipped ? document.frame.height - viewport : 0
+                    var offset = viewport - 60
+                    var part = 2
+                    while document.isFlipped, offset < end - 60 {
+                        scrollView.contentView.scroll(to: NSPoint(x: 0, y: offset))
+                        scrollView.reflectScrolledClipView(scrollView.contentView)
+                        RunLoop.main.run(until: .now + 0.8)
+                        if save(window, to: folder.appendingPathComponent("\(name)-\(part).png")) { count += 1 }
+                        offset += viewport - 60
+                        part += 1
+                    }
                     scrollView.contentView.scroll(to: NSPoint(x: 0, y: end))
                     scrollView.reflectScrolledClipView(scrollView.contentView)
                     RunLoop.main.run(until: .now + 0.8)
@@ -191,8 +202,11 @@ enum SnapshotRenderer {
             .init(id: "airpods", name: "AirPods Pro", kind: .earbuds, left: 80, right: 78, batteryCase: 27),
             .init(id: "keyboard", name: "Magic Keyboard", kind: .keyboard, main: 64),
         ], paired: samplePairedDevices)
-        // Registered, not saved, so a snapshot run never touches real notes.
-        UserDefaults.standard.register(defaults: ["notes.text": "Call the bank about the card\nIdeas: notch widgets for weather"])
+        // In memory only, so a snapshot run never touches real notes.
+        NotesStore.shared.loadSample([
+            "Weekend\n- [x] Book the campsite\n- [ ] Pack the tent\n- [ ] Call Sam about the car\nBring the good coffee",
+            "Ideas\n- Notch widget for the weather",
+        ])
 
         let files = ["Q3 Report.pdf", "Hero shot.png", "Brand assets.zip", "Keynote draft.key", "notes.txt"]
         let samples = folder.appendingPathComponent("tray-samples", isDirectory: true)

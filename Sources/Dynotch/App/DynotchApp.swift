@@ -33,6 +33,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.mainMenu = Self.makeMainMenu()
         TrayStore.shared.load()
+        NotesStore.shared.start()
         NowPlayingService.shared.start()
         PowerMonitor.shared.start()
         CalendarService.shared.start()
