@@ -24,6 +24,8 @@ enum SnapshotRenderer {
         let volume = LiveNotice(key: "volume", symbol: "speaker.wave.2.fill", tint: .white, kind: .meter(0.62))
         let charging = LiveNotice(key: "power", symbol: "bolt.fill", tint: .green, text: "82%")
         let event = LiveNotice(key: "event", symbol: "calendar", tint: .orange, text: "in 5m", detail: "Design review")
+        let message = NotificationPeek.sample()
+        let privateMessage = NotificationPeek.sample(hideText: true)
         let scenes = [
             Scene(name: "01-closed-idle", phase: .closed),
             Scene(name: "02-closed-hover", phase: .hovering),
@@ -33,6 +35,8 @@ enum SnapshotRenderer {
             Scene(name: "06-closed-volume", phase: .closed, activity: .notice(volume)),
             Scene(name: "07-closed-charging", phase: .closed, activity: .notice(charging)),
             Scene(name: "08-closed-event", phase: .closed, activity: .notice(event)),
+            Scene(name: "09-closed-notification", phase: .closed, activity: .notice(message)),
+            Scene(name: "09-closed-notification-private", phase: .closed, activity: .notice(privateMessage)),
             Scene(name: "10-open-nook", phase: .open, tab: .home),
             Scene(name: "11-open-nook-empty", phase: .open, tab: .home, hasTrack: false),
             Scene(name: "12-open-tray", phase: .open, tab: .tray),

@@ -40,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         BrightnessMonitor.shared.start()
         DeviceBatteryMonitor.shared.start()
         LiveActivityCenter.shared.start()
+        NotificationMirror.shared.start()
         NotchManager.shared.start()
 
         let settings = AppSettings.shared

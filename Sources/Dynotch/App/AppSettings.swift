@@ -212,6 +212,24 @@ final class AppSettings: ObservableObject {
         didSet { save("timerSound", timerSound) }
     }
 
+    // MARK: Notification peeks
+
+    @Published var liveNotifications: Bool = AppSettings.value("liveNotifications", true) {
+        didSet { save("liveNotifications", liveNotifications) }
+    }
+    /// Peeks show only the app and the sender.
+    @Published var notificationHideText: Bool = AppSettings.value("notificationHideText", false) {
+        didSet { save("notificationHideText", notificationHideText) }
+    }
+    /// Apps from `NotificationPeek.sources` that don't peek, by their `id`.
+    @Published var notificationMutedApps: [String] = AppSettings.value("notificationMutedApps", [String]()) {
+        didSet { save("notificationMutedApps", notificationMutedApps) }
+    }
+    /// Whether apps that aren't in `NotificationPeek.sources` peek.
+    @Published var notificationOtherApps: Bool = AppSettings.value("notificationOtherApps", true) {
+        didSet { save("notificationOtherApps", notificationOtherApps) }
+    }
+
     var enabledTabs: [NotchTab] {
         NotchTab.allCases.filter { tab in
             switch tab {
