@@ -155,6 +155,13 @@ final class AppSettings: ObservableObject {
         didSet { save("liveDevices", liveDevices) }
     }
 
+    // MARK: Live activities: two at once, microphone, timers, downloads, Focus
+
+    /// A second activity as a glyph in the right ear.
+    @Published var liveSecondary: Bool = AppSettings.value("liveSecondary", true) {
+        didSet { save("liveSecondary", liveSecondary) }
+    }
+
     // MARK: Nook
 
     @Published var homeWidgetA: HomeWidget = AppSettings.value("homeWidgetA", HomeWidget.calendar) {

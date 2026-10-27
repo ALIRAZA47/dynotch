@@ -28,13 +28,38 @@ enum ClosedActivity: Equatable {
     case notice(LiveNotice)
 }
 
-/// Decides what the closed notch shows, by priority: notices, a new track,
-/// a running focus timer, then music that's playing.
+/// A second activity, drawn as a small glyph at the end of the right ear while the main
+/// activity keeps the left ear and the rest of the notch.
+enum CompactActivity: Equatable {
+    case timer
+    case music
+
+    /// The main activity already shows this one.
+    func isShown(by activity: ClosedActivity) -> Bool {
+        switch (self, activity) {
+        case (.timer, .timer), (.music, .music), (.music, .trackPeek): true
+        default: false
+        }
+    }
+}
+
+/// Everything in the closed notch: the main activity and the glyph of a second one beside it.
+struct ClosedContent: Equatable {
+    var activity: ClosedActivity = .idle
+    var secondary: CompactActivity?
+}
+
+/// Decides what the closed notch shows. The main activity goes by priority: notices, a new
+/// track, a running focus timer, then music that's playing. The most important of the others
+/// that has a compact form shows beside it.
 @MainActor
 final class LiveActivityCenter: ObservableObject {
     static let shared = LiveActivityCenter()
 
-    @Published private(set) var activity: ClosedActivity = .idle
+    @Published private(set) var content = ClosedContent()
+
+    /// The main activity.
+    var activity: ClosedActivity { content.activity }
 
     private var notice: LiveNotice?
     private var noticeTask: Task<Void, Never>?
@@ -92,19 +117,29 @@ final class LiveActivityCenter: ObservableObject {
     private func recompute() {
         let settings = AppSettings.shared
         let media = NowPlayingService.shared
-        let next: ClosedActivity
+        let timerRunning = settings.liveTimer && PomodoroTimer.shared.isRunning
+        let musicPlaying = settings.liveMusic && media.isPlaying && media.track != nil
+        let activity: ClosedActivity
         if let notice {
-            next = .notice(notice)
+            activity = .notice(notice)
         } else if trackPeekActive, settings.liveMusic, media.track != nil {
-            next = .trackPeek
-        } else if settings.liveTimer, PomodoroTimer.shared.isRunning {
-            next = .timer
-        } else if settings.liveMusic, media.isPlaying, media.track != nil {
-            next = .music
+            activity = .trackPeek
+        } else if timerRunning {
+            activity = .timer
+        } else if musicPlaying {
+            activity = .music
         } else {
-            next = .idle
+            activity = .idle
         }
-        guard next != activity else { return }
-        withAnimation(.notchActivity) { activity = next }
+
+        // The ones with a compact form, most important first.
+        var compact: [CompactActivity] = []
+        if timerRunning { compact.append(.timer) }
+        if musicPlaying { compact.append(.music) }
+        let secondary = settings.liveSecondary ? compact.first { !$0.isShown(by: activity) } : nil
+
+        let next = ClosedContent(activity: activity, secondary: secondary)
+        guard next != content else { return }
+        withAnimation(.notchActivity) { content = next }
     }
 }

@@ -49,9 +49,16 @@ struct ClosedNotchView: View {
                     .padding(.leading, 10)
                     .frame(width: layout.earWidth, height: layout.notchHeight, alignment: .leading)
                 Color.clear.frame(width: layout.notchWidth)
-                trailing
-                    .padding(.trailing, 11)
-                    .frame(width: layout.earWidth, height: layout.notchHeight, alignment: .trailing)
+                HStack(spacing: ClosedLayout.glyphSpacing) {
+                    trailing
+                    if let secondary = viewModel.secondary {
+                        CompactActivityView(activity: secondary)
+                            .frame(width: ClosedLayout.glyphSize, height: ClosedLayout.glyphSize)
+                            .transition(.scale(scale: 0.5).combined(with: .opacity))
+                    }
+                }
+                .padding(.trailing, 11)
+                .frame(width: layout.earWidth, height: layout.notchHeight, alignment: .trailing)
             }
             if layout.rowHeight > 0 {
                 detailRow

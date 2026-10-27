@@ -15,15 +15,26 @@ struct NotchMetrics: Equatable {
 }
 
 /// The closed notch: the hardware cutout in the middle, with matching "ears"
-/// either side for live activities and an optional row underneath.
+/// either side for live activities and an optional row underneath. A second
+/// activity's glyph goes at the end of the right ear, and both ears grow to fit it.
 struct ClosedLayout: Equatable {
     var notchWidth: CGFloat
     var notchHeight: CGFloat
     var earWidth: CGFloat
     var rowHeight: CGFloat
 
+    /// The second activity's glyph, and the gap before it.
+    static let glyphSize: CGFloat = 16
+    static let glyphSpacing: CGFloat = 8
+
     var totalWidth: CGFloat { notchWidth + earWidth * 2 }
     var totalHeight: CGFloat { notchHeight + rowHeight }
+
+    init(activity: ClosedActivity, secondary: CompactActivity?, notch: CGSize) {
+        self.init(activity: activity, notch: notch)
+        guard secondary != nil else { return }
+        earWidth = activity == .idle ? notch.height + 6 : earWidth + Self.glyphSize + Self.glyphSpacing
+    }
 
     init(activity: ClosedActivity, notch: CGSize) {
         notchWidth = notch.width
@@ -66,6 +77,8 @@ final class NotchViewModel: ObservableObject {
     /// Files are being dragged toward the notch; the tray shows its drop zones.
     @Published var isDraggingFiles = false
     @Published private(set) var activity: ClosedActivity
+    /// A second activity, shown as a glyph at the end of the right ear.
+    @Published private(set) var secondary: CompactActivity?
     /// A context menu is open; the notch must not close under it.
     @Published var isMenuOpen = false
 
@@ -77,11 +90,16 @@ final class NotchViewModel: ObservableObject {
 
     init(geometry: NotchGeometry) {
         self.geometry = geometry
-        activity = LiveActivityCenter.shared.activity
-        LiveActivityCenter.shared.$activity
+        let center = LiveActivityCenter.shared
+        activity = center.content.activity
+        secondary = center.content.secondary
+        center.$content
             .dropFirst()
-            .sink { [weak self] activity in
-                withAnimation(.notchActivity) { self?.activity = activity }
+            .sink { [weak self] content in
+                withAnimation(.notchActivity) {
+                    self?.activity = content.activity
+                    self?.secondary = content.secondary
+                }
             }
             .store(in: &cancellables)
         // Open size and enabled tabs live in settings.
@@ -101,7 +119,7 @@ final class NotchViewModel: ObservableObject {
     }
 
     var closedLayout: ClosedLayout {
-        ClosedLayout(activity: activity, notch: geometry.closedSize)
+        ClosedLayout(activity: activity, secondary: secondary, notch: geometry.closedSize)
     }
 
     var metrics: NotchMetrics {
@@ -151,9 +169,11 @@ final class NotchViewModel: ObservableObject {
 
     // MARK: Snapshots
 
-    func stage(phase: Phase, activity: ClosedActivity, tab: NotchTab = .home, draggingFiles: Bool = false) {
+    func stage(phase: Phase, activity: ClosedActivity, secondary: CompactActivity? = nil, tab: NotchTab = .home,
+               draggingFiles: Bool = false) {
         self.phase = phase
         self.activity = activity
+        self.secondary = secondary
         self.tab = tab
         isDraggingFiles = draggingFiles
     }

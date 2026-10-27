@@ -366,6 +366,11 @@ struct ActivitySettings: View {
     @ObservedObject var navigation: SettingsNavigation
     @ObservedObject private var settings = AppSettings.shared
 
+    private let options = [
+        SwitchOption(title: "Two at once", detail: "A second activity as a small glyph at the end of the right ear",
+                     symbol: "circle.grid.2x1.right.filled", tint: Palette.lavender, setting: \.liveSecondary),
+    ]
+
     /// The activities, then a tile that shows a sample in the real notch.
     private enum Tile: Identifiable {
         case activity(LiveActivityKind)
@@ -381,18 +386,24 @@ struct ActivitySettings: View {
 
     var body: some View {
         let onCount = LiveActivityKind.allCases.filter { settings[keyPath: $0.setting] }.count
-        SettingsSection(title: "Show in the closed notch", trailing: "\(onCount) of \(LiveActivityKind.allCases.count) on",
-                        footer: "Live activities appear beside the camera without opening the notch. Point at one to see it above.") {
-            TileGrid(items: LiveActivityKind.allCases.map(Tile.activity) + [.preview], columns: 3) { tile in
-                switch tile {
-                case .activity(let kind):
-                    activityTile(kind)
-                case .preview:
-                    ActionTile(title: "Preview", detail: "Show a sample in the notch", symbol: "sparkles") {
-                        LiveActivityCenter.shared.post(LiveNotice(key: "preview", symbol: "sparkles", tint: .yellow, text: "Hi!",
-                                                                  detail: "This is a live activity"), for: 3)
+        VStack(alignment: .leading, spacing: 26) {
+            SettingsSection(title: "Show in the closed notch", trailing: "\(onCount) of \(LiveActivityKind.allCases.count) on",
+                            footer: "Live activities appear beside the camera without opening the notch. Point at one to see it above.") {
+                TileGrid(items: LiveActivityKind.allCases.map(Tile.activity) + [.preview], columns: 3) { tile in
+                    switch tile {
+                    case .activity(let kind):
+                        activityTile(kind)
+                    case .preview:
+                        ActionTile(title: "Preview", detail: "Show a sample in the notch", symbol: "sparkles") {
+                            LiveActivityCenter.shared.post(LiveNotice(key: "preview", symbol: "sparkles", tint: .yellow, text: "Hi!",
+                                                                      detail: "This is a live activity"), for: 3)
+                        }
                     }
                 }
+            }
+            SettingsSection(title: "Options",
+                            footer: "With two at once, the timer or the music you're playing keeps a small glyph while something else takes the notch.") {
+                SwitchGrid(options: options)
             }
         }
     }

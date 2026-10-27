@@ -9,6 +9,7 @@ enum SnapshotRenderer {
         let name: String
         let phase: NotchViewModel.Phase
         var activity: ClosedActivity = .idle
+        var secondary: CompactActivity?
         var tab: NotchTab = .home
         var draggingFiles = false
         var hasTrack = true
@@ -39,6 +40,11 @@ enum SnapshotRenderer {
             Scene(name: "13-open-tray-dropping", phase: .open, tab: .tray, draggingFiles: true),
             Scene(name: "14-open-focus", phase: .open, tab: .focus),
             Scene(name: "15-open-stats", phase: .open, tab: .stats),
+            Scene(name: "20-closed-timer-and-music", phase: .closed, activity: .timer, secondary: .music),
+            Scene(name: "21-closed-volume-and-timer", phase: .closed, activity: .notice(volume), secondary: .timer),
+            Scene(name: "22-closed-track-peek-and-timer", phase: .closed, activity: .trackPeek, secondary: .timer),
+            Scene(name: "23-closed-event-and-timer", phase: .closed, activity: .notice(event), secondary: .timer),
+            Scene(name: "24-hover-timer-and-music", phase: .hovering, activity: .timer, secondary: .music),
         ]
 
         let settings = AppSettings.shared
@@ -46,7 +52,8 @@ enum SnapshotRenderer {
         for scene in scenes {
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
             let viewModel = NotchViewModel(geometry: geometry)
-            viewModel.stage(phase: scene.phase, activity: scene.activity, tab: scene.tab, draggingFiles: scene.draggingFiles)
+            viewModel.stage(phase: scene.phase, activity: scene.activity, secondary: scene.secondary, tab: scene.tab,
+                            draggingFiles: scene.draggingFiles)
             let content = ZStack(alignment: .top) {
                 Desktop(notchWidth: geometry.closedSize.width, menuBarHeight: geometry.closedSize.height)
                 NotchRootView(viewModel: viewModel)
