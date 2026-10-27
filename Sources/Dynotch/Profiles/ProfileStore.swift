@@ -142,6 +142,10 @@ struct ProfileSetting {
         .number("virtualNotchWidth", \.virtualNotchWidth),
         .bool("artworkTint", \.artworkTint),
         .bool("showOpenShadow", \.showOpenShadow),
+        .choice("notchMaterial", \.notchMaterial),
+        .choice("notchAccent", \.notchAccent),
+        .number("notchTopRadius", \.notchTopRadius),
+        .number("notchBottomRadius", \.notchBottomRadius),
         // Tabs and widgets
         .bool("showTrayTab", \.showTrayTab),
         .bool("showFocusTab", \.showFocusTab),

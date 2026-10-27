@@ -10,7 +10,7 @@ struct ProfilesSection: View {
     var body: some View {
         ScrollViewReader { proxy in
             SettingsSection(title: "Profiles", trailing: store.active.map { "\($0.name) is on" },
-                            footer: "A profile keeps what the notch shows and how it opens: tabs, widgets, live activities, size and displays. Changes you make go into the profile that's on. When a profile's Focus ends or its display is unplugged, the notch goes back to how it was.") {
+                            footer: "A profile keeps what the notch shows and how it opens: tabs, widgets, live activities, size, theme and displays. Changes you make go into the profile that's on. When a profile's Focus ends or its display is unplugged, the notch goes back to how it was.") {
                 SettingsCard {
                     if store.profiles.isEmpty {
                         IntroRow()
