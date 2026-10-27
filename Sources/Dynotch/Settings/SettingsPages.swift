@@ -233,9 +233,18 @@ struct AppearanceSettings: View {
             SettingsSection(title: "Style") {
                 SwitchGrid(options: style)
             }
-            SettingsSection(title: "Virtual notch", footer: "Used on displays without a camera notch.") {
+            SettingsSection(title: "Virtual notch", footer: virtualNotchFooter) {
+                HStack(spacing: 10) {
+                    ForEach(VirtualNotchStyle.allCases) { style in
+                        ChoiceTile(title: style.title, detail: style.detail, isSelected: settings.virtualNotchStyle == style) {
+                            settings.virtualNotchStyle = style
+                        } art: {
+                            VirtualNotchArt(style: style, isSelected: settings.virtualNotchStyle == style)
+                        }
+                    }
+                }
                 SettingsCard {
-                    VirtualNotchSketch(width: settings.virtualNotchWidth)
+                    VirtualNotchSketch(width: settings.virtualNotchWidth, style: settings.virtualNotchStyle)
                     CardDivider()
                     SliderRow(title: "Width", spokenTitle: "Virtual notch width", value: $settings.virtualNotchWidth,
                               range: 140...280, step: 5,
@@ -243,6 +252,44 @@ struct AppearanceSettings: View {
                 }
             }
         }
+    }
+
+    private var virtualNotchFooter: String {
+        switch settings.virtualNotchStyle {
+        case .notch:
+            "Used on displays without a camera notch."
+        case .line:
+            "Used on displays without a camera notch. The line covers nothing: it grows into the notch while "
+                + "something's showing, when you hover, and when it opens."
+        }
+    }
+}
+
+/// A monitor with the virtual notch, or just the line, along its top edge.
+private struct VirtualNotchArt: View {
+    let style: VirtualNotchStyle
+    let isSelected: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .strokeBorder(lineWidth: 1.6)
+                .frame(width: 40, height: 26)
+                .overlay(alignment: .top) {
+                    switch style {
+                    case .notch:
+                        NotchShape(topRadius: 1.5, bottomRadius: 2.5)
+                            .frame(width: 16, height: 5.5)
+                    case .line:
+                        Capsule()
+                            .frame(width: 14, height: 2)
+                            .padding(.top, 2.6)
+                    }
+                }
+            Rectangle().frame(width: 2, height: 4)
+            Capsule().frame(width: 15, height: 2)
+        }
+        .foregroundStyle(isSelected ? Palette.accent : Color.secondary)
     }
 }
 
@@ -382,20 +429,23 @@ private struct AccentSwatch: View {
     }
 }
 
-/// The top of an external display with the virtual notch hanging from it, at half size.
+/// The top of an external display with the virtual notch hanging from it, or the line it rests as, at half size.
 private struct VirtualNotchSketch: View {
     let width: Double
+    var style: VirtualNotchStyle = .notch
 
     var body: some View {
+        let isLine = style == .line
         ZStack(alignment: .top) {
             LinearGradient(colors: [Color(red: 0.36, green: 0.52, blue: 0.86), Color(red: 0.86, green: 0.55, blue: 0.62)],
                            startPoint: .leading, endPoint: .trailing)
                 .opacity(0.85)
             Rectangle().fill(.white.opacity(0.5)).frame(height: 12)
-            NotchShape(topRadius: 3, bottomRadius: 6)
-                .fill(.black)
-                .frame(width: width / 2 + 6, height: 14)
+            NotchShape(topRadius: isLine ? 0 : 3, bottomRadius: isLine ? 1 : 6)
+                .fill(.black.opacity(isLine ? 0.4 : 1))
+                .frame(width: width / 2 + (isLine ? 0 : 6), height: isLine ? 2 : 14)
                 .animation(.spring(response: 0.3, dampingFraction: 0.8), value: width)
+                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: style)
         }
         .frame(height: 44)
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: 13, topTrailingRadius: 13, style: .continuous))

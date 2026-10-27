@@ -24,6 +24,8 @@ enum SnapshotRenderer {
         var focus: FocusMode?
         /// A look other than the user's, for this scene only.
         var theme: NotchTheme?
+        /// A display other than a MacBook's, for this scene only.
+        var geometry: NotchGeometry?
         /// More sample state for this scene; `resetAudioSamples` undoes it before the next one.
         var setUp: (@MainActor () -> Void)?
         /// Sample state for this scene. Scenes after it keep it.
@@ -37,6 +39,11 @@ enum SnapshotRenderer {
 
         let geometry = NotchGeometry(screenFrame: CGRect(x: 0, y: 0, width: 1728, height: 1117),
                                      closedSize: CGSize(width: 185, height: 32), hasHardwareNotch: true)
+        // An external display: the virtual notch hangs from a 24-point menu bar, or rests as a line.
+        let virtualNotch = NotchGeometry(screenFrame: CGRect(x: 0, y: 0, width: 2560, height: 1440),
+                                         closedSize: CGSize(width: 190, height: 24), hasHardwareNotch: false)
+        let line = NotchGeometry(screenFrame: virtualNotch.screenFrame, closedSize: virtualNotch.closedSize,
+                                 hasHardwareNotch: false, isLine: true)
         let volume = LiveNotice(key: "volume", symbol: "speaker.wave.2.fill", tint: .white, kind: .meter(0.62))
         let charging = LiveNotice(key: "power", symbol: "bolt.fill", tint: .green, text: "82%")
         let event = LiveNotice(key: "event", symbol: "calendar", tint: .orange, text: "in 5m", detail: "Design review")
@@ -93,6 +100,12 @@ enum SnapshotRenderer {
             Scene(name: "22-closed-track-peek-and-timer", phase: .closed, activity: .trackPeek, secondary: .timer),
             Scene(name: "23-closed-event-and-timer", phase: .closed, activity: .notice(event), secondary: .timer),
             Scene(name: "24-hover-timer-and-music", phase: .hovering, activity: .timer, secondary: .music),
+            // Displays without a camera notch: the virtual notch, and the line that grows into it
+            Scene(name: "25-virtual-notch-idle", phase: .closed, geometry: virtualNotch),
+            Scene(name: "26-virtual-notch-music", phase: .closed, activity: .music, geometry: virtualNotch),
+            Scene(name: "27-line-idle", phase: .closed, geometry: line),
+            Scene(name: "28-line-hover", phase: .hovering, geometry: line),
+            Scene(name: "29-line-music", phase: .closed, activity: .music, geometry: line),
             Scene(name: "30-closed-muted", phase: .closed, secondary: .micMuted, micMuted: true),
             Scene(name: "31-closed-music-muted", phase: .closed, activity: .music, secondary: .micMuted, micMuted: true),
             Scene(name: "32-closed-mute-notice", phase: .closed, activity: .notice(muted), micMuted: true),
@@ -184,11 +197,12 @@ enum SnapshotRenderer {
             DownloadMonitor.shared.loadSample(knowsSize: scene.downloadKnowsSize)
             FocusMonitor.shared.loadSample(scene.focus)
             scene.setUp?()
-            let viewModel = NotchViewModel(geometry: geometry)
+            let sceneGeometry = scene.geometry ?? geometry
+            let viewModel = NotchViewModel(geometry: sceneGeometry)
             viewModel.stage(phase: scene.phase, activity: scene.activity, secondary: scene.secondary, tab: scene.tab,
                             draggingFiles: scene.draggingFiles)
             let content = ZStack(alignment: .top) {
-                Desktop(notchWidth: geometry.closedSize.width, menuBarHeight: geometry.closedSize.height)
+                Desktop(notchWidth: sceneGeometry.closedSize.width, menuBarHeight: sceneGeometry.closedSize.height)
                 NotchRootView(viewModel: viewModel)
             }
             .frame(width: size.width, height: size.height)

@@ -14,6 +14,31 @@ enum DisplayMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// How the closed notch looks on a display without a camera notch.
+enum VirtualNotchStyle: String, CaseIterable, Identifiable {
+    /// A black notch hangs from the menu bar, as on a MacBook.
+    case notch
+    /// A faint line along the top edge, so nothing is covered. It grows into the notch while
+    /// something's on, under the pointer, and when it opens.
+    case line
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .notch: "Notch"
+        case .line: "Line"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .notch: "Hangs from the menu bar"
+        case .line: "A faint line at the top edge"
+        }
+    }
+}
+
 enum NotchTab: String, CaseIterable, Identifiable {
     case home, tray, focus, stats
 
@@ -137,6 +162,10 @@ final class AppSettings: ObservableObject {
     }
     @Published var virtualNotchWidth: Double = AppSettings.value("virtualNotchWidth", 190) {
         didSet { save("virtualNotchWidth", virtualNotchWidth) }
+    }
+    /// On a display without a camera notch: a black notch, or a line that only becomes one when needed.
+    @Published var virtualNotchStyle: VirtualNotchStyle = AppSettings.value("virtualNotchStyle", VirtualNotchStyle.notch) {
+        didSet { save("virtualNotchStyle", virtualNotchStyle.rawValue) }
     }
     @Published var artworkTint: Bool = AppSettings.value("artworkTint", true) {
         didSet { save("artworkTint", artworkTint) }

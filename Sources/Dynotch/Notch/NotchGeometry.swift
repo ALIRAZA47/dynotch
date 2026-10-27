@@ -3,10 +3,13 @@ import AppKit
 /// Where the notch sits on a screen and how big the closed notch is.
 struct NotchGeometry: Equatable {
     var screenFrame: CGRect
+    /// The closed notch with something in it. On a display without a camera notch, the virtual notch.
     var closedSize: CGSize
     var hasHardwareNotch: Bool
+    /// A virtual notch that's a faint line while it has nothing to show, so it covers nothing.
+    var isLine = false
 
-    static func make(for screen: NSScreen, virtualWidth: CGFloat) -> NotchGeometry {
+    static func make(for screen: NSScreen, virtualWidth: CGFloat, virtualStyle: VirtualNotchStyle = .notch) -> NotchGeometry {
         if screen.safeAreaInsets.top > 0,
            let left = screen.auxiliaryTopLeftArea,
            let right = screen.auxiliaryTopRightArea {
@@ -20,7 +23,8 @@ struct NotchGeometry: Equatable {
         let height = menuBar > 0 ? min(max(menuBar, 22), 32) : 26
         return NotchGeometry(screenFrame: screen.frame,
                              closedSize: CGSize(width: virtualWidth, height: height),
-                             hasHardwareNotch: false)
+                             hasHardwareNotch: false,
+                             isLine: virtualStyle == .line)
     }
 }
 

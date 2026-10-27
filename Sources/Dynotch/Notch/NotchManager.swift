@@ -28,9 +28,10 @@ final class NotchManager {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.rebuild() }
             .store(in: &cancellables)
-        Publishers.Merge3(settings.$openWidth.dropFirst().map { _ in () },
+        Publishers.Merge4(settings.$openWidth.dropFirst().map { _ in () },
                           settings.$openHeight.dropFirst().map { _ in () },
-                          settings.$virtualNotchWidth.dropFirst().map { _ in () })
+                          settings.$virtualNotchWidth.dropFirst().map { _ in () },
+                          settings.$virtualNotchStyle.dropFirst().map { _ in () })
             .receive(on: RunLoop.main)
             .sink { [weak self] in self?.controllers.forEach { $0.layout() } }
             .store(in: &cancellables)

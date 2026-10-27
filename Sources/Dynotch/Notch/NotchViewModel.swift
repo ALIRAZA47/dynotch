@@ -143,6 +143,15 @@ final class NotchViewModel: ObservableObject {
 
     var shouldStayOpen: Bool { isMenuOpen || isDraggingFiles || isDraggingOut }
 
+    /// The line a virtual notch rests as, and how it swells under the pointer.
+    static let lineHeight: CGFloat = 3
+    static let lineHoverHeight: CGFloat = 5
+
+    /// The notch is drawn as a faint line: a virtual notch set to one, closed, with nothing to show.
+    var isLine: Bool {
+        geometry.isLine && phase != .open && activity == .idle && secondary == nil
+    }
+
     /// The tab on screen: the tray while files are dragged in, otherwise the chosen one if it's enabled.
     var visibleTab: NotchTab {
         if isDraggingFiles { return .tray }
@@ -161,8 +170,14 @@ final class NotchViewModel: ObservableObject {
             return NotchMetrics(width: settings.openWidth, height: settings.openHeight,
                                 topRadius: theme.topRadius, bottomRadius: theme.bottomRadius)
         case .closed, .hovering:
-            let layout = closedLayout
             let hovering = phase == .hovering
+            if isLine {
+                // Flat along the top edge with rounded bottom corners. Hovering swells it, like the notch.
+                return NotchMetrics(width: geometry.closedSize.width + (hovering ? 14 : 0),
+                                    height: hovering ? Self.lineHoverHeight : Self.lineHeight,
+                                    topRadius: 0, bottomRadius: hovering ? 2.5 : 1.5)
+            }
+            let layout = closedLayout
             return NotchMetrics(width: layout.totalWidth + (hovering ? 14 : 0),
                                 height: layout.totalHeight + (hovering ? 3 : 0),
                                 topRadius: NotchTheme.closedTopRadius,
@@ -195,7 +210,8 @@ final class NotchViewModel: ObservableObject {
 
     func update(geometry: NotchGeometry) {
         guard geometry != self.geometry else { return }
-        self.geometry = geometry
+        // Switching a virtual notch between the notch and the line redraws the closed notch.
+        withAnimation(.notchActivity) { self.geometry = geometry }
     }
 
     // MARK: Snapshots

@@ -140,6 +140,7 @@ struct ProfileSetting {
         .number("openWidth", \.openWidth),
         .number("openHeight", \.openHeight),
         .number("virtualNotchWidth", \.virtualNotchWidth),
+        .choice("virtualNotchStyle", \.virtualNotchStyle),
         .bool("artworkTint", \.artworkTint),
         .bool("showOpenShadow", \.showOpenShadow),
         .choice("notchMaterial", \.notchMaterial),

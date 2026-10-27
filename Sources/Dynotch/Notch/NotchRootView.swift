@@ -6,10 +6,13 @@ struct NotchRootView: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var mic = MicMonitor.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The system's appearance, read before the notch sets its own: the menu bar follows it.
+    @Environment(\.colorScheme) private var menuBarScheme
 
     var body: some View {
         let metrics = viewModel.metrics
         let theme = settings.theme
+        let isLine = viewModel.isLine
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
                 if viewModel.isOpen {
@@ -27,8 +30,14 @@ struct NotchRootView: View {
             }
             .frame(width: metrics.width, height: metrics.height, alignment: .top)
             .padding(.horizontal, metrics.topRadius)
-            .background(NotchSurface(isGlass: viewModel.isOpen && theme.isGlass, topRadius: metrics.topRadius,
-                                     bottomRadius: metrics.bottomRadius, bandHeight: viewModel.geometry.closedSize.height))
+            .background {
+                NotchSurface(isGlass: viewModel.isOpen && theme.isGlass, topRadius: metrics.topRadius,
+                             bottomRadius: metrics.bottomRadius, bandHeight: viewModel.geometry.closedSize.height)
+                // Black fades into a light menu bar; a dark one needs the line a shade lighter than itself.
+                if isLine, menuBarScheme == .dark {
+                    Color.white.opacity(0.55)
+                }
+            }
             .clipShape(NotchShape(topRadius: metrics.topRadius, bottomRadius: metrics.bottomRadius))
             .overlay {
                 if let color = onAirColor {
@@ -41,6 +50,8 @@ struct NotchRootView: View {
             // Glass carries a lighter shadow: a heavy one shows through it.
             .shadow(color: .black.opacity(viewModel.isOpen && settings.showOpenShadow ? (theme.isGlass ? 0.3 : 0.5) : 0),
                     radius: 18, y: 8)
+            // The line is faint until the pointer finds it.
+            .opacity(isLine ? (viewModel.phase == .hovering ? 0.7 : 0.4) : 1)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)

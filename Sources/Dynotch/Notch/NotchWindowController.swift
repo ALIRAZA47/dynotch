@@ -35,8 +35,9 @@ final class NotchWindowController {
 
     init(screen: NSScreen) {
         self.screen = screen
+        let settings = AppSettings.shared
         viewModel = NotchViewModel(geometry: NotchGeometry.make(
-            for: screen, virtualWidth: AppSettings.shared.virtualNotchWidth))
+            for: screen, virtualWidth: settings.virtualNotchWidth, virtualStyle: settings.virtualNotchStyle))
         panel = NotchPanel(contentRect: .zero)
         let host = NotchHostingView(rootView: NotchRootView(viewModel: viewModel))
         host.sizingOptions = []
@@ -67,7 +68,8 @@ final class NotchWindowController {
 
     func layout() {
         let settings = AppSettings.shared
-        viewModel.update(geometry: NotchGeometry.make(for: screen, virtualWidth: settings.virtualNotchWidth))
+        viewModel.update(geometry: NotchGeometry.make(for: screen, virtualWidth: settings.virtualNotchWidth,
+                                                      virtualStyle: settings.virtualNotchStyle))
         let width = settings.openWidth + NotchTheme.maxTopRadius * 2 + Self.shadowInset * 2
         let height = settings.openHeight + Self.shadowInset
         let frame = screen.frame
@@ -240,7 +242,8 @@ final class NotchWindowController {
 
     /// The notch plus a little slack, and up past the top edge so the very top pixel counts.
     private func hitRect() -> CGRect {
-        let slack: CGFloat = viewModel.isOpen ? 6 : 4
+        // The line is only a few points tall, so it gets more room underneath.
+        let slack: CGFloat = viewModel.isOpen ? 6 : viewModel.isLine ? 8 : 4
         let rect = notchRect
         return CGRect(x: rect.minX - slack, y: rect.minY - slack, width: rect.width + slack * 2, height: rect.height + slack + 4)
     }
