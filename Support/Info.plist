@@ -57,6 +57,8 @@
 	<string>Dynotch shows your reminders in the notch and lets you check them off.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Dynotch uses the camera for the Mirror widget so you can check yourself before a call.</string>
+	<key>NSAudioCaptureUsageDescription</key>
+	<string>With Live equalizer on, Dynotch listens to Music or Spotify while they play so the equalizer bars follow the music. Nothing is recorded or saved.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Dynotch shows the battery level of your connected Bluetooth devices.</string>
 </dict>

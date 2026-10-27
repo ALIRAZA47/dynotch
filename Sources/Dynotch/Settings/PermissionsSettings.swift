@@ -41,7 +41,8 @@ final class PermissionStatus: ObservableObject {
                           DeviceBatteryMonitor.shared.objectWillChange)
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
-        NotificationMirror.shared.objectWillChange
+        Publishers.Merge3(NotificationMirror.shared.objectWillChange, MediaKeyTap.shared.objectWillChange,
+                          AudioLevels.shared.$permission.map { _ in () })
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
     }
@@ -60,6 +61,12 @@ final class PermissionStatus: ObservableObject {
             Item(title: "Camera", purpose: "The Mirror widget", symbol: "camera.fill", tint: .teal,
                  state: state(camera.status == .authorized, undetermined: camera.status == .notDetermined),
                  action: camera.requestAccess),
+            // macOS doesn't say whether Accessibility was refused or never asked for.
+            Item(title: "Accessibility", purpose: "The volume and brightness keys, with the system HUD replaced",
+                 symbol: "accessibility", tint: .indigo, state: MediaKeyTap.shared.hasAccess ? .granted : .notDetermined,
+                 action: MediaKeyTap.shared.requestAccess),
+            Item(title: "System audio recording", purpose: "The live equalizer, which listens to Music and Spotify",
+                 symbol: "waveform", tint: .pink, state: audioCaptureState, action: AudioLevels.shared.requestPermission),
             Item(title: "Bluetooth", purpose: "Battery levels of AirPods, keyboards and mice", symbol: "airpodspro",
                  tint: .blue, state: devices.isAuthorized ? .granted : .notDetermined, action: devices.requestAccess),
             // There's no prompt for Full Disk Access, only the switch in System Settings.
@@ -94,6 +101,16 @@ final class PermissionStatus: ObservableObject {
 
     private func state(_ granted: Bool, undetermined: Bool) -> State {
         granted ? .granted : undetermined ? .notDetermined : .denied
+    }
+
+    private var audioCaptureState: State {
+        guard AudioLevels.isSupported else { return .unavailable("Needs macOS 14.2") }
+        switch AudioLevels.shared.permission {
+        case .granted: return .granted
+        case .denied: return .denied
+        case .notDetermined: return .notDetermined
+        case .unknown: return .unavailable("Asked for when the equalizer starts")
+        }
     }
 
     private func automationState(_ status: Automation.Status) -> State {

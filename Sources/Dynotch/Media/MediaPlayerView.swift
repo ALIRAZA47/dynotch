@@ -4,15 +4,35 @@ import SwiftUI
 struct MediaPlayerView: View {
     @ObservedObject private var media = NowPlayingService.shared
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var outputs = AudioOutputs.shared
 
     var body: some View {
+        player
+            .opacity(outputs.isPickerShown ? 0 : 1)
+            .allowsHitTesting(!outputs.isPickerShown)
+            .frame(maxHeight: .infinity)
+            .overlay {
+                if outputs.isPickerShown {
+                    OutputPicker(tint: tint)
+                        .transition(.opacity.combined(with: .scale(scale: 0.97)))
+                }
+            }
+            .onDisappear { outputs.isPickerShown = false }
+    }
+
+    @ViewBuilder
+    private var player: some View {
         if let track = media.track {
             VStack(alignment: .leading, spacing: 9) {
                 HStack(alignment: .top, spacing: 13) {
                     ArtworkView(image: media.artwork, size: 84, cornerRadius: 14, glow: settings.artworkTint ? tint : nil)
+                        .overlay { ArtworkVolumeOverlay(cornerRadius: 14) }
                         .overlay(alignment: .bottomTrailing) { playerBadge }
+                        .overlay {
+                            if !outputs.isPickerShown { VolumeScrollArea() }
+                        }
                         .onTapGesture { media.openPlayer() }
-                        .help("Open \(media.player?.name ?? "player")")
+                        .help("Open \(media.player?.name ?? "player"). Scroll to change the volume.")
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text(track.title)
@@ -29,6 +49,7 @@ struct MediaPlayerView: View {
                                 .buttonStyle(PressableButtonStyle())
                                 .help(favorite ? "Remove from favorites" : "Favorite")
                             }
+                            OutputButton(tint: tint)
                         }
                         Text(track.artist.isEmpty ? " " : track.artist)
                             .font(.system(size: 12.5))
@@ -168,5 +189,6 @@ private struct EmptyPlayerView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .overlay(alignment: .topTrailing) { OutputButton(tint: .white).padding(.top, 4) }
     }
 }

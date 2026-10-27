@@ -12,6 +12,8 @@ enum SnapshotRenderer {
         var tab: NotchTab = .home
         var draggingFiles = false
         var hasTrack = true
+        /// More sample state for this scene; `resetAudioSamples` undoes it before the next one.
+        var setUp: (@MainActor () -> Void)?
     }
 
     static func render(into folder: URL) {
@@ -43,12 +45,23 @@ enum SnapshotRenderer {
             Scene(name: "13-open-tray-dropping", phase: .open, tab: .tray, draggingFiles: true),
             Scene(name: "14-open-focus", phase: .open, tab: .focus),
             Scene(name: "15-open-stats", phase: .open, tab: .stats),
+            Scene(name: "30-open-nook-volume", phase: .open, tab: .home,
+                  setUp: { VolumeMonitor.shared.loadSample(volume: 0.62, changing: true) }),
+            Scene(name: "31-open-nook-outputs", phase: .open, tab: .home, setUp: { loadOutputs(pickerShown: true) }),
+            Scene(name: "32-open-nook-empty-outputs", phase: .open, tab: .home, hasTrack: false,
+                  setUp: { loadOutputs(pickerShown: true) }),
+            Scene(name: "33-closed-music-live-levels", phase: .closed, activity: .music,
+                  setUp: { AudioLevels.shared.loadSample([0.95, 0.45, 0.7, 0.25]) }),
+            Scene(name: "34-open-nook-live-levels", phase: .open, tab: .home,
+                  setUp: { AudioLevels.shared.loadSample([0.3, 0.9, 0.55, 0.8]) }),
         ]
 
         let settings = AppSettings.shared
         let size = CGSize(width: settings.openWidth + NotchMetrics.openTopRadius * 2 + 80, height: settings.openHeight + 40)
         for scene in scenes {
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
+            resetAudioSamples()
+            scene.setUp?()
             let viewModel = NotchViewModel(geometry: geometry)
             viewModel.stage(phase: scene.phase, activity: scene.activity, tab: scene.tab, draggingFiles: scene.draggingFiles)
             let content = ZStack(alignment: .top) {
@@ -149,6 +162,17 @@ enum SnapshotRenderer {
         let includingWindow: UInt32 = 1 << 3, ignoreFraming: UInt32 = 1 << 0, bestResolution: UInt32 = 1 << 3
         return createImage(.null, includingWindow, UInt32(window.windowNumber), ignoreFraming | bestResolution)?
             .takeRetainedValue()
+    }
+
+    /// The volume, output and equalizer state every scene starts from.
+    private static func resetAudioSamples() {
+        VolumeMonitor.shared.loadSample(volume: 0.62, changing: false)
+        loadOutputs(pickerShown: false)
+        AudioLevels.shared.loadSample(nil)
+    }
+
+    private static func loadOutputs(pickerShown: Bool) {
+        AudioOutputs.shared.loadSample(pickerShown: pickerShown)
     }
 
     private static func loadTrack() {

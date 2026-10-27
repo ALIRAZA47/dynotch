@@ -192,15 +192,30 @@ struct ArtworkView: View {
     }
 }
 
-/// The bouncing equalizer next to the notch. The motion is decorative: macOS
-/// doesn't let apps tap another app's audio without screen-recording permission.
+/// The bouncing equalizer next to the notch. With Live equalizer on, the bars follow the music
+/// through `AudioLevels`; otherwise, and until sound arrives, the motion is decorative.
 struct AudioBars: View {
     var isPlaying: Bool
     var color: Color
     var barCount = 4
+    @ObservedObject private var levels = AudioLevels.shared
 
     var body: some View {
-        if isPlaying {
+        content
+            // The tap only runs while some bars are on screen.
+            .onAppear { levels.addViewer() }
+            .onDisappear { levels.removeViewer() }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if isPlaying, let bands = levels.bands {
+            barStack { index in
+                let band = bands.isEmpty ? 0 : bands[min(bands.count - 1, index * bands.count / barCount)]
+                return 0.18 + 0.82 * CGFloat(band)
+            }
+            .animation(.easeOut(duration: 0.12), value: bands)
+        } else if isPlaying {
             TimelineView(.periodic(from: .now, by: 0.15)) { context in
                 let tick = Int(context.date.timeIntervalSinceReferenceDate / 0.15)
                 bars(tick: tick)
@@ -212,12 +227,17 @@ struct AudioBars: View {
     }
 
     private func bars(tick: Int?) -> some View {
+        barStack { index in level(index: index, tick: tick) }
+    }
+
+    /// The bars, each as tall as `height` says, from 0 to 1.
+    private func barStack(_ height: @escaping (Int) -> CGFloat) -> some View {
         GeometryReader { proxy in
             HStack(alignment: .center, spacing: proxy.size.width * 0.12) {
                 ForEach(0..<barCount, id: \.self) { index in
                     Capsule()
                         .fill(color)
-                        .frame(height: max(3, proxy.size.height * level(index: index, tick: tick)))
+                        .frame(height: max(3, proxy.size.height * height(index)))
                 }
             }
             .frame(maxHeight: .infinity)

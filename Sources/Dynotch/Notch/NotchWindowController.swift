@@ -17,6 +17,12 @@ final class NotchWindowController {
     private var hoverTask: Task<Void, Never>?
     private var closeTask: Task<Void, Never>?
     private var scrollTotal: CGFloat = 0
+    /// Sideways travel of the current swipe, positive to the right.
+    private var swipeAcross: CGFloat = 0
+    /// Up and down or sideways, settled once the fingers have moved a little.
+    private var swipeAxis: Axis?
+    private var hasSkipped = false
+    private var lastScroll = Date.distantPast
     private var cancellables = Set<AnyCancellable>()
 
     /// Room around the open notch for its shadow.
@@ -45,6 +51,11 @@ final class NotchWindowController {
             }
             .store(in: &cancellables)
         Publishers.Merge(viewModel.$isMenuOpen, viewModel.$isDraggingFiles)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.closeIfAbandoned() }
+            .store(in: &cancellables)
+        AudioOutputs.shared.$isPresentingRoutes
+            .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.closeIfAbandoned() }
             .store(in: &cancellables)
@@ -81,7 +92,7 @@ final class NotchWindowController {
         if inside != isInside {
             isInside = inside
             inside ? pointerEntered() : pointerExited()
-        } else if !inside, viewModel.isOpen, !awaitingPointer, closeTask == nil, !viewModel.shouldStayOpen {
+        } else if !inside, viewModel.isOpen, !awaitingPointer, closeTask == nil, !isHeldOpen {
             // Whatever held the notch open (a drag, a menu) has ended while the pointer was away.
             scheduleClose()
         }
@@ -98,7 +109,7 @@ final class NotchWindowController {
         if inside, !viewModel.isOpen {
             hoverTask?.cancel()
             viewModel.open()
-        } else if !inside, viewModel.isOpen, !viewModel.isMenuOpen {
+        } else if !inside, viewModel.isOpen, !viewModel.isMenuOpen, !AudioOutputs.shared.isPresentingRoutes {
             dismiss()
         }
     }
@@ -132,26 +143,55 @@ final class NotchWindowController {
     }
 
     func scrolled(_ event: NSEvent, at point: CGPoint) {
-        guard AppSettings.shared.swipeGestures, event.momentumPhase.isEmpty else { return }
-        guard hitRect().contains(point) else {
-            scrollTotal = 0
+        guard event.momentumPhase.isEmpty else { return }
+        // Over the open player's artwork, scrolling changes the volume instead.
+        if viewModel.isOpen, VolumeScrollView.covers(point, in: panel) {
+            resetSwipe()
             return
         }
-        if event.phase == .began || event.phase == .mayBegin { scrollTotal = 0 }
-        // Positive when the fingers move down, whatever the natural-scrolling setting.
-        let fingersDown = event.isDirectionInvertedFromDevice ? event.scrollingDeltaY : -event.scrollingDeltaY
-        scrollTotal += event.hasPreciseScrollingDeltas ? fingersDown : fingersDown * 8
-
-        if !viewModel.isOpen, scrollTotal > 14 {
-            scrollTotal = 0
-            hoverTask?.cancel()
-            Haptics.tap()
-            viewModel.open()
-        } else if viewModel.isOpen, scrollTotal < -40, swipeClosesNotch(at: point) {
-            scrollTotal = 0
-            dismiss()
+        guard AppSettings.shared.swipeGestures else { return }
+        guard hitRect().contains(point) else {
+            resetSwipe()
+            return
         }
-        if event.phase == .ended || event.phase == .cancelled { scrollTotal = 0 }
+        // A mouse wheel has no phases, so a pause starts a new gesture.
+        if event.phase == .began || event.phase == .mayBegin
+            || (event.phase.isEmpty && Date.now.timeIntervalSince(lastScroll) > 0.4) {
+            resetSwipe()
+        }
+        lastScroll = .now
+        // Positive when the fingers move down or right, whatever the natural-scrolling setting.
+        let scale: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 8
+        let inverted = event.isDirectionInvertedFromDevice
+        scrollTotal += (inverted ? event.scrollingDeltaY : -event.scrollingDeltaY) * scale
+        swipeAcross += (inverted ? event.scrollingDeltaX : -event.scrollingDeltaX) * scale
+        if swipeAxis == nil, max(abs(scrollTotal), abs(swipeAcross)) > 6 {
+            swipeAxis = abs(swipeAcross) > abs(scrollTotal) ? .horizontal : .vertical
+            // Skipping a track shouldn't open the notch on the way.
+            if swipeAxis == .horizontal { hoverTask?.cancel() }
+        }
+
+        switch swipeAxis {
+        case .vertical:
+            if !viewModel.isOpen, scrollTotal > 14 {
+                scrollTotal = 0
+                hoverTask?.cancel()
+                Haptics.tap()
+                viewModel.open()
+            } else if viewModel.isOpen, scrollTotal < -40, swipeClosesNotch(at: point) {
+                scrollTotal = 0
+                dismiss()
+            }
+        case .horizontal:
+            // Hovering opens the notch quickly, so its header row, where the closed notch was, counts too.
+            if !hasSkipped, abs(swipeAcross) > 40, !viewModel.isOpen || isOverHeader(point) {
+                hasSkipped = true
+                skipTrack(forward: swipeAcross < 0)
+            }
+        case nil:
+            break
+        }
+        if event.phase == .ended || event.phase == .cancelled { resetSwipe() }
     }
 
     func dismiss() {
@@ -214,7 +254,7 @@ final class NotchWindowController {
             try? await Task.sleep(for: .seconds(delay))
             guard let self, !Task.isCancelled else { return }
             self.closeTask = nil
-            guard !self.isInside, !self.viewModel.shouldStayOpen else { return }
+            guard !self.isInside, !self.isHeldOpen else { return }
             self.viewModel.close()
         }
     }
@@ -224,9 +264,14 @@ final class NotchWindowController {
         closeTask = nil
     }
 
+    /// A menu, a drag or AirPlay's device list hangs off the open notch, so it stays open.
+    private var isHeldOpen: Bool {
+        viewModel.shouldStayOpen || AudioOutputs.shared.isPresentingRoutes
+    }
+
     /// Something that held the notch open went away while the pointer was elsewhere.
     private func closeIfAbandoned() {
-        guard viewModel.isOpen, !viewModel.shouldStayOpen else { return }
+        guard viewModel.isOpen, !isHeldOpen else { return }
         isInside = hitRect().contains(NSEvent.mouseLocation)
         if !isInside { scheduleClose(after: 0.4) }
     }
@@ -234,7 +279,27 @@ final class NotchWindowController {
     /// The Focus tab has scrolling lists, so there only a swipe over the header closes the notch.
     private func swipeClosesNotch(at point: CGPoint) -> Bool {
         guard viewModel.visibleTab == .focus else { return true }
+        return isOverHeader(point)
+    }
+
+    /// The open notch's top row, beside the camera.
+    private func isOverHeader(_ point: CGPoint) -> Bool {
         let geometry = viewModel.geometry
         return point.y >= geometry.screenFrame.maxY - geometry.closedSize.height - 8
+    }
+
+    private func resetSwipe() {
+        scrollTotal = 0
+        swipeAcross = 0
+        swipeAxis = nil
+        hasSkipped = false
+    }
+
+    /// Two fingers sideways over the notch: to the left for the next track, to the right for the previous one.
+    private func skipTrack(forward: Bool) {
+        let media = NowPlayingService.shared
+        guard media.player != nil else { return }
+        Haptics.tap()
+        if forward { media.next() } else { media.previous() }
     }
 }
