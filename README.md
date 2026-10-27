@@ -127,7 +127,8 @@ Mirror's camera and the live equalizer's audio tap. Timers still end on time, wi
 When you're back, whatever came due meanwhile runs once.
 
 On battery and in Low Power Mode, the polls run less often. Everything else (music, volume,
-the microphone, notifications, files arriving) is driven by events and costs nothing while idle.
+the microphone, notifications, files arriving) is driven by events, so it costs nothing until
+something happens.
 
 | Poll | On power | On battery | Low Power Mode |
 |---|---|---|---|
