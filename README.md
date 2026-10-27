@@ -73,6 +73,7 @@ ln -s /Applications/Dynotch.app/Contents/Resources/dynotch /usr/local/bin/dynotc
 | `dynotch timer start` | Controls the focus timer: `start`, `pause`, `toggle`, `reset` or `skip`. |
 | `dynotch tray --show report.pdf` | Adds files to the Tray, and opens it with `--show`. |
 | `dynotch profile Work` | Switches to a saved profile by name. The notch says which, or that there's no such profile. |
+| `dynotch focus-report` | Saves what the Focus settings hold, and which Focus Dynotch makes of them, to `~/Library/Logs/Dynotch/focus-report.json`, then prints that path. Names and places are left out. For when the notch shows the wrong Focus; it needs Full Disk Access, like the Focus activity. |
 
 Other apps can open the same links, for example
 `dynotch://notify?text=Hello&tint=orange`, `dynotch://timer/start` or `dynotch://profile?name=Work`.
@@ -195,6 +196,11 @@ above). An ad hoc build may lose them.
   DisplayServices framework. If that's unavailable it stays quiet.
 - Not included from MacNotch: AI translation, and Night Shift / True Tone toggles (they have
   no public API).
+- Which Focus is on comes from Focus settings files that Apple doesn't document. A scheduled
+  Focus switched off by hand is recognized by the record macOS keeps of what was switched off,
+  using the key names in macOS's own Focus code, but that hasn't been checked against a real
+  switch-off yet. If the notch shows a Focus that's off, `dynotch focus-report` saves what the
+  files hold.
 - Notification peeks read a database that Apple doesn't document. Its location and layout
   have changed between macOS versions before; if they change again, Settings says
   notifications can't be read on that Mac. They were last checked on macOS 27.0.1.

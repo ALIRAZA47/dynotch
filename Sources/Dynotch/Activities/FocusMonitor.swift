@@ -169,19 +169,22 @@ final class FocusMonitor: ObservableObject {
         }
     }
 
-    /// A Focus turned on by hand wins; otherwise one whose schedule covers `now`.
+    /// A Focus turned on by hand wins; otherwise one whose schedule covers `now`, unless it was
+    /// switched off since that stretch of its schedule began.
     nonisolated static func activeMode(assertions: Any?, configurations: Any?, at now: Date) -> FocusMode? {
         let configs = entries(configurations).compactMap { $0["modeConfigurations"] as? [String: Any] }
             .reduce(into: [String: [String: Any]]()) { all, group in
                 for (id, config) in group { if let config = config as? [String: Any] { all[id] = config } }
             }
-        let records = entries(assertions).flatMap { $0["storeAssertionRecords"] as? [[String: Any]] ?? [] }
+        let stores = entries(assertions)
+        let records = stores.flatMap { $0["storeAssertionRecords"] as? [[String: Any]] ?? [] }
         let latest = records.max { timestamp($0) < timestamp($1) }
         if let details = latest?["assertionDetails"] as? [String: Any],
            let id = details["assertionDetailsModeIdentifier"] as? String {
             return mode(id: id, config: configs[id])
         }
-        for (id, config) in configs.sorted(by: { $0.key < $1.key }) where isScheduled(config, at: now) {
+        for (id, config) in configs.sorted(by: { $0.key < $1.key }) {
+            guard let start = scheduleStart(config, at: now), !isSwitchedOff(id, since: start, in: stores) else { continue }
             return mode(id: id, config: config)
         }
         return nil
@@ -195,26 +198,52 @@ final class FocusMonitor: ObservableObject {
         (record["assertionStartDateTimestamp"] as? NSNumber)?.doubleValue ?? 0
     }
 
-    /// An enabled time schedule that covers `now`, overnight ones included.
-    nonisolated private static func isScheduled(_ config: [String: Any], at now: Date) -> Bool {
+    /// The database counts time in seconds since 2001, like NSDate.
+    nonisolated private static func date(_ value: Any?) -> Date? {
+        (value as? NSNumber).map { Date(timeIntervalSinceReferenceDate: $0.doubleValue) }
+    }
+
+    /// Whether a Focus was switched off since `start`. macOS notes when everything was last switched
+    /// off, and keeps the assertions that ended. Which of the two a scheduled Focus leaves when it's
+    /// switched off by hand isn't documented, so this looks for both.
+    nonisolated private static func isSwitchedOff(_ id: String, since start: Date, in stores: [[String: Any]]) -> Bool {
+        stores.contains { store in
+            if let all = date(store["storeLastCompleteInvalidationTimestamp"]), all >= start { return true }
+            let ended = store["storeInvalidationRecords"] as? [[String: Any]] ?? []
+            return ended.contains { record in
+                let details = (record["invalidationAssertion"] as? [String: Any])?["assertionDetails"] as? [String: Any]
+                guard details?["assertionDetailsModeIdentifier"] as? String == id,
+                      let when = date(record["invalidationDateTimestamp"]) else { return false }
+                return when >= start
+            }
+        }
+    }
+
+    /// When the stretch of an enabled time schedule that covers `now` began, overnight ones included.
+    nonisolated private static func scheduleStart(_ config: [String: Any], at now: Date) -> Date? {
         let triggers = (config["triggers"] as? [String: Any])?["triggers"] as? [[String: Any]] ?? []
         let calendar = Calendar.current
         let parts = calendar.dateComponents([.hour, .minute, .weekday], from: now)
         let minute = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
-        return triggers.contains { trigger in
+        return triggers.compactMap { trigger -> Date? in
             func value(_ key: String) -> Int? { (trigger[key] as? NSNumber)?.intValue }
             guard value("enabledSetting") == 2,
-                  let startHour = value("timePeriodStartTimeHour"), let endHour = value("timePeriodEndTimeHour") else { return false }
-            let start = startHour * 60 + (value("timePeriodStartTimeMinute") ?? 0)
+                  let startHour = value("timePeriodStartTimeHour"), let endHour = value("timePeriodEndTimeHour") else { return nil }
+            let startMinute = value("timePeriodStartTimeMinute") ?? 0
+            let start = startHour * 60 + startMinute
             let end = endHour * 60 + (value("timePeriodEndTimeMinute") ?? 0)
-            guard start != end else { return false }
+            guard start != end else { return nil }
             let inside = start < end ? (minute >= start && minute < end) : (minute >= start || minute < end)
-            guard inside else { return false }
-            // Days as bits from Sunday; an overnight schedule belongs to the day it started.
-            guard let days = value("timePeriodWeekdays"), days != 0, let weekday = parts.weekday else { return true }
-            let startDay = start > end && minute < end ? (weekday + 5) % 7 + 1 : weekday
-            return days & (1 << (startDay - 1)) != 0
-        }
+            guard inside else { return nil }
+            // An overnight schedule belongs to the day it started. Days are bits from Sunday.
+            let startedYesterday = start > end && minute < end
+            if let days = value("timePeriodWeekdays"), days != 0, let weekday = parts.weekday {
+                let startDay = startedYesterday ? (weekday + 5) % 7 + 1 : weekday
+                guard days & (1 << (startDay - 1)) != 0 else { return nil }
+            }
+            guard let today = calendar.date(bySettingHour: startHour, minute: startMinute, second: 0, of: now) else { return nil }
+            return startedYesterday ? calendar.date(byAdding: .day, value: -1, to: today) : today
+        }.max()
     }
 
     nonisolated private static func mode(id: String, config: [String: Any]?) -> FocusMode {
@@ -232,6 +261,57 @@ final class FocusMonitor: ObservableObject {
                                        "green": .green, "mint": .mint, "yellow": .yellow, "orange": .orange, "red": .red,
                                        "pink": .pink, "brown": .brown, "gray": .gray, "grey": .gray]
         return colors[key] ?? .indigo
+    }
+
+    // MARK: Report
+
+    /// Where `dynotch focus-report` finds the report.
+    nonisolated static let reportURL = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent("Library/Logs/Dynotch/focus-report.json")
+
+    /// Saves what the Focus database holds and which Focus Dynotch makes of it, for checking how
+    /// macOS records a Focus. Names and places are left out, so the report can be shared.
+    func writeReport() {
+        queue.async {
+            let now = Date.now
+            var report: [String: Any] = ["time": now.formatted(.iso8601), "timestamp": now.timeIntervalSinceReferenceDate]
+            do {
+                let assertions = try Self.json(Self.folder.appendingPathComponent("Assertions.json"))
+                let configurations = try Self.json(Self.folder.appendingPathComponent("ModeConfigurations.json"))
+                report["shows"] = Self.activeMode(assertions: assertions, configurations: configurations, at: now)?.id ?? NSNull()
+                report["assertions"] = assertions.map { Self.redacted($0) } ?? NSNull()
+                report["configurations"] = configurations.map { Self.redacted($0) } ?? NSNull()
+            } catch let error as CocoaError where error.code == .fileReadNoPermission {
+                report["error"] = "Dynotch has no Full Disk Access"
+            } catch {
+                report["error"] = error.localizedDescription
+            }
+            guard JSONSerialization.isValidJSONObject(report),
+                  let data = try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
+            else { return }
+            try? FileManager.default.createDirectory(at: Self.reportURL.deletingLastPathComponent(),
+                                                     withIntermediateDirectories: true)
+            try? data.write(to: Self.reportURL, options: .atomic)
+        }
+    }
+
+    /// Keeps the shape, the numbers and the identifiers. Other text, such as a Focus's name, becomes
+    /// its length, and coordinates are left out.
+    nonisolated private static func redacted(_ value: Any, key: String = "") -> Any {
+        let key = key.lowercased()
+        switch value {
+        case let dictionary as [String: Any]:
+            return dictionary.reduce(into: [String: Any]()) { $0[$1.key] = redacted($1.value, key: $1.key) }
+        case let array as [Any]:
+            return array.map { redacted($0, key: key) }
+        case let text as String:
+            let kept = ["identifier", "uuid", "reason", "type", "behavior", "colorname", "imagename", "class"]
+            return kept.contains { key.hasSuffix($0) } ? text : "\(text.count) characters"
+        case is NSNumber where ["latitude", "longitude", "radius"].contains(where: { key.hasSuffix($0) }):
+            return "left out"
+        default:
+            return value
+        }
     }
 
     // MARK: Snapshots

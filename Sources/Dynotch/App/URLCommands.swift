@@ -10,6 +10,7 @@ import SwiftUI
 ///     dynotch://timer/start            start, pause, toggle, reset or skip
 ///     dynotch://tray/add?path=/a/file&path=/another/file&show=1
 ///     dynotch://profile?name=Work      switches to a saved profile
+///     dynotch://focus/report           saves a Focus report to ~/Library/Logs/Dynotch
 @MainActor
 enum URLCommands {
     static func handle(_ url: URL) {
@@ -39,6 +40,8 @@ enum URLCommands {
             if value("show") == "1" { NotchManager.shared.open(tab: .tray) }
         case "profile":
             ProfileStore.shared.switchTo(named: value("name") ?? "")
+        case "focus" where path.dropFirst().first == "report":
+            FocusMonitor.shared.writeReport()
         default:
             NSLog("Dynotch: ignoring %@", url.absoluteString)
         }
