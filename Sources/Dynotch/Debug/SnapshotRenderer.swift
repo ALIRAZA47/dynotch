@@ -5,6 +5,9 @@ import SwiftUI
 /// so the UI can be reviewed without driving the real thing.
 @MainActor
 enum SnapshotRenderer {
+    /// The moment sample timers count from, so every snapshot shows the same times.
+    private static let sampleTime = Date.now
+
     private struct Scene {
         let name: String
         let phase: NotchViewModel.Phase
@@ -16,6 +19,7 @@ enum SnapshotRenderer {
         var micMuted = false
         var micInUse = false
         var cameraInUse = false
+        var hasTimers = true
     }
 
     static func render(into folder: URL) {
@@ -29,6 +33,10 @@ enum SnapshotRenderer {
         let charging = LiveNotice(key: "power", symbol: "bolt.fill", tint: .green, text: "82%")
         let event = LiveNotice(key: "event", symbol: "calendar", tint: .orange, text: "in 5m", detail: "Design review")
         let muted = LiveNotice(key: "mic", symbol: "mic.slash.fill", tint: .red, text: "Muted")
+        let tea = TimerStore.shared.countdowns[0], laundry = TimerStore.shared.countdowns[1]
+        let roast = Countdown(id: UUID(), name: "Slow roast pork", duration: 4 * 3600,
+                              endDate: TimerStore.shared.now.addingTimeInterval(2 * 3600 + 750))
+        let timerDone = LiveNotice(key: "countdown", symbol: "bell.fill", tint: TimerStore.tint, text: "Done", detail: "Tea · 4 min")
         let scenes = [
             Scene(name: "01-closed-idle", phase: .closed),
             Scene(name: "02-closed-hover", phase: .hovering),
@@ -57,6 +65,13 @@ enum SnapshotRenderer {
                   micMuted: true, micInUse: true),
             Scene(name: "35-hover-on-air-timer", phase: .hovering, activity: .timer, micInUse: true, cameraInUse: true),
             Scene(name: "36-open-on-air", phase: .open, tab: .home, cameraInUse: true),
+            Scene(name: "40-closed-countdown", phase: .closed, activity: .countdown(tea)),
+            Scene(name: "41-closed-countdown-and-pomodoro", phase: .closed, activity: .countdown(tea), secondary: .timer),
+            Scene(name: "42-closed-two-countdowns", phase: .closed, activity: .countdown(tea), secondary: .countdown(laundry)),
+            Scene(name: "43-closed-long-countdown", phase: .closed, activity: .countdown(roast), secondary: .stopwatch),
+            Scene(name: "44-closed-stopwatch-and-music", phase: .closed, activity: .stopwatch, secondary: .music),
+            Scene(name: "45-closed-timer-done", phase: .closed, activity: .notice(timerDone)),
+            Scene(name: "46-open-focus-no-timers", phase: .open, tab: .focus, hasTimers: false),
         ]
 
         let settings = AppSettings.shared
@@ -64,6 +79,7 @@ enum SnapshotRenderer {
         for scene in scenes {
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
             MicMonitor.shared.loadSample(muted: scene.micMuted, micInUse: scene.micInUse, cameraInUse: scene.cameraInUse)
+            if scene.hasTimers { TimerStore.shared.loadSample(at: sampleTime) } else { TimerStore.shared.clearSample() }
             let viewModel = NotchViewModel(geometry: geometry)
             viewModel.stage(phase: scene.phase, activity: scene.activity, secondary: scene.secondary, tab: scene.tab,
                             draggingFiles: scene.draggingFiles)
@@ -213,6 +229,7 @@ enum SnapshotRenderer {
                 .init(id: "c", title: "Water the plants", dueDate: nil, color: .green),
             ])
         PomodoroTimer.shared.loadSample(remaining: 18 * 60 + 24, running: true)
+        TimerStore.shared.loadSample(at: sampleTime)
         SystemMonitor.shared.loadSample()
         DeviceBatteryMonitor.shared.loadSample([
             .init(id: "airpods", name: "AirPods Pro", kind: .earbuds, left: 80, right: 78, batteryCase: 27),

@@ -270,7 +270,7 @@ private struct VirtualNotchSketch: View {
 /// The live activities that can be turned off, and a sample of each for the preview.
 enum LiveActivityKind: String, CaseIterable, Identifiable {
     case music, trackPeek, timer, levels, charging, lowBattery, events, devices
-    case micMuted
+    case micMuted, countdowns
 
     var id: String { rawValue }
 
@@ -285,6 +285,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .events: "Upcoming events"
         case .devices: "Bluetooth devices"
         case .micMuted: "Muted microphone"
+        case .countdowns: "Timers"
         }
     }
 
@@ -299,6 +300,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .events: "Five minutes before they start"
         case .devices: "When one connects, with its battery"
         case .micMuted: "A red badge while the mic is muted"
+        case .countdowns: "Named timers and the stopwatch from the Focus tab"
         }
     }
 
@@ -313,6 +315,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .events: "calendar"
         case .devices: "airpodspro"
         case .micMuted: "mic.slash.fill"
+        case .countdowns: "hourglass"
         }
     }
 
@@ -327,6 +330,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .events: .orange
         case .devices: .teal
         case .micMuted: .red
+        case .countdowns: TimerStore.tint
         }
     }
 
@@ -342,6 +346,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .events: \.liveEvents
         case .devices: \.liveDevices
         case .micMuted: \.liveMicMuted
+        case .countdowns: \.liveCountdowns
         }
     }
 
@@ -365,8 +370,11 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .devices:
             .notice(LiveNotice(key: "device", symbol: "airpodspro", tint: .white, text: "80%", detail: "AirPods Pro connected"))
         case .micMuted: .idle
+        case .countdowns: .countdown(Self.sampleCountdown)
         }
     }
+
+    private static let sampleCountdown = Countdown(id: UUID(), name: "Tea", duration: 240, pausedRemaining: 221)
 
     /// A glyph at the end of the right ear, for the activities that only ever show as one.
     var sampleSecondary: CompactActivity? {
@@ -421,7 +429,7 @@ struct ActivitySettings: View {
                 }
             }
             SettingsSection(title: "Options",
-                            footer: "With two at once, the mute badge, the timer or the music you're playing keeps a small glyph while something else takes the notch. The ring is green for a camera and orange for the mic.") {
+                            footer: "With two at once, the mute badge, a timer or the music you're playing keeps a small glyph while something else takes the notch. The ring is green for a camera and orange for the mic.") {
                 SwitchGrid(options: options)
             }
         }
@@ -681,7 +689,7 @@ struct FocusSettings: View {
     private let behavior = [
         SwitchOption(title: "Auto-start", detail: "Start the next phase automatically", symbol: "forward.fill",
                      tint: PomodoroTimer.Phase.shortBreak.color, setting: \.autoStartNextPhase),
-        SwitchOption(title: "Sound", detail: "Play a sound when a phase ends", symbol: "bell.fill",
+        SwitchOption(title: "Sound", detail: "Play a sound when a phase or a named timer ends", symbol: "bell.fill",
                      tint: .orange, setting: \.timerSound),
     ]
 

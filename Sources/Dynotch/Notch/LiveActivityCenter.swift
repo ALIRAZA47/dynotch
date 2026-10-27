@@ -26,6 +26,9 @@ enum ClosedActivity: Equatable {
     case trackPeek
     case timer
     case notice(LiveNotice)
+    /// A named timer from the Focus tab.
+    case countdown(Countdown)
+    case stopwatch
 }
 
 /// A second activity, drawn as a small glyph at the end of the right ear while the main
@@ -35,12 +38,15 @@ enum CompactActivity: Equatable {
     case music
     /// The microphone is muted. Its badge shows even when nothing else does.
     case micMuted
+    case countdown(Countdown)
+    case stopwatch
 
     /// The main activity already shows this one.
     func isShown(by activity: ClosedActivity) -> Bool {
         switch (self, activity) {
-        case (.timer, .timer), (.music, .music), (.music, .trackPeek): true
+        case (.timer, .timer), (.music, .music), (.music, .trackPeek), (.stopwatch, .stopwatch): true
         case (.micMuted, .notice(let notice)): notice.key == "mic"
+        case (.countdown(let compact), .countdown(let main)): compact.id == main.id
         default: false
         }
     }
@@ -56,8 +62,9 @@ struct ClosedContent: Equatable {
 }
 
 /// Decides what the closed notch shows. The main activity goes by priority: notices, a new
-/// track, a running focus timer, then music that's playing. The most important of the others
-/// that has a compact form shows beside it, the mute badge first.
+/// track, a running timer (the focus timer or a named one, whichever ends soonest, then the
+/// stopwatch), then music that's playing. The most important of the others that has a
+/// compact form shows beside it, the mute badge first.
 @MainActor
 final class LiveActivityCenter: ObservableObject {
     static let shared = LiveActivityCenter()
@@ -83,6 +90,8 @@ final class LiveActivityCenter: ObservableObject {
             media.$track.map { _ in () }.eraseToAnyPublisher(),
             timer.$isRunning.map { _ in () }.eraseToAnyPublisher(),
             MicMonitor.shared.$isMuted.map { _ in () }.eraseToAnyPublisher(),
+            TimerStore.shared.$countdowns.map { _ in () }.eraseToAnyPublisher(),
+            TimerStore.shared.$stopwatch.map { _ in () }.eraseToAnyPublisher(),
             AppSettings.shared.objectWillChange.map { _ in () }.eraseToAnyPublisher()
         )
         // @Published fires before the value changes; read it on the next turn.
@@ -124,15 +133,29 @@ final class LiveActivityCenter: ObservableObject {
     private func recompute() {
         let settings = AppSettings.shared
         let media = NowPlayingService.shared
-        let timerRunning = settings.liveTimer && PomodoroTimer.shared.isRunning
+        let store = TimerStore.shared
         let musicPlaying = settings.liveMusic && media.isPlaying && media.track != nil
+
+        // Running timers, the one that ends soonest first, then the stopwatch.
+        var timers: [(end: Date, activity: ClosedActivity, compact: CompactActivity)] = []
+        if settings.liveTimer, let end = PomodoroTimer.shared.endDate {
+            timers.append((end, .timer, .timer))
+        }
+        if settings.liveCountdowns {
+            for countdown in store.countdowns {
+                if let end = countdown.endDate { timers.append((end, .countdown(countdown), .countdown(countdown))) }
+            }
+            if store.stopwatch.isRunning { timers.append((.distantFuture, .stopwatch, .stopwatch)) }
+        }
+        timers.sort { $0.end < $1.end }
+
         let activity: ClosedActivity
         if let notice {
             activity = .notice(notice)
         } else if trackPeekActive, settings.liveMusic, media.track != nil {
             activity = .trackPeek
-        } else if timerRunning {
-            activity = .timer
+        } else if let timer = timers.first {
+            activity = timer.activity
         } else if musicPlaying {
             activity = .music
         } else {
@@ -142,7 +165,7 @@ final class LiveActivityCenter: ObservableObject {
         // The ones with a compact form, most important first.
         var compact: [CompactActivity] = []
         if settings.liveMicMuted, MicMonitor.shared.isMuted { compact.append(.micMuted) }
-        if timerRunning { compact.append(.timer) }
+        compact += timers.map(\.compact)
         if musicPlaying { compact.append(.music) }
         var secondary = compact.first { !$0.isShown(by: activity) }
         // Without "Two at once", only a status like the mute badge shows, and only when nothing else does.

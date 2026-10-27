@@ -173,6 +173,10 @@ final class AppSettings: ObservableObject {
     @Published var onAirRing: Bool = AppSettings.value("onAirRing", true) {
         didSet { save("onAirRing", onAirRing) }
     }
+    /// Named timers and the stopwatch from the Focus tab.
+    @Published var liveCountdowns: Bool = AppSettings.value("liveCountdowns", true) {
+        didSet { save("liveCountdowns", liveCountdowns) }
+    }
 
     // MARK: Nook
 

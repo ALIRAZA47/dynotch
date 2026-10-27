@@ -10,6 +10,8 @@ struct CompactActivityView: View {
         case .timer: TimerGlyph()
         case .music: MusicGlyph()
         case .micMuted: MuteBadge()
+        case .countdown(let countdown): CountdownGlyph(countdown: countdown)
+        case .stopwatch: StopwatchGlyph()
         }
     }
 }

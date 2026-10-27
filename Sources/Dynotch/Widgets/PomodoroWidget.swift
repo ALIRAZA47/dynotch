@@ -7,7 +7,8 @@ struct PomodoroWidget: View {
     @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
-        WidgetCard(title: compact ? nil : "Focus timer", symbol: "timer") {
+        // On the Focus tab it sits beside the named timers, so it goes by its own name there.
+        WidgetCard(title: compact ? nil : "Pomodoro", symbol: "timer") {
             if !compact { sessionDots }
         } content: {
             VStack(spacing: 6) {
@@ -40,11 +41,13 @@ struct PomodoroWidget: View {
     }
 
     private var sessionDots: some View {
-        HStack(spacing: 4) {
+        // Smaller dots for long rounds, so they fit beside the title.
+        let dense = settings.sessionsPerRound > 5
+        return HStack(spacing: dense ? 3 : 4) {
             ForEach(0..<max(1, settings.sessionsPerRound), id: \.self) { index in
                 Circle()
                     .fill(index < timer.completedSessions ? PomodoroTimer.Phase.focus.color : Color.white.opacity(0.18))
-                    .frame(width: 5, height: 5)
+                    .frame(width: dense ? 4 : 5, height: dense ? 4 : 5)
             }
         }
         .help("Focus sessions this round")

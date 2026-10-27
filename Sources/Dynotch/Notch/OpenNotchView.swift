@@ -156,7 +156,9 @@ struct FocusTabView: View {
         GeometryReader { proxy in
             HStack(spacing: 12) {
                 PomodoroWidget(compact: false)
-                    .frame(width: (proxy.size.width * 0.3).rounded())
+                    .frame(width: (proxy.size.width * 0.23).rounded())
+                TimersWidget()
+                    .frame(width: (proxy.size.width * 0.25).rounded())
                 RemindersWidget()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 NotesWidget()

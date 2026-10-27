@@ -52,6 +52,15 @@ struct ClosedLayout: Equatable {
         case .timer:
             earWidth = 64
             rowHeight = 0
+        case .countdown(let countdown):
+            // The ring and up to ten letters of the name on the left, the time at its widest on the right.
+            let name = CGFloat(min(countdown.name.count, 10)) * 7
+            let time: CGFloat = countdown.duration >= 3600 ? 56 : countdown.duration >= 600 ? 42 : 34
+            earWidth = max(64, 10 + 17 + 6 + name + 6, 11 + time + 8)
+            rowHeight = 0
+        case .stopwatch:
+            earWidth = 72
+            rowHeight = 0
         case .notice(let notice):
             switch notice.kind {
             case .meter:

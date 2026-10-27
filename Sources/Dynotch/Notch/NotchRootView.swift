@@ -123,6 +123,12 @@ struct ClosedNotchView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(notice.tint)
                 .contentTransition(.symbolEffect(.replace))
+        case .countdown(let countdown):
+            CountdownLabel(countdown: countdown)
+        case .stopwatch:
+            Image(systemName: "stopwatch.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(TimerStore.stopwatchTint)
         }
     }
 
@@ -151,6 +157,10 @@ struct ClosedNotchView: View {
                     .foregroundStyle(notice.tint)
                     .lineLimit(1)
             }
+        case .countdown(let countdown):
+            CountdownTime(countdown: countdown)
+        case .stopwatch:
+            StopwatchTime()
         }
     }
 

@@ -28,7 +28,8 @@ final class PomodoroTimer: ObservableObject {
     /// Focus sessions finished in the current round.
     @Published private(set) var completedSessions = 0
 
-    private var endDate: Date?
+    /// When the current phase ends, while the timer runs.
+    private(set) var endDate: Date?
     private var ticker: Timer?
     /// The current phase has been started at least once, so new durations wait for the next one.
     private var phaseStarted = false

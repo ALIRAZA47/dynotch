@@ -284,6 +284,19 @@ private struct ClosedPreview: View {
             Image(systemName: notice.symbol)
                 .font(.system(size: 13 * scale, weight: .semibold))
                 .foregroundStyle(notice.tint)
+        case .countdown(let countdown):
+            HStack(spacing: 6 * scale) {
+                ProgressRing(progress: countdown.progress(at: .now), color: TimerStore.tint, lineWidth: 2.6 * scale)
+                    .frame(width: 17 * scale, height: 17 * scale)
+                Text(countdown.name)
+                    .font(.system(size: 12 * scale, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(1)
+            }
+        case .stopwatch:
+            Image(systemName: "stopwatch.fill")
+                .font(.system(size: 13 * scale, weight: .semibold))
+                .foregroundStyle(TimerStore.stopwatchTint)
         }
     }
 
@@ -312,6 +325,16 @@ private struct ClosedPreview: View {
                     .foregroundStyle(notice.tint)
                     .lineLimit(1)
             }
+        case .countdown(let countdown):
+            Text(Format.duration(countdown.remaining(at: .now).rounded(.up)))
+                .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(TimerStore.tint)
+        case .stopwatch:
+            Text("12:34")
+                .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(TimerStore.stopwatchTint)
         }
     }
 
@@ -339,6 +362,12 @@ private struct ClosedPreview: View {
                 .fill(Palette.sunset)
         case .micMuted:
             MuteBadge(size: ClosedLayout.glyphSize * scale)
+        case .countdown(let countdown):
+            ProgressRing(progress: countdown.progress(at: .now), color: TimerStore.tint, lineWidth: 2.4 * scale)
+                .padding(1.5 * scale)
+        case .stopwatch:
+            ProgressRing(progress: 0.55, color: TimerStore.stopwatchTint, lineWidth: 2.4 * scale)
+                .padding(1.5 * scale)
         }
     }
 }
