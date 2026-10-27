@@ -17,6 +17,9 @@ struct LiveNotice: Equatable {
     /// Longer text shown on a second row under the notch.
     var detail: String?
     var kind: Kind = .info
+    /// Posted by a `dynotch://` link rather than by Dynotch. Drawn with a terminal badge, since a
+    /// script may borrow any symbol and color.
+    var fromScript = false
 }
 
 /// What the closed notch is showing.

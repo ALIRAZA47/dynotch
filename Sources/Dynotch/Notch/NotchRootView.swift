@@ -151,6 +151,10 @@ struct ClosedNotchView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(notice.tint)
                 .contentTransition(.symbolEffect(.replace))
+                .overlay(alignment: .bottomTrailing) {
+                    // A script chose the symbol and color above; the badge says so.
+                    if notice.fromScript { ScriptBadge() }
+                }
         case .countdown(let countdown):
             CountdownLabel(countdown: countdown)
         case .stopwatch:
@@ -216,5 +220,18 @@ struct ClosedNotchView: View {
         default:
             EmptyView()
         }
+    }
+}
+
+/// A tiny terminal on a notice that a `dynotch://` link posted, so it can't pass for one of Dynotch's own.
+struct ScriptBadge: View {
+    var body: some View {
+        Image(systemName: "terminal.fill")
+            .font(.system(size: 5.5, weight: .black))
+            .foregroundStyle(.black)
+            .frame(width: 9, height: 9)
+            .background(Circle().fill(.white))
+            .offset(x: 4, y: 3)
+            .accessibilityLabel("From a script")
     }
 }

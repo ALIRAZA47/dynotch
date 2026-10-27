@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The hardened runtime (scripts/build.sh signs with it) blocks these unless they're declared.
+	     Each is asked for the first time its feature is used, as the usage strings in Info.plist say. -->
+	<key>com.apple.security.device.camera</key>
+	<true/>
+	<key>com.apple.security.personal-information.location</key>
+	<true/>
+	<key>com.apple.security.personal-information.calendars</key>
+	<true/>
+	<key>com.apple.security.automation.apple-events</key>
+	<true/>
+</dict>
+</plist>

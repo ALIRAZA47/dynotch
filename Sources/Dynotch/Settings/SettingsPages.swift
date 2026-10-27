@@ -1251,6 +1251,7 @@ struct FocusSettings: View {
 
 struct AboutSettings: View {
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var focus = FocusMonitor.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 26) {
@@ -1298,6 +1299,30 @@ struct AboutSettings: View {
                     ShortcutRow(keys: ["↑", "↓"], spokenKeys: "Up or down arrow",
                                 action: "Move through the pages, once the sidebar is selected")
                 }
+            }
+
+            SettingsSection(title: "Diagnostics",
+                            footer: "For when the notch shows the wrong Focus. The report keeps the shape of the Focus settings, their identifiers and times; names and places are left out, so it can be shared.") {
+                HStack(spacing: 12) {
+                    SymbolBadge(symbol: "moon.fill", tint: .indigo, size: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Focus report")
+                            .font(.system(size: 13, weight: .medium))
+                        Text(focus.access == .denied ? "Needs Full Disk Access, under Permissions"
+                             : "What the Focus settings hold, and which Focus Dynotch makes of them")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .accessibilityElement(children: .combine)
+                    Spacer(minLength: 12)
+                    CapsuleButton(title: "Save…", symbol: "square.and.arrow.down") { FocusMonitor.shared.saveReport() }
+                        .accessibilityLabel("Save a Focus report")
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(CardBackground())
             }
         }
     }

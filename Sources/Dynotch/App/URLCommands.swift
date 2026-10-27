@@ -10,7 +10,10 @@ import SwiftUI
 ///     dynotch://timer/start            start, pause, toggle, reset or skip
 ///     dynotch://tray/add?path=/a/file&path=/another/file&show=1
 ///     dynotch://profile?name=Work      switches to a saved profile
-///     dynotch://focus/report           saves a Focus report to ~/Library/Logs/Dynotch
+///
+/// Anything on the Mac can open these links, so they only do what the user could see and undo:
+/// notices carry a terminal badge, Tray adds point at files without copying them and skip
+/// ~/Library, and nothing reads a protected database on a link's behalf.
 @MainActor
 enum URLCommands {
     static func handle(_ url: URL) {
@@ -35,15 +38,13 @@ enum URLCommands {
         case "tray":
             let urls = items.filter { $0.name == "path" }.compactMap(\.value)
                 .map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath) }
-                .filter { FileManager.default.fileExists(atPath: $0.path) }
-            TrayStore.shared.add(urls)
+            TrayStore.shared.addFromScript(urls)
             if value("show") == "1" { NotchManager.shared.open(tab: .tray) }
         case "profile":
             ProfileStore.shared.switchTo(named: value("name") ?? "")
-        case "focus" where path.dropFirst().first == "report":
-            FocusMonitor.shared.writeReport()
         default:
-            NSLog("Dynotch: ignoring %@", url.absoluteString)
+            // Only the command, since the query may carry text that shouldn't end up in a log.
+            NSLog("Dynotch: ignoring dynotch://%@", path.joined(separator: "/"))
         }
     }
 
@@ -61,7 +62,7 @@ enum URLCommands {
         }
         let symbol = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) == nil ? nil : $0 } ?? "bell.fill"
         LiveActivityCenter.shared.post(LiveNotice(key: "command", symbol: symbol, tint: color(named: tint) ?? .white,
-                                                  text: text, detail: detail),
+                                                  text: text, detail: detail, fromScript: true),
                                        for: min(max(seconds ?? 4, 1), 30))
     }
 

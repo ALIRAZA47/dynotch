@@ -31,12 +31,14 @@ struct ScriptResult: Sendable {
 /// and a busy target app can block for seconds.
 final class AppleScriptRunner: @unchecked Sendable {
     private let queue = DispatchQueue(label: "app.dynotch.applescript", qos: .userInitiated)
+    /// Compiled scripts by source. A seek is a new script for each position, so this is kept small.
     private var compiled: [String: NSAppleScript] = [:]
 
     func run(_ source: String) async -> ScriptResult? {
         await withCheckedContinuation { continuation in
             queue.async {
                 let script = self.compiled[source] ?? NSAppleScript(source: source)
+                if self.compiled[source] == nil, self.compiled.count >= 32 { self.compiled.removeAll() }
                 self.compiled[source] = script
                 var error: NSDictionary?
                 let descriptor = script?.executeAndReturnError(&error)

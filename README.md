@@ -104,9 +104,18 @@ open build/Dynotch.app
 turning on **Launch at login**.
 
 Run `./scripts/make-signing-identity.sh` once first. It creates a self-signed
-"Dynotch Local Signing" certificate in your login keychain, and `build.sh` signs
-with it, so macOS keeps Dynotch's permissions across rebuilds. Without it, the
-app is signed ad hoc, which looks like a new app to macOS after every build.
+"Dynotch Local Signing" certificate in a keychain of its own,
+`~/Library/Keychains/dynotch-signing.keychain-db`, with a password you choose, and
+`build.sh` signs with it, so macOS keeps Dynotch's permissions across rebuilds. That
+keychain stays out of the keychain search list and locks when the Mac sleeps or an hour
+after it was last used, so nothing else on the Mac can sign with the identity unnoticed;
+`build.sh` asks for the password when it's locked. An identity an older version of the
+script put in the login keychain is moved across, permissions intact. Without an identity,
+the app is signed ad hoc, which looks like a new app to macOS after every build.
+
+The app is signed with the hardened runtime, which keeps other processes from loading code
+into it. `Support/Dynotch.entitlements` lists what it may still reach: the camera, location,
+calendars and Apple events.
 
 `./scripts/package.sh` builds and signs a release and puts `Dynotch-<version>.dmg` and a
 `.zip` of the app in `dist/`, with their SHA-256 checksums. The version comes from
@@ -129,13 +138,14 @@ ln -s /Applications/Dynotch.app/Contents/Resources/dynotch /usr/local/bin/dynotc
 
 | Command | What it does |
 |---|---|
+| `dynotch notify "Deploy done" --detail "api · 2m 14s" --symbol checkmark.circle.fill --tint green` | Shows a notice in the closed notch. Long text moves to the row underneath. `--seconds` sets how long it stays (4 by default). The notice carries a small terminal badge, so it can't pass for one of Dynotch's own. |
+| `dynotch open tray` | Opens the notch on a tab: `home`, `tray`, `focus` or `stats`. |
 | `dynotch notify "Deploy done" --detail "api · 2m 14s" --symbol checkmark.circle.fill --tint green` | Shows a notice in the closed notch. Long text moves to the row underneath. `--seconds` sets how long it stays (4 by default). |
 | `dynotch open tray` | Opens the notch on a tab: `home`, `tray`, `focus` or `stats` (the Control tab). |
 | `dynotch close` | Closes the notch. |
 | `dynotch timer start` | Controls the focus timer: `start`, `pause`, `toggle`, `reset` or `skip`. |
-| `dynotch tray --show report.pdf` | Adds files to the Tray, and opens it with `--show`. |
+| `dynotch tray --show report.pdf` | Adds files to the Tray, and opens it with `--show`. The items point at the files where they are, never copies; nothing under `~/Library` is taken; and the notch says what a script added. |
 | `dynotch profile Work` | Switches to a saved profile by name. The notch says which, or that there's no such profile. |
-| `dynotch focus-report` | Saves what the Focus settings hold, and which Focus Dynotch makes of them, to `~/Library/Logs/Dynotch/focus-report.json`, then prints that path. Names and places are left out. For when the notch shows the wrong Focus; it needs Full Disk Access, like the Focus activity. |
 
 Other apps can open the same links, for example
 `dynotch://notify?text=Hello&tint=orange`, `dynotch://timer/start` or `dynotch://profile?name=Work`.
@@ -143,6 +153,8 @@ Other apps can open the same links, for example
 **When a long command finishes.** Source `notify-long-commands.zsh` (it sits next to
 `dynotch` in the app) from `~/.zshrc`. Any command that runs for 30 seconds or more
 then ends with a "Done" or "Failed" notice. `DYNOTCH_LONG_COMMAND` changes the threshold.
+The notice names the command alone, `make` say, since its arguments can hold tokens;
+`DYNOTCH_LONG_COMMAND_DETAIL=full` includes them.
 
 **When Claude Code needs you.** Claude Code hooks can call the same command. Add this
 to `~/.claude/settings.json`:
@@ -163,9 +175,10 @@ from, and a line of text. Messages, Mail, Slack, Microsoft Teams, Outlook, Whats
 Signal, Discord, FaceTime, Zoom, Calendar and Reminders have symbols of their own; other apps
 get a bell, and the line starts with the app's name.
 
-**Settings → Live Activities → Notifications** chooses which apps peek. **Hide message text**
-shows only the app and the sender, which is worth turning on if you share your screen: Dynotch
-doesn't check Focus or screen sharing.
+**Settings → Live Activities → Notifications** chooses which apps peek. Peeks stay hidden
+while a Focus is on and while a display is mirrored, as macOS's own banners do. Dynotch can't
+tell when the screen is shared, so **Hide message text**, which shows only the app and the
+sender, is worth turning on if you share it.
 
 **Turning it on.** macOS has no public API for other apps' notifications, so Dynotch reads
 them from Notification Center's own database
@@ -263,8 +276,8 @@ above). An ad hoc build may lose them.
 - Which Focus is on comes from Focus settings files that Apple doesn't document. A scheduled
   Focus switched off by hand is recognized by the record macOS keeps of what was switched off,
   using the key names in macOS's own Focus code, but that hasn't been checked against a real
-  switch-off yet. If the notch shows a Focus that's off, `dynotch focus-report` saves what the
-  files hold.
+  switch-off yet. If the notch shows a Focus that's off, **Settings → About → Diagnostics**
+  saves a report of what the files hold, with names and places left out.
 - Notification peeks read a database that Apple doesn't document. Its location and layout
   have changed between macOS versions before; if they change again, Settings says
   notifications can't be read on that Mac. They were last checked on macOS 27.0.1.
@@ -286,8 +299,8 @@ Sources/Dynotch/
   Settings/   settings window and permissions page
   Welcome/    the first-run welcome tour
   Debug/      snapshot renderer, energy probe
-Support/      Info.plist, app icon
-scripts/      build script, icon generator
+Support/      Info.plist, entitlements, app icon
+scripts/      build and signing scripts, icon generator, the dynotch command and the zsh hook
 ```
 
 The notch panel is as large as the open notch but only accepts the mouse while the
