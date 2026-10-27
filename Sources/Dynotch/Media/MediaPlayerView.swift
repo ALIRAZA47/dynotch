@@ -92,8 +92,9 @@ struct MediaPlayerView: View {
         }
     }
 
+    /// The album art's color, or the accent while Artwork tint is off.
     private var tint: Color {
-        settings.artworkTint ? Color(nsColor: media.accent) : .white
+        settings.artworkTint ? Color(nsColor: media.accent) : theme.accent
     }
 
     @ViewBuilder

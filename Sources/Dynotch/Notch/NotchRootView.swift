@@ -9,7 +9,7 @@ struct NotchRootView: View {
 
     var body: some View {
         let metrics = viewModel.metrics
-        let theme = NotchTheme.standard
+        let theme = settings.theme
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
                 if viewModel.isOpen {
@@ -27,7 +27,8 @@ struct NotchRootView: View {
             }
             .frame(width: metrics.width, height: metrics.height, alignment: .top)
             .padding(.horizontal, metrics.topRadius)
-            .background(Color.black)
+            .background(NotchSurface(isGlass: viewModel.isOpen && theme.isGlass, topRadius: metrics.topRadius,
+                                     bottomRadius: metrics.bottomRadius, bandHeight: viewModel.geometry.closedSize.height))
             .clipShape(NotchShape(topRadius: metrics.topRadius, bottomRadius: metrics.bottomRadius))
             .overlay {
                 if let color = onAirColor {
@@ -37,7 +38,9 @@ struct NotchRootView: View {
                                                 removal: .opacity.animation(.easeOut(duration: 0.2))))
                 }
             }
-            .shadow(color: .black.opacity(viewModel.isOpen && settings.showOpenShadow ? 0.5 : 0), radius: 18, y: 8)
+            // Glass carries a lighter shadow: a heavy one shows through it.
+            .shadow(color: .black.opacity(viewModel.isOpen && settings.showOpenShadow ? (theme.isGlass ? 0.3 : 0.5) : 0),
+                    radius: 18, y: 8)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -77,6 +80,7 @@ struct ClosedNotchView: View {
     @ObservedObject private var media = NowPlayingService.shared
     @ObservedObject private var timer = PomodoroTimer.shared
     @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         let layout = viewModel.closedLayout
@@ -110,7 +114,7 @@ struct ClosedNotchView: View {
     }
 
     private var tint: Color {
-        settings.artworkTint ? Color(nsColor: media.accent) : .white
+        settings.artworkTint ? Color(nsColor: media.accent) : theme.accent
     }
 
     @ViewBuilder

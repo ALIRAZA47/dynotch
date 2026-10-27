@@ -145,6 +145,29 @@ final class AppSettings: ObservableObject {
         didSet { save("showOpenShadow", showOpenShadow) }
     }
 
+    // MARK: Theme
+
+    /// Black or glass. Only the open notch changes: the closed one stays black, like the camera housing.
+    @Published var notchMaterial: NotchMaterial = AppSettings.value("notchMaterial", NotchMaterial.black) {
+        didSet { save("notchMaterial", notchMaterial.rawValue) }
+    }
+    @Published var notchAccent: NotchAccent = AppSettings.value("notchAccent", NotchAccent.lavender) {
+        didSet { save("notchAccent", notchAccent.rawValue) }
+    }
+    /// Where the open notch meets the top of the screen, in points.
+    @Published var notchTopRadius: Double = AppSettings.value("notchTopRadius", 12.0) {
+        didSet { save("notchTopRadius", notchTopRadius) }
+    }
+    /// The open notch's bottom corners, in points. The cards inside follow them.
+    @Published var notchBottomRadius: Double = AppSettings.value("notchBottomRadius", 30.0) {
+        didSet { save("notchBottomRadius", notchBottomRadius) }
+    }
+
+    /// The open notch's look, from the four settings above.
+    var theme: NotchTheme {
+        NotchTheme(material: notchMaterial, accent: notchAccent, topRadius: notchTopRadius, bottomRadius: notchBottomRadius)
+    }
+
     // MARK: Equalizer and keys
 
     @Published var replaceSystemHUD: Bool = AppSettings.value("replaceSystemHUD", false) {

@@ -157,7 +157,7 @@ final class NotchViewModel: ObservableObject {
         let settings = AppSettings.shared
         switch phase {
         case .open:
-            let theme = NotchTheme.standard
+            let theme = settings.theme
             return NotchMetrics(width: settings.openWidth, height: settings.openHeight,
                                 topRadius: theme.topRadius, bottomRadius: theme.bottomRadius)
         case .closed, .hovering:

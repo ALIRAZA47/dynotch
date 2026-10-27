@@ -106,6 +106,8 @@ private struct StagePreview: View {
             .animation(.notchActivity, value: featured)
         }
         .animation(.notchOpen, value: page)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: settings.theme)
+        .environment(\.notchTheme, settings.theme)
     }
 
     // MARK: Notch
@@ -115,9 +117,10 @@ private struct StagePreview: View {
         let page = navigation.page
         if isOpen {
             let scale = Self.openScale
+            let theme = settings.theme
             PreviewNotch(size: CGSize(width: settings.openWidth * scale, height: settings.openHeight * scale),
-                         topRadius: NotchTheme.standard.topRadius * scale, bottomRadius: NotchTheme.standard.bottomRadius * scale,
-                         shadow: settings.showOpenShadow) {
+                         topRadius: theme.topRadius * scale, bottomRadius: theme.bottomRadius * scale,
+                         isGlass: theme.isGlass, bandHeight: 32 * scale, shadow: settings.showOpenShadow) {
                 OpenPreview(tab: page == .tray ? .tray : .home, scale: scale)
             }
         } else {
@@ -180,7 +183,7 @@ private struct StagePreview: View {
                 MethodChip(symbol: "keyboard", text: "⌃⌥N", isOn: settings.globalShortcut)
             }
         case .appearance:
-            CaptionText("\(Int(settings.openWidth)) × \(Int(settings.openHeight)) pt")
+            CaptionText("\(Int(settings.openWidth)) × \(Int(settings.openHeight)) pt · \(settings.theme.material.title) · \(settings.notchAccent.title)")
         case .activities:
             ActivityDots(featured: featured)
         case .focus:
@@ -193,11 +196,14 @@ private struct StagePreview: View {
     }
 }
 
-/// The notch silhouette at preview size, hanging from the top edge.
+/// The notch silhouette at preview size, hanging from the top edge. Black, or glass for an open
+/// notch whose theme asks for it.
 private struct PreviewNotch<Content: View>: View {
     let size: CGSize
     let topRadius: CGFloat
     let bottomRadius: CGFloat
+    var isGlass = false
+    var bandHeight: CGFloat = 0
     var shadow = false
     @ViewBuilder var content: Content
 
@@ -205,9 +211,9 @@ private struct PreviewNotch<Content: View>: View {
         content
             .frame(width: size.width, height: size.height, alignment: .top)
             .padding(.horizontal, topRadius)
-            .background(Color.black)
+            .background(NotchSurface(isGlass: isGlass, topRadius: topRadius, bottomRadius: bottomRadius, bandHeight: bandHeight))
             .clipShape(NotchShape(topRadius: topRadius, bottomRadius: bottomRadius))
-            .shadow(color: .black.opacity(shadow ? 0.6 : 0), radius: 12, y: 7)
+            .shadow(color: .black.opacity(shadow ? (isGlass ? 0.35 : 0.6) : 0), radius: 12, y: 7)
     }
 }
 
@@ -237,6 +243,7 @@ private struct ClosedPreview: View {
     let scale: CGFloat
     let timerText: String
     let tintArtwork: Bool
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -309,7 +316,7 @@ private struct ClosedPreview: View {
         case .idle:
             EmptyView()
         case .music, .trackPeek:
-            AudioBars(isPlaying: true, color: tintArtwork ? Color(red: 1, green: 0.45, blue: 0.55) : Palette.lilac)
+            AudioBars(isPlaying: true, color: tintArtwork ? Color(red: 1, green: 0.45, blue: 0.55) : theme.accent)
                 .frame(width: 20 * scale, height: 14 * scale)
         case .timer:
             Text(timerText)
@@ -462,6 +469,7 @@ private struct OpenPreview: View {
     let tab: NotchTab
     let scale: CGFloat
     @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         VStack(spacing: 0) {
@@ -469,21 +477,21 @@ private struct OpenPreview: View {
                 .frame(height: 32 * scale)
             Group {
                 if tab == .tray {
-                    TraySketch()
+                    TraySketch(cardRadius: theme.cardRadius * scale)
                 } else {
-                    NookSketch()
+                    NookSketch(cardRadius: theme.cardRadius * scale)
                 }
             }
             .padding(.top, 8 * scale)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .padding(.horizontal, 18 * scale)
-        .padding(.bottom, 14 * scale)
+        .padding(.horizontal, NotchTheme.inset * scale)
+        .padding(.bottom, NotchTheme.inset * scale)
     }
 
     private var header: some View {
         // As in the real header: each side gets what's left beside the camera housing.
-        let side = max(0, (settings.openWidth - 36 - 185) / 2 - 6) * scale
+        let side = max(0, (settings.openWidth - NotchTheme.inset * 2 - 185) / 2 - 6) * scale
         return HStack(spacing: 0) {
             HStack(spacing: 2) {
                 ForEach(settings.enabledTabs) { item in
@@ -494,10 +502,10 @@ private struct OpenPreview: View {
                             Text(item.title).font(.system(size: 6.5, weight: .semibold)).fixedSize()
                         }
                     }
-                    .foregroundStyle(.white.opacity(selected ? 1 : 0.45))
+                    .foregroundStyle(.white.opacity(selected ? 1 : 0.5))
                     .padding(.horizontal, selected ? 5 : 3)
                     .frame(height: 11)
-                    .background(Capsule().fill(.white.opacity(selected ? 0.14 : 0)))
+                    .background(Capsule().fill(selected ? theme.selection : .clear))
                 }
             }
             .frame(width: side, alignment: .leading)
@@ -514,13 +522,16 @@ private struct OpenPreview: View {
 }
 
 private struct NookSketch: View {
+    let cardRadius: CGFloat
     @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         GeometryReader { proxy in
             let widgets = settings.homeWidgets
             HStack(spacing: 5.5) {
-                PlayerSketch(tint: settings.artworkTint ? Color(red: 1, green: 0.45, blue: 0.55) : .white)
+                PlayerSketch(tint: settings.artworkTint ? Color(red: 1, green: 0.45, blue: 0.55) : theme.accent,
+                             artworkRadius: cardRadius)
                     .frame(width: widgets.isEmpty ? proxy.size.width : (proxy.size.width * 0.5).rounded())
                 ForEach(Array(widgets.enumerated()), id: \.offset) { _, widget in
                     VStack(spacing: 4) {
@@ -533,7 +544,7 @@ private struct NookSketch: View {
                             .lineLimit(1)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(NotchTheme.standard.card))
+                    .background(RoundedRectangle(cornerRadius: cardRadius, style: .continuous).fill(theme.card))
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 }
             }
@@ -543,11 +554,12 @@ private struct NookSketch: View {
 
 private struct PlayerSketch: View {
     let tint: Color
+    let artworkRadius: CGFloat
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .top, spacing: 6) {
-                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                RoundedRectangle(cornerRadius: artworkRadius, style: .continuous)
                     .fill(Palette.sunset)
                     .frame(width: 34, height: 34)
                     .shadow(color: Palette.magenta.opacity(0.4), radius: 4)
@@ -586,7 +598,9 @@ private struct PlayerSketch: View {
 }
 
 private struct TraySketch: View {
+    let cardRadius: CGFloat
     @ObservedObject private var tray = TrayStore.shared
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         HStack(spacing: 5.5) {
@@ -622,7 +636,7 @@ private struct TraySketch: View {
             }
             .padding(6)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(NotchTheme.standard.card))
+            .background(RoundedRectangle(cornerRadius: cardRadius, style: .continuous).fill(theme.card))
             VStack(spacing: 3) {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .font(.system(size: 9, weight: .medium))
@@ -631,7 +645,7 @@ private struct TraySketch: View {
             .foregroundStyle(.white.opacity(0.8))
             .frame(width: 50)
             .frame(maxHeight: .infinity)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(NotchTheme.standard.card))
+            .background(RoundedRectangle(cornerRadius: cardRadius, style: .continuous).fill(theme.card))
         }
     }
 }

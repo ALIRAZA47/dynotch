@@ -22,6 +22,8 @@ enum SnapshotRenderer {
         var hasTimers = true
         var downloadKnowsSize = true
         var focus: FocusMode?
+        /// A look other than the user's, for this scene only.
+        var theme: NotchTheme?
         /// More sample state for this scene; `resetAudioSamples` undoes it before the next one.
         var setUp: (@MainActor () -> Void)?
         /// Sample state for this scene. Scenes after it keep it.
@@ -72,6 +74,14 @@ enum SnapshotRenderer {
             Scene(name: "13-open-tray-dropping", phase: .open, tab: .tray, draggingFiles: true),
             Scene(name: "14-open-focus", phase: .open, tab: .focus),
             Scene(name: "15-open-stats", phase: .open, tab: .stats),
+            // Themes
+            Scene(name: "16-open-nook-glass", phase: .open, tab: .home, theme: NotchTheme(material: .glass)),
+            Scene(name: "17-open-focus-glass", phase: .open, tab: .focus, theme: NotchTheme(material: .glass)),
+            Scene(name: "18-open-stats-pink-round", phase: .open, tab: .stats,
+                  theme: NotchTheme(accent: .pink, topRadius: 18, bottomRadius: 40)),
+            Scene(name: "19-open-tray-teal-square", phase: .open, tab: .tray,
+                  theme: NotchTheme(accent: .teal, topRadius: 8, bottomRadius: 18),
+                  setUp: { TrayStore.shared.select(TrayStore.shared.items[1]) }),
             Scene(name: "20-closed-timer-and-music", phase: .closed, activity: .timer, secondary: .music),
             Scene(name: "21-closed-volume-and-timer", phase: .closed, activity: .notice(volume), secondary: .timer),
             Scene(name: "22-closed-track-peek-and-timer", phase: .closed, activity: .trackPeek, secondary: .timer),
@@ -157,7 +167,9 @@ enum SnapshotRenderer {
         let size = CGSize(width: settings.openWidth + NotchTheme.standard.topRadius * 2 + 80, height: settings.openHeight + 40)
         let savedWidgets = (settings.homeWidgetA, settings.homeWidgetB)
         let savedShortcuts = settings.pinnedShortcuts
+        let savedTheme = settings.theme
         for scene in scenes {
+            apply(scene.theme ?? savedTheme)
             scene.prepare?()
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
             resetAudioSamples()
@@ -184,8 +196,20 @@ enum SnapshotRenderer {
         }
         (settings.homeWidgetA, settings.homeWidgetB) = savedWidgets
         if settings.pinnedShortcuts != savedShortcuts { settings.pinnedShortcuts = savedShortcuts }
+        apply(savedTheme)
         print("Wrote \(scenes.count) snapshots to \(folder.path)")
         renderSettings(into: folder)
+        renderThemes(into: folder)
+    }
+
+    /// Puts a theme in the settings, where the notch reads it. Only writes what differs.
+    private static func apply(_ theme: NotchTheme) {
+        let settings = AppSettings.shared
+        guard settings.theme != theme else { return }
+        settings.notchMaterial = theme.material
+        settings.notchAccent = theme.accentChoice
+        settings.notchTopRadius = theme.topRadius
+        settings.notchBottomRadius = theme.bottomRadius
     }
 
     // MARK: Settings
@@ -255,6 +279,34 @@ enum SnapshotRenderer {
             window.close()
         }
         print("Wrote \(count) live activity previews to \(folder.path)")
+    }
+
+    /// The Appearance page with other themes, so its header's model notch shows them, glass included.
+    private static func renderThemes(into folder: URL) {
+        let savedTheme = AppSettings.shared.theme
+        let looks: [(name: String, appearance: NSAppearance.Name, theme: NotchTheme)] = [
+            ("glass-dark", .darkAqua, NotchTheme(material: .glass, accent: .pink, topRadius: 16, bottomRadius: 38)),
+            ("glass-light", .aqua, NotchTheme(material: .glass, accent: .teal, topRadius: 8, bottomRadius: 20)),
+            ("graphite-dark", .darkAqua, NotchTheme(accent: .graphite, topRadius: 20, bottomRadius: 24)),
+        ]
+        var count = 0
+        for (index, look) in looks.enumerated() {
+            apply(look.theme)
+            let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
+                                         styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
+            let navigation = SettingsNavigation()
+            navigation.page = .appearance
+            SettingsWindowController.configure(window, navigation: navigation)
+            window.appearance = NSAppearance(named: look.appearance)
+            window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -40_000))
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: .now + 1.2)
+            if save(window, to: folder.appendingPathComponent("settings-2-appearance-\(look.name).png")) { count += 1 }
+            window.orderOut(nil)
+            window.close()
+        }
+        apply(savedTheme)
+        print("Wrote \(count) theme previews to \(folder.path)")
     }
 
     /// Writes the window to a PNG, trying again if the window server hands back a blank frame.
