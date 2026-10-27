@@ -5,3 +5,5 @@ build/
 .DS_Store
 # Exported videos are large; they live outside version control.
 media/*.mp4
+# Agent worktrees.
+.claude/worktrees/
