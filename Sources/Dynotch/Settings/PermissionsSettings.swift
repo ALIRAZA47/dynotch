@@ -41,6 +41,9 @@ final class PermissionStatus: ObservableObject {
                           DeviceBatteryMonitor.shared.objectWillChange)
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        MediaKeyTap.shared.objectWillChange
+            .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &cancellables)
     }
 
     var privacy: [Item] {
@@ -57,6 +60,10 @@ final class PermissionStatus: ObservableObject {
             Item(title: "Camera", purpose: "The Mirror widget", symbol: "camera.fill", tint: .teal,
                  state: state(camera.status == .authorized, undetermined: camera.status == .notDetermined),
                  action: camera.requestAccess),
+            // macOS doesn't say whether Accessibility was refused or never asked for.
+            Item(title: "Accessibility", purpose: "The volume and brightness keys, with the system HUD replaced",
+                 symbol: "accessibility", tint: .indigo, state: MediaKeyTap.shared.hasAccess ? .granted : .notDetermined,
+                 action: MediaKeyTap.shared.requestAccess),
             Item(title: "Bluetooth", purpose: "Battery levels of AirPods, keyboards and mice", symbol: "airpodspro",
                  tint: .blue, state: devices.isAuthorized ? .granted : .notDetermined, action: devices.requestAccess),
         ]

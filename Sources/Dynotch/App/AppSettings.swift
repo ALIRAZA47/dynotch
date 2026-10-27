@@ -128,6 +128,12 @@ final class AppSettings: ObservableObject {
         didSet { save("showOpenShadow", showOpenShadow) }
     }
 
+    // MARK: Equalizer and keys
+
+    @Published var replaceSystemHUD: Bool = AppSettings.value("replaceSystemHUD", false) {
+        didSet { save("replaceSystemHUD", replaceSystemHUD) }
+    }
+
     // MARK: Live activities
 
     @Published var liveMusic: Bool = AppSettings.value("liveMusic", true) {

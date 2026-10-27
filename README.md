@@ -19,6 +19,7 @@ dependencies.
 | **Tray tab** | Drag files toward the notch and it opens with drop zones: **Keep in Tray**, **AirDrop**, **Compress** and **Copy to…**. Tray items have Quick Look thumbnails, drag back out to any app, and survive relaunches. The right-click menu offers Open, Open With, Show in Finder, Copy, AirDrop, Share, Compress, Extract, Convert Image (PNG/JPEG/HEIC), Make Smaller, Copy to…, Move to… and Remove. Dropped images, links and text become files. |
 | **Focus tab** | Pomodoro timer (focus, short and long breaks, sound, auto-start), Reminders (check off, add new) and a Notes scratchpad. |
 | **Stats tab** | CPU (with a sparkline), memory, disk and network; battery levels for the Mac, AirPods (each bud and the case), keyboards, mice and more; quick toggles for Dark Mode, Keep Awake, Mute, Color Picker (copies the hex code), Screenshot and Sleep Display. |
+| **Audio and keys** | **Replace system HUD** (opt-in) takes over the volume, mute and brightness keys so only Dynotch's meter shows, in steps of a sixteenth (a sixty-fourth with ⇧⌥), even at either end of the range. Keys Dynotch can't handle, like an output without a volume control or an external display, go to macOS as usual. |
 | **Calendar** | A five-day strip; "in 12m" and "Now" labels; a Join button for Zoom, Meet, Teams, Webex and FaceTime links. |
 | **App** | Menu bar icon, Settings window (General, Appearance, Live Activities, Nook & Widgets, Tray, Focus Timer, Permissions, About), launch at login. Runs as an agent app with no Dock icon. |
 
@@ -92,6 +93,7 @@ Each permission is requested the first time you use the feature that needs it.
 | Automation: System Events | The Dark Mode toggle |
 | Calendar, Reminders | The Calendar and Reminders widgets |
 | Camera | The Mirror widget (it's only on while you're looking at it) |
+| Accessibility | Replace system HUD: handling the volume and brightness keys. Asked for when you turn it on |
 | Bluetooth | Battery levels of connected devices |
 
 Grants survive rebuilds as long as the app is signed with the local identity (see
@@ -103,8 +105,8 @@ above). An ad hoc build may lose them.
   (browsers, Podcasts and so on) only report to the private MediaRemote framework, which
   macOS reserves for Apple-signed processes. Apps that show every player work around this
   by loading code into an Apple-signed binary. Dynotch doesn't do that.
-- The volume and brightness HUD appears alongside the system one. Hiding the system HUD
-  would mean intercepting media keys, which needs Accessibility access.
+- The volume and brightness HUD appears alongside the system one unless **Replace system HUD**
+  is on (Settings → Live Activities), which needs Accessibility access.
 - The equalizer bars are decorative. Real audio levels would need screen-recording
   permission.
 - The brightness HUD reads the built-in display's brightness through the private
@@ -122,7 +124,7 @@ Sources/Dynotch/
   Calendar/   EventKit service, calendar and reminders widgets
   Tray/       tray store, file actions, tray UI and drop zones
   Widgets/    mirror, focus timer, notes, system stats, batteries, quick toggles, shortcuts
-  HUD/        volume (CoreAudio) and brightness monitors
+  HUD/        volume (CoreAudio) and brightness monitors, media-key tap
   Settings/   settings window and permissions page
   Debug/      snapshot renderer
 Support/      Info.plist, app icon

@@ -380,6 +380,14 @@ struct ActivitySettings: View {
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 26) {
+            closedNotch
+            EqualizerAndKeysSettings()
+        }
+    }
+
+    @ViewBuilder
+    private var closedNotch: some View {
         let onCount = LiveActivityKind.allCases.filter { settings[keyPath: $0.setting] }.count
         SettingsSection(title: "Show in the closed notch", trailing: "\(onCount) of \(LiveActivityKind.allCases.count) on",
                         footer: "Live activities appear beside the camera without opening the notch. Point at one to see it above.") {

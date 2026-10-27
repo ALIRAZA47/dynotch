@@ -38,6 +38,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CalendarService.shared.start()
         VolumeMonitor.shared.start()
         BrightnessMonitor.shared.start()
+        MediaKeyTap.shared.start()
         DeviceBatteryMonitor.shared.start()
         LiveActivityCenter.shared.start()
         NotchManager.shared.start()
