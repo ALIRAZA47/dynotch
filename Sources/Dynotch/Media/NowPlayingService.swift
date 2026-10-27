@@ -67,6 +67,8 @@ final class NowPlayingService: ObservableObject {
         let center = DistributedNotificationCenter.default()
         for source in Player.allCases {
             observers.append(center.addObserver(forName: source.notification, object: nil, queue: .main) { [weak self] note in
+                // Anything can post a distributed notification; only the player itself gets a hearing.
+                guard source.isRunning else { return }
                 let info = PlayerInfo(note.userInfo)
                 MainActor.assumeIsolated { self?.handle(info, from: source) }
             })
@@ -292,8 +294,14 @@ final class NowPlayingService: ObservableObject {
         }
     }
 
+    /// Artwork comes from Spotify's and Apple's image servers, over HTTPS and from nowhere else:
+    /// the link is whatever the player or the search API handed over.
+    private static let artworkHosts = ["scdn.co", "spotifycdn.com", "mzstatic.com"]
+
     private static func download(_ url: URL) async -> NSImage? {
-        guard let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
+        guard url.scheme?.lowercased() == "https", let host = url.host?.lowercased(),
+              artworkHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }),
+              let (data, _) = try? await URLSession.shared.data(from: url) else { return nil }
         return NSImage(data: data)
     }
 

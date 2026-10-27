@@ -13,7 +13,7 @@ struct Cadence: Equatable {
 /// Core Audio and IOKit listeners, file system sources, distributed notifications.
 extension Cadence {
     /// CPU, memory, disk and network, while the Stats tab is on screen.
-    static let systemStats = Cadence(name: "Stats tab", every: 1.5, onBattery: 3, lowPower: 5)
+    static let systemStats = Cadence(name: "Control tab", every: 1.5, onBattery: 3, lowPower: 5)
     /// Focus schedules start and end without touching the files that are watched.
     static let focusSchedules = Cadence(name: "Focus schedules", every: 30, onBattery: 60, lowPower: 120)
     /// `system_profiler` for Bluetooth battery levels, which nothing announces.
@@ -82,11 +82,16 @@ final class EnergyCoordinator: ObservableObject {
         observe(workspace, NSWorkspace.screensDidWakeNotification) { $0.displaysAsleep = false }
         observe(workspace, NSWorkspace.sessionDidResignActiveNotification) { $0.sessionInactive = true }
         observe(workspace, NSWorkspace.sessionDidBecomeActiveNotification) { $0.sessionInactive = false }
+        // Anything on the Mac can post these, so each is a cue to look at the window server and
+        // the process list rather than a fact: now, and again a moment later in case they lag.
         let distributed = DistributedNotificationCenter.default()
-        observe(distributed, Notification.Name("com.apple.screenIsLocked")) { $0.screenLocked = true }
-        observe(distributed, Notification.Name("com.apple.screenIsUnlocked")) { $0.screenLocked = false }
-        observe(distributed, Notification.Name("com.apple.screensaver.didstart")) { $0.screenSaver = true }
-        observe(distributed, Notification.Name("com.apple.screensaver.didstop")) { $0.screenSaver = false }
+        for name in ["com.apple.screenIsLocked", "com.apple.screenIsUnlocked",
+                     "com.apple.screensaver.didstart", "com.apple.screensaver.didstop"] {
+            distributed.publisher(for: Notification.Name(name))
+                .receive(on: RunLoop.main)
+                .sink { [weak self] _ in self?.lookAtScreen(again: true) }
+                .store(in: &cancellables)
+        }
         // Posted on whichever thread changed it.
         NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)
             .receive(on: RunLoop.main)
@@ -121,12 +126,22 @@ final class EnergyCoordinator: ObservableObject {
     func sawInput() {
         guard isQuiet, Date.now.timeIntervalSince(lastLook) > 1 else { return }
         lastLook = .now
+        lookAtScreen(again: false)
+    }
+
+    /// Reads whether the displays sleep, the screen is locked and this user has the Mac from the
+    /// window server, and whether the screen saver runs from the process list. With `again`, once
+    /// more after a moment, since a notification can arrive before the state it announces.
+    private func lookAtScreen(again: Bool) {
         var next = conditions
         Self.readScreen(into: &next)
-        if next.screenSaver {
-            next.screenSaver = NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "com.apple.ScreenSaver.Engine" }
-        }
+        next.screenSaver = NSWorkspace.shared.runningApplications.contains { $0.bundleIdentifier == "com.apple.ScreenSaver.Engine" }
         update(next)
+        guard again else { return }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(1.5))
+            self?.lookAtScreen(again: false)
+        }
     }
 
     /// Whether the main display sleeps, the screen is locked, and this user has the Mac, from the

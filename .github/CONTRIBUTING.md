@@ -16,9 +16,11 @@ open build/Dynotch.app
 ```
 
 Run `./scripts/make-signing-identity.sh` once first. It creates a self-signed
-"Dynotch Local Signing" certificate in your login keychain so macOS keeps the app's
-permissions across rebuilds. Without it the app is signed ad hoc and looks like a new
-app to macOS after every build.
+"Dynotch Local Signing" certificate in a keychain of its own, with a password you choose,
+so macOS keeps the app's permissions across rebuilds; `build.sh` asks for the password when
+that keychain is locked. Without it the app is signed ad hoc and looks like a new app to
+macOS after every build. Builds are signed with the hardened runtime; what the app may
+reach is listed in `Support/Dynotch.entitlements`.
 
 For a quick loop, `swift build` and `.build/debug/Dynotch` also work. Reviewing UI?
 `Dynotch --snapshot <folder>` renders every notch state with sample data to PNGs.

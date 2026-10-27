@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// Where Dynotch keeps what it saves between launches: its own defaults, or a scratch domain
+/// with sample values while `--snapshot` renders, so a snapshot run never reads or writes the real ones.
+extension UserDefaults {
+    nonisolated(unsafe) static var dynotch: UserDefaults = .standard
+}
+
 enum DisplayMode: String, CaseIterable, Identifiable {
     case notched, main, all
 
@@ -40,6 +46,7 @@ enum VirtualNotchStyle: String, CaseIterable, Identifiable {
 }
 
 enum NotchTab: String, CaseIterable, Identifiable {
+    // `stats` is the Control tab; the raw value stays so saved settings and links keep working.
     case home, tray, focus, stats
 
     var id: String { rawValue }
@@ -49,7 +56,7 @@ enum NotchTab: String, CaseIterable, Identifiable {
         case .home: "Nook"
         case .tray: "Tray"
         case .focus: "Focus"
-        case .stats: "Stats"
+        case .stats: "Control"
         }
     }
 
@@ -58,7 +65,31 @@ enum NotchTab: String, CaseIterable, Identifiable {
         case .home: "house.fill"
         case .tray: "tray.full.fill"
         case .focus: "timer"
-        case .stats: "gauge.with.dots.needle.67percent"
+        case .stats: "switch.2"
+        }
+    }
+}
+
+/// What resting the pointer on the closed notch brings up.
+enum HoverShows: String, CaseIterable, Identifiable {
+    /// A small glance at what's live, with a control or two. A click or a swipe down opens the rest.
+    case glance
+    /// The whole notch, as before.
+    case notch
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .glance: "A glance"
+        case .notch: "The full notch"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .glance: "eye"
+        case .notch: "rectangle.expand.vertical"
         }
     }
 }
@@ -156,6 +187,13 @@ final class AppSettings: ObservableObject {
     @Published var hoverDelay: Double = AppSettings.value("hoverDelay", 0.15) {
         didSet { save("hoverDelay", hoverDelay) }
     }
+    @Published var hoverShows: HoverShows = AppSettings.value("hoverShows", HoverShows.glance) {
+        didSet { save("hoverShows", hoverShows.rawValue) }
+    }
+    /// ⌃⌥K opens the command field from anywhere.
+    @Published var commandShortcut: Bool = AppSettings.value("commandShortcut", true) {
+        didSet { save("commandShortcut", commandShortcut) }
+    }
     @Published var swipeGestures: Bool = AppSettings.value("swipeGestures", true) {
         didSet { save("swipeGestures", swipeGestures) }
     }
@@ -177,10 +215,10 @@ final class AppSettings: ObservableObject {
 
     // MARK: Appearance
 
-    @Published var openWidth: Double = AppSettings.value("openWidth", 660) {
+    @Published var openWidth: Double = AppSettings.value("openWidth", 680) {
         didSet { save("openWidth", openWidth) }
     }
-    @Published var openHeight: Double = AppSettings.value("openHeight", 210) {
+    @Published var openHeight: Double = AppSettings.value("openHeight", 228) {
         didSet { save("openHeight", openHeight) }
     }
     @Published var virtualNotchWidth: Double = AppSettings.value("virtualNotchWidth", 190) {
@@ -317,6 +355,10 @@ final class AppSettings: ObservableObject {
     @Published var showAllDayEvents: Bool = AppSettings.value("showAllDayEvents", true) {
         didSet { save("showAllDayEvents", showAllDayEvents) }
     }
+    /// The Focus tab's second card shows the notes rather than the reminders.
+    @Published var focusShowsNotes: Bool = AppSettings.value("focusShowsNotes", false) {
+        didSet { save("focusShowsNotes", focusShowsNotes) }
+    }
     /// Where notes are kept as Markdown files. Empty for Dynotch's own folder.
     @Published var notesFolderPath: String = AppSettings.value("notesFolderPath", "") {
         didSet { save("notesFolderPath", notesFolderPath) }
@@ -436,14 +478,14 @@ final class AppSettings: ObservableObject {
     private init() {}
 
     private func save(_ key: String, _ value: Any) {
-        UserDefaults.standard.set(value, forKey: key)
+        UserDefaults.dynotch.set(value, forKey: key)
     }
 
     nonisolated private static func value<T>(_ key: String, _ fallback: T) -> T {
-        UserDefaults.standard.object(forKey: key) as? T ?? fallback
+        UserDefaults.dynotch.object(forKey: key) as? T ?? fallback
     }
 
     nonisolated private static func value<T: RawRepresentable>(_ key: String, _ fallback: T) -> T where T.RawValue == String {
-        UserDefaults.standard.string(forKey: key).flatMap(T.init(rawValue:)) ?? fallback
+        UserDefaults.dynotch.string(forKey: key).flatMap(T.init(rawValue:)) ?? fallback
     }
 }

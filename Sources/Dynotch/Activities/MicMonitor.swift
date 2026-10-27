@@ -196,8 +196,8 @@ final class MicMonitor: ObservableObject {
     /// Input levels to restore, by device UID, for microphones muted by turning them down.
     /// Kept across launches, so quitting while muted can't lose them.
     private var savedVolumes: [String: Double] {
-        get { UserDefaults.standard.dictionary(forKey: "micSavedVolumes") as? [String: Double] ?? [:] }
-        set { UserDefaults.standard.set(newValue, forKey: "micSavedVolumes") }
+        get { UserDefaults.dynotch.dictionary(forKey: "micSavedVolumes") as? [String: Double] ?? [:] }
+        set { UserDefaults.dynotch.set(newValue, forKey: "micSavedVolumes") }
     }
 
     private func currentlyMuted() -> Bool {

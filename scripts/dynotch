@@ -7,15 +7,16 @@
 #   dynotch timer [start|pause|toggle|reset|skip]
 #   dynotch tray [--show] FILE...
 #   dynotch profile NAME
-#   dynotch focus-report
 #   dynotch capture
 #
 # COLOR is red, orange, yellow, green, mint, teal, cyan, blue, indigo, purple,
-# pink, white or gray, or a hex value such as #FF6B5C.
+# pink, white or gray, or a hex value such as #FF6B5C. A notice from here carries
+# a small terminal badge, so it can't pass for one of Dynotch's own. Tray items
+# point at the files where they are; nothing under ~/Library is taken.
 set -euo pipefail
 
 usage() {
-    sed -n '4,14p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '4,15p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -59,7 +60,10 @@ case "$command" in
                 --show) query+="&show=1" ;;
                 *)
                     [ -e "$1" ] || { echo "dynotch: no such file: $1" >&2; exit 1; }
-                    path="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+                    path="$(cd "$(dirname "$1")" && pwd -P)/$(basename "$1")"
+                    case "$path" in
+                        "$HOME/Library/"*) echo "dynotch: Dynotch doesn't take files from ~/Library: $1" >&2; exit 1 ;;
+                    esac
                     query+="&path=$(encode "$path")" ;;
             esac
             shift
@@ -71,17 +75,6 @@ case "$command" in
         send "profile?name=$(encode "$1")" ;;
     capture)
         send "capture" ;;
-    focus-report)
-        # Dynotch writes it, since reading the Focus settings takes its Full Disk Access.
-        report="$HOME/Library/Logs/Dynotch/focus-report.json"
-        rm -f "${report:?}"
-        send "focus/report"
-        for _ in $(seq 50); do
-            [ -s "$report" ] && { echo "$report"; exit 0; }
-            sleep 0.1
-        done
-        echo "dynotch: no report from Dynotch; is it running?" >&2
-        exit 1 ;;
     -h|--help|help)
         usage ;;
     *)

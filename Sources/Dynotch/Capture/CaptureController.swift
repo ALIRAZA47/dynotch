@@ -24,7 +24,7 @@ final class CaptureController: ObservableObject {
     /// Whether macOS lets Dynotch record the screen. Looked up when a capture starts and after asking.
     @Published private(set) var hasAccess = CGPreflightScreenCaptureAccess()
     /// macOS asks once; after that the Permissions page opens System Settings instead.
-    @Published private(set) var hasAsked = UserDefaults.standard.bool(forKey: "askedForScreenRecording")
+    @Published private(set) var hasAsked = UserDefaults.dynotch.bool(forKey: "askedForScreenRecording")
 
     private(set) var editor: CaptureEditor?
     private(set) var overlays: [CaptureOverlayWindow] = []
@@ -98,7 +98,7 @@ final class CaptureController: ObservableObject {
             CalendarService.openPrivacySettings("Privacy_ScreenCapture")
         } else {
             hasAsked = true
-            UserDefaults.standard.set(true, forKey: "askedForScreenRecording")
+            UserDefaults.dynotch.set(true, forKey: "askedForScreenRecording")
             if !CGRequestScreenCaptureAccess() {
                 // Nothing came of asking: the prompt is up, or the answer was no before.
             }

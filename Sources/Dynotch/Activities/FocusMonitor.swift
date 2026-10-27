@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// A Focus, as the closed notch shows it.
 struct FocusMode: Equatable {
@@ -28,6 +29,8 @@ final class FocusMonitor: ObservableObject {
     @Published private(set) var modes: [FocusMode] = []
     /// A profile switches on with a Focus, so keep reading even while the Focus live activity is off.
     @Published var isNeededByProfiles = false
+    /// Notification peeks stay hidden while a Focus is on, as macOS's banners do.
+    @Published var isNeededByNotifications = false
 
     private enum Reading {
         case read(FocusMode?, all: [FocusMode])
@@ -47,8 +50,8 @@ final class FocusMonitor: ObservableObject {
     private init() {}
 
     func start() {
-        Publishers.CombineLatest(AppSettings.shared.$liveFocus, $isNeededByProfiles)
-            .map { $0 || $1 }
+        Publishers.CombineLatest3(AppSettings.shared.$liveFocus, $isNeededByProfiles, $isNeededByNotifications)
+            .map { $0 || $1 || $2 }
             .removeDuplicates()
             .sink { [weak self] on in on ? self?.watch() : self?.stopWatching() }
             .store(in: &cancellables)
@@ -265,13 +268,18 @@ final class FocusMonitor: ObservableObject {
 
     // MARK: Report
 
-    /// Where `dynotch focus-report` finds the report.
-    nonisolated static let reportURL = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent("Library/Logs/Dynotch/focus-report.json")
-
     /// Saves what the Focus database holds and which Focus Dynotch makes of it, for checking how
-    /// macOS records a Focus. Names and places are left out, so the report can be shared.
-    func writeReport() {
+    /// macOS records a Focus, to a file the user picks. Names and places are left out, so the
+    /// report can be shared. It's a button in Settings rather than a `dynotch://` link: the files
+    /// are behind Full Disk Access, and a link can come from anything on the Mac.
+    func saveReport() {
+        NSApp.activate(ignoringOtherApps: true)
+        let panel = NSSavePanel()
+        panel.title = "Save Focus Report"
+        panel.nameFieldStringValue = "focus-report.json"
+        panel.allowedContentTypes = [.json]
+        panel.canCreateDirectories = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
         queue.async {
             let now = Date.now
             var report: [String: Any] = ["time": now.formatted(.iso8601), "timestamp": now.timeIntervalSinceReferenceDate]
@@ -289,9 +297,7 @@ final class FocusMonitor: ObservableObject {
             guard JSONSerialization.isValidJSONObject(report),
                   let data = try? JSONSerialization.data(withJSONObject: report, options: [.prettyPrinted, .sortedKeys])
             else { return }
-            try? FileManager.default.createDirectory(at: Self.reportURL.deletingLastPathComponent(),
-                                                     withIntermediateDirectories: true)
-            try? data.write(to: Self.reportURL, options: .atomic)
+            try? data.write(to: url, options: .atomic)
         }
     }
 

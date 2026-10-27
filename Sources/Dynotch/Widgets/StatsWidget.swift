@@ -1,94 +1,35 @@
 import SwiftUI
 
-struct SystemStatsWidget: View {
+/// CPU, memory and network in one quiet line, at the foot of the Control tab's batteries. Disk
+/// space and the upload rate are in its tooltip.
+struct SystemFooter: View {
     @ObservedObject private var monitor = SystemMonitor.shared
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
-        WidgetCard(title: "System", symbol: "cpu") {
-            VStack(spacing: 8) {
-                StatRow(label: "CPU", value: "\(Int((monitor.cpu * 100).rounded()))%",
-                        fraction: monitor.cpu, color: color(for: monitor.cpu)) {
-                    Sparkline(values: monitor.cpuHistory, color: color(for: monitor.cpu))
-                        .frame(width: 44, height: 14)
-                }
-                StatRow(label: "Memory",
-                        value: "\(Format.memory(monitor.memoryUsed)) of \(Format.memory(monitor.memoryTotal))",
-                        fraction: monitor.memoryFraction, color: color(for: monitor.memoryFraction))
-                StatRow(label: "Disk", value: "\(Format.bytes(monitor.diskFree)) free",
-                        fraction: monitor.diskUsedFraction, color: color(for: monitor.diskUsedFraction))
-                HStack(spacing: 12) {
-                    Label(Format.rate(monitor.download), systemImage: "arrow.down")
-                    Label(Format.rate(monitor.upload), systemImage: "arrow.up")
-                    Spacer(minLength: 0)
-                }
-                .font(NotchFont.numeric(10.5, .medium))
-                .foregroundStyle(theme.secondary)
-                .labelStyle(CompactLabelStyle())
-                .accessibilityElement(children: .combine)
+        VStack(spacing: 7) {
+            theme.divider.frame(height: 1)
+            HStack(spacing: 0) {
+                Text("CPU \(Int((monitor.cpu * 100).rounded()))%")
+                    .foregroundStyle(monitor.cpu > 0.85 ? Color.orange : theme.tertiary)
+                Spacer(minLength: 4)
+                Text("Mem \(Int((monitor.memoryFraction * 100).rounded()))%")
+                    .foregroundStyle(monitor.memoryFraction > 0.9 ? Color.orange : theme.tertiary)
+                Spacer(minLength: 4)
+                Label(Format.rate(monitor.download), systemImage: "arrow.down")
+                    .foregroundStyle(theme.tertiary)
+                    .layoutPriority(1)
             }
+            .font(NotchFont.numeric(10))
+            .minimumScaleFactor(0.85)
+            .labelStyle(CompactLabelStyle())
+            .lineLimit(1)
         }
+        .help("Memory: \(Format.memory(monitor.memoryUsed)) of \(Format.memory(monitor.memoryTotal)) · "
+              + "Disk: \(Format.bytes(monitor.diskFree)) free · Upload: \(Format.rate(monitor.upload))")
+        .accessibilityElement(children: .combine)
         .onAppear { monitor.beginObserving() }
         .onDisappear { monitor.endObserving() }
-    }
-
-    private func color(for fraction: Double) -> Color {
-        fraction > 0.85 ? .red : fraction > 0.65 ? .orange : Color(red: 0.4, green: 0.8, blue: 1)
-    }
-}
-
-private struct StatRow<Accessory: View>: View {
-    let label: String
-    let value: String
-    let fraction: Double
-    let color: Color
-    @ViewBuilder var accessory: Accessory
-    @Environment(\.notchTheme) private var theme
-
-    init(label: String, value: String, fraction: Double, color: Color,
-         @ViewBuilder accessory: () -> Accessory = { EmptyView() }) {
-        self.label = label
-        self.value = value
-        self.fraction = fraction
-        self.color = color
-        self.accessory = accessory()
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
-                Text(label)
-                    .font(NotchFont.bodyStrong)
-                Spacer(minLength: 0)
-                accessory
-                Text(value)
-                    .font(NotchFont.numeric(10.5, .medium))
-                    .foregroundStyle(theme.secondary)
-                    .lineLimit(1)
-            }
-            LevelBar(level: fraction, color: color)
-                .frame(height: 4)
-        }
-        .accessibilityElement(children: .combine)
-    }
-}
-
-private struct Sparkline: View {
-    let values: [Double]
-    let color: Color
-
-    var body: some View {
-        GeometryReader { proxy in
-            Path { path in
-                guard values.count > 1 else { return }
-                let step = proxy.size.width / CGFloat(values.count - 1)
-                for (index, value) in values.enumerated() {
-                    let point = CGPoint(x: CGFloat(index) * step, y: proxy.size.height * (1 - CGFloat(min(1, value))))
-                    index == 0 ? path.move(to: point) : path.addLine(to: point)
-                }
-            }
-            .stroke(color, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
-        }
     }
 }
 

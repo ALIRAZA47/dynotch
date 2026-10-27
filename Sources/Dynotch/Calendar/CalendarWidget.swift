@@ -1,28 +1,15 @@
+import AppKit
 import SwiftUI
 
-/// A five-day strip and the selected day's events.
+/// What's next on the calendar: the next event in full, with Join when it has a call link, and the
+/// rest of the day underneath. After the day's last event, tomorrow's first.
 struct CalendarWidget: View {
     @ObservedObject private var calendar = CalendarService.shared
-    @ViewState private var selectedDay = Calendar.current.startOfDay(for: .now)
-    @Environment(\.notchTheme) private var theme
-
-    private static let moreHeight: CGFloat = 12
 
     var body: some View {
         if calendar.hasEventAccess {
-            WidgetCard {
-                VStack(alignment: .leading, spacing: NotchTheme.titleGap) {
-                    // The month and the day in full when they fit, shorter when they don't.
-                    ViewThatFits(in: .horizontal) {
-                        title(month: .wide, weekday: .wide)
-                        title(month: .abbreviated, weekday: .wide)
-                        title(month: .abbreviated, weekday: .abbreviated)
-                    }
-                    VStack(alignment: .leading, spacing: 6) {
-                        dayStrip
-                        eventList
-                    }
-                }
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                UpNextCard(agenda: Agenda(calendar: calendar, now: context.date), now: context.date)
             }
         } else {
             WidgetCard(title: "Calendar", symbol: "calendar") {
@@ -31,151 +18,210 @@ struct CalendarWidget: View {
             }
         }
     }
+}
 
-    /// The selected day's month, and which day it is on the right.
-    private func title(month: Date.FormatStyle.Symbol.Month, weekday: Date.FormatStyle.Symbol.Weekday) -> some View {
-        CardTitle(title: selectedDay.formatted(.dateTime.month(month)), symbol: "calendar") {
-            Text(dayName(selectedDay, weekday: weekday).uppercased())
-                .tracking(0.6)
-                .foregroundStyle(Calendar.current.isDateInToday(selectedDay) ? theme.accent : theme.tertiary)
-                .lineLimit(1)
-                .fixedSize()
-        }
-    }
+/// The day as the card tells it: the event to show in full and what comes after it.
+struct Agenda {
+    enum Moment { case now, next, tomorrow, clear }
 
-    /// "Today", "Tomorrow" or the day of the week.
-    private func dayName(_ day: Date, weekday: Date.FormatStyle.Symbol.Weekday) -> String {
-        let calendar = Calendar.current
-        if calendar.isDateInToday(day) { return "Today" }
-        if calendar.isDateInTomorrow(day) { return "Tomorrow" }
-        return day.formatted(.dateTime.weekday(weekday))
-    }
+    /// Happening now, starting next, or tomorrow's first once today is done.
+    let event: CalendarService.Event?
+    let moment: Moment
+    /// The rest of today after `event`, all-day events first.
+    let later: [CalendarService.Event]
 
-    private var dayStrip: some View {
-        let today = Calendar.current.startOfDay(for: .now)
-        let days = (0..<5).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: today) }
-        return HStack(spacing: 2) {
-            ForEach(days, id: \.self) { day in
-                DayButton(day: day, isSelected: Calendar.current.isDate(day, inSameDayAs: selectedDay), isToday: day == today,
-                          hasEvents: !calendar.events(on: day).isEmpty) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { selectedDay = day }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var eventList: some View {
-        let events = calendar.events(on: selectedDay)
-        if events.isEmpty {
-            EmptyState(symbol: "calendar.badge.checkmark", message: "No events")
+    @MainActor
+    init(calendar: CalendarService, now: Date) {
+        let today = calendar.events(on: now)
+        let timed = today.filter { !$0.isAllDay && $0.end > now }
+        let allDay = today.filter(\.isAllDay)
+        if let first = timed.first {
+            event = first
+            moment = first.isHappening(at: now) ? .now : .next
+            later = allDay + timed.dropFirst()
+        } else if let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: now),
+                  let first = calendar.events(on: tomorrow).first(where: { !$0.isAllDay }) {
+            event = first
+            moment = .tomorrow
+            later = allDay
         } else {
-            // As many rows as fit, then a line that says how many more there are.
-            GeometryReader { proxy in
-                let row = EventRow.height + EventRow.spacing
-                let fitting = max(1, Int((proxy.size.height + EventRow.spacing) / row))
-                let shown = events.count <= fitting ? events.count : max(1, Int((proxy.size.height - Self.moreHeight) / row))
-                VStack(alignment: .leading, spacing: EventRow.spacing) {
-                    ForEach(events.prefix(shown)) { event in
-                        EventRow(event: event)
-                    }
-                    if shown < events.count {
-                        Text("+\(events.count - shown) more")
-                            .font(NotchFont.caption)
-                            .foregroundStyle(theme.tertiary)
-                            .frame(height: Self.moreHeight)
-                            .padding(.leading, 9)
-                    }
-                }
-            }
+            event = nil
+            moment = .clear
+            later = allDay
         }
+    }
+
+    /// Soon enough to say so in orange.
+    func isSoon(at now: Date) -> Bool {
+        guard let event else { return false }
+        return moment == .now || (moment == .next && event.start.timeIntervalSince(now) < 15 * 60)
     }
 }
 
-/// A day in the strip: its initial, its date and a dot when it has events.
-private struct DayButton: View {
-    let day: Date
-    let isSelected: Bool
-    let isToday: Bool
-    let hasEvents: Bool
-    let action: () -> Void
+private struct UpNextCard: View {
+    let agenda: Agenda
+    let now: Date
     @Environment(\.notchTheme) private var theme
-    @ViewState private var hovering = false
 
     var body: some View {
-        Button(action: action) {
-            VStack(spacing: 1) {
-                Text(day.formatted(.dateTime.weekday(.narrow)))
-                    .font(.system(size: 8.5, weight: .semibold))
-                    .foregroundStyle(isSelected ? theme.secondary : theme.tertiary)
-                Text(day.formatted(.dateTime.day()))
-                    .font(NotchFont.numeric(12))
-                    .foregroundStyle(isToday && !isSelected ? theme.accent : theme.primary)
-                Circle()
-                    .fill(hasEvents ? (isToday ? theme.accent : theme.secondary) : .clear)
-                    .frame(width: 3, height: 3)
+        WidgetCard {
+            VStack(alignment: .leading, spacing: 0) {
+                CardTitle(title: heading, symbol: "calendar") {
+                    if let when {
+                        Text(when)
+                            .font(NotchFont.numeric(11))
+                            .foregroundStyle(agenda.isSoon(at: now) ? Color.orange : theme.tertiary)
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                }
+                if let event = agenda.event {
+                    EventDetail(event: event)
+                        .padding(.top, 8)
+                } else {
+                    Text("Nothing else today")
+                        .font(NotchFont.title)
+                        .foregroundStyle(theme.secondary)
+                        .padding(.top, 8)
+                }
+                Spacer(minLength: 6)
+                if !agenda.later.isEmpty {
+                    LaterEvents(events: agenda.later)
+                }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 3)
-            .background(RoundedRectangle(cornerRadius: theme.controlRadius, style: .continuous)
-                .fill(isSelected ? theme.selection : hovering ? theme.control : .clear))
-            .contentShape(Rectangle())
         }
-        .buttonStyle(PressableButtonStyle(scale: 0.94))
-        .onHover { hovering = $0 }
-        .animation(.notchHighlight, value: hovering)
-        .accessibilityLabel(day.formatted(.dateTime.weekday(.wide).month(.wide).day()))
-        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+
+    private var heading: String {
+        switch agenda.moment {
+        case .now: "Now"
+        case .next: "Up next"
+        case .tomorrow: "Tomorrow"
+        case .clear: "Today"
+        }
+    }
+
+    /// When it ends, how soon it starts, or what time tomorrow.
+    private var when: String? {
+        guard let event = agenda.event else { return nil }
+        switch agenda.moment {
+        case .now: return "until " + event.end.formatted(date: .omitted, time: .shortened)
+        case .next: return Format.countdown(to: event.start, from: now)
+        case .tomorrow: return event.start.formatted(date: .omitted, time: .shortened)
+        case .clear: return nil
+        }
     }
 }
 
-private struct EventRow: View {
+/// The event's title, its times and where the call is, then Join and Open in Calendar.
+private struct EventDetail: View {
     let event: CalendarService.Event
     @Environment(\.notchTheme) private var theme
 
-    static let height: CGFloat = 26
-    static let spacing: CGFloat = 3
-
     var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { context in
+        VStack(alignment: .leading, spacing: 2) {
+            Text(event.title)
+                .font(NotchFont.title)
+                .lineLimit(1)
+                .help(event.title)
+            Text(details)
+                .font(NotchFont.body)
+                .foregroundStyle(theme.secondary)
+                .lineLimit(1)
             HStack(spacing: 6) {
-                Capsule()
-                    .fill(event.color)
-                    .frame(width: 3)
-                    .padding(.vertical, 2)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(event.title)
-                        .font(NotchFont.bodyStrong)
-                        .lineLimit(1)
-                    Text(subtitle(at: context.date))
-                        .font(NotchFont.caption)
-                        .foregroundStyle(event.isHappening(at: context.date) ? event.color : theme.tertiary)
-                        .lineLimit(1)
+                if let url = event.meetingURL {
+                    JoinButton(url: url)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                if let url = event.meetingURL, event.end > context.date, event.start.timeIntervalSince(context.date) < 15 * 60 {
-                    Button {
-                        NSWorkspace.shared.open(url)
-                    } label: {
-                        Image(systemName: "video.fill")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.black)
-                            .frame(width: 20, height: 20)
-                            .background(Circle().fill(Color.green))
-                    }
-                    .buttonStyle(PressableButtonStyle())
-                    .help("Join")
+                PillButton(title: "Open in Calendar", tint: .white) {
+                    NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Calendar.app"))
                 }
             }
-            .frame(height: Self.height)
-            .help(event.title)
+            .padding(.top, 8)
         }
     }
 
-    private func subtitle(at now: Date) -> String {
-        if event.isAllDay { return "All day" }
-        if event.isHappening(at: now) { return "Now · until \(event.end.formatted(date: .omitted, time: .shortened))" }
-        if event.start > now, event.start.timeIntervalSince(now) < 3 * 3600 { return Format.countdown(to: event.start, from: now) }
-        return event.start.formatted(date: .omitted, time: .shortened)
+    private var details: String {
+        let times = event.isAllDay ? "All day" : event.start.formatted(date: .omitted, time: .shortened)
+            + " – " + event.end.formatted(date: .omitted, time: .shortened)
+        guard let service = event.meetingURL.flatMap(Self.service(for:)) else { return times }
+        return times + " · " + service
+    }
+
+    /// The call service, from its link.
+    private static func service(for url: URL) -> String? {
+        let host = url.host()?.lowercased() ?? ""
+        if host.hasSuffix("zoom.us") { return "Zoom" }
+        if host == "meet.google.com" { return "Google Meet" }
+        if host.hasSuffix("teams.microsoft.com") || host.hasSuffix("teams.live.com") { return "Teams" }
+        if host.hasSuffix("webex.com") { return "Webex" }
+        if url.scheme == "facetime" || host == "facetime.apple.com" { return "FaceTime" }
+        return nil
+    }
+}
+
+/// Joins the call, in green like the call buttons in FaceTime.
+struct JoinButton: View {
+    let url: URL
+    var height: CGFloat = 24
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button {
+            NSWorkspace.shared.open(url)
+        } label: {
+            HStack(spacing: 5) {
+                Image(systemName: "video.fill")
+                    .font(.system(size: 9.5, weight: .bold))
+                Text("Join")
+                    .font(NotchFont.bodyStrong)
+            }
+            .foregroundStyle(Color(red: 0.02, green: 0.15, blue: 0.06))
+            .padding(.horizontal, 11)
+            .frame(height: height)
+            .background(Capsule().fill(Color(red: 0.19, green: 0.82, blue: 0.35).opacity(hovering ? 1 : 0.92)))
+            .contentShape(Capsule())
+        }
+        .buttonStyle(PressableButtonStyle(scale: 0.94))
+        .onHover { hovering = $0 }
+        .help(url.absoluteString)
+    }
+}
+
+/// The rest of the day under a hairline: as many rows as fit, each its time, calendar color and title.
+private struct LaterEvents: View {
+    let events: [CalendarService.Event]
+    @Environment(\.notchTheme) private var theme
+
+    private static let row: CGFloat = 16
+    private static let spacing: CGFloat = 4
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            theme.divider.frame(height: 1)
+            GeometryReader { proxy in
+                let fitting = max(0, Int((proxy.size.height - 7 + Self.spacing) / (Self.row + Self.spacing)))
+                VStack(alignment: .leading, spacing: Self.spacing) {
+                    ForEach(events.prefix(fitting)) { event in
+                        HStack(spacing: 8) {
+                            Text(event.isAllDay ? "All day" : event.start.formatted(date: .omitted, time: .shortened))
+                                .font(NotchFont.numeric(10.5))
+                                .foregroundStyle(theme.tertiary)
+                                .lineLimit(1)
+                                .frame(width: 46, alignment: .leading)
+                            Capsule()
+                                .fill(event.color)
+                                .frame(width: 3, height: 11)
+                            Text(event.title)
+                                .font(NotchFont.body)
+                                .lineLimit(1)
+                        }
+                        .frame(height: Self.row)
+                        .help(event.title)
+                    }
+                }
+                .padding(.top, 7)
+            }
+            .frame(minHeight: Self.row + 7, maxHeight: Self.row * 3 + Self.spacing * 2 + 7)
+        }
     }
 }

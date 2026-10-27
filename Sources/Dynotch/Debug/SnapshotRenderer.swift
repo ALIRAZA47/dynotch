@@ -2,11 +2,35 @@ import AppKit
 import SwiftUI
 
 /// `Dynotch --snapshot <folder>` renders the notch in each state with sample data,
-/// so the UI can be reviewed without driving the real thing.
+/// so the UI can be reviewed without driving the real thing. Settings come from a scratch
+/// domain with sample values (`useScratchDefaults`), so the images look the same on every Mac
+/// and show nothing of the real settings.
 @MainActor
 enum SnapshotRenderer {
     /// The moment sample timers count from, so every snapshot shows the same times.
     private static let sampleTime = Date.now
+
+    // MARK: Scratch defaults
+
+    private static let scratchDomain = "app.dynotch.snapshot"
+
+    /// Points every setting at a scratch domain holding sample values. Called before anything
+    /// reads a setting; `discardScratchDefaults` clears it again when the run is done.
+    static func useScratchDefaults() {
+        guard let defaults = UserDefaults(suiteName: scratchDomain) else { return }
+        defaults.removePersistentDomain(forName: scratchDomain)
+        let samples: [String: Any] = [
+            "hasLaunchedBefore": true,
+            "weatherPlace": "Lisbon, Portugal", "weatherLatitude": 38.72, "weatherLongitude": -9.14,
+            "pinnedShortcuts": ["Morning routine", "Log a glass of water", "Focus playlist"],
+        ]
+        for (key, value) in samples { defaults.set(value, forKey: key) }
+        UserDefaults.dynotch = defaults
+    }
+
+    static func discardScratchDefaults() {
+        UserDefaults.dynotch.removePersistentDomain(forName: scratchDomain)
+    }
 
     private struct Scene {
         let name: String
@@ -26,6 +50,10 @@ enum SnapshotRenderer {
         var theme: NotchTheme?
         /// A display other than a MacBook's, for this scene only.
         var geometry: NotchGeometry?
+        /// The command field, with this typed into it.
+        var command: String?
+        /// The Focus tab's second card shows the notes.
+        var focusShowsNotes = false
         /// More sample state for this scene; `resetAudioSamples` undoes it before the next one.
         var setUp: (@MainActor () -> Void)?
         /// Sample state for this scene. Scenes after it keep it.
@@ -65,6 +93,9 @@ enum SnapshotRenderer {
                                      detail: "Are we still on for lunch tomorrow? I booked the place by the river for half past twelve")
         let downloaded = LiveNotice(key: "download", symbol: "arrow.down.circle.fill", tint: DownloadMonitor.tint,
                                     text: "Downloaded", detail: "Keynote Themes.zip")
+        // What `dynotch notify` shows: a script's own symbol and color, with the terminal badge.
+        let scriptNotice = LiveNotice(key: "command", symbol: "checkmark.circle.fill", tint: .green, text: "Done",
+                                      detail: "make test · 2m 14s", fromScript: true)
         let doNotDisturb = FocusMode(id: "dnd", name: "Do Not Disturb", symbol: "moon.fill", tint: .indigo)
         let work = FocusMode(id: "work", name: "Work", symbol: "briefcase.fill", tint: .teal)
         let focusOn = LiveNotice(key: "focus", symbol: "moon.fill", tint: .indigo, text: "On", detail: "Do Not Disturb")
@@ -86,11 +117,12 @@ enum SnapshotRenderer {
             Scene(name: "12-open-tray", phase: .open, tab: .tray),
             Scene(name: "13-open-tray-dropping", phase: .open, tab: .tray, draggingFiles: true),
             Scene(name: "14-open-focus", phase: .open, tab: .focus),
-            Scene(name: "15-open-stats", phase: .open, tab: .stats),
+            Scene(name: "14-open-focus-notes", phase: .open, tab: .focus, focusShowsNotes: true),
+            Scene(name: "15-open-control", phase: .open, tab: .stats),
             // Themes
             Scene(name: "16-open-nook-glass", phase: .open, tab: .home, theme: NotchTheme(material: .glass)),
             Scene(name: "17-open-focus-glass", phase: .open, tab: .focus, theme: NotchTheme(material: .glass)),
-            Scene(name: "18-open-stats-pink-round", phase: .open, tab: .stats,
+            Scene(name: "18-open-control-pink-round", phase: .open, tab: .stats,
                   theme: NotchTheme(accent: .pink, topRadius: 18, bottomRadius: 40)),
             Scene(name: "19-open-tray-teal-square", phase: .open, tab: .tray,
                   theme: NotchTheme(accent: .teal, topRadius: 8, bottomRadius: 18),
@@ -129,6 +161,7 @@ enum SnapshotRenderer {
             Scene(name: "62-closed-download-and-music", phase: .closed, activity: .download, secondary: .music),
             Scene(name: "63-closed-timer-and-download", phase: .closed, activity: .timer, secondary: .download),
             Scene(name: "64-closed-downloaded", phase: .closed, activity: .notice(downloaded)),
+            Scene(name: "65-closed-script-notice", phase: .closed, activity: .notice(scriptNotice)),
             Scene(name: "70-closed-focus", phase: .closed, secondary: .focus(doNotDisturb), focus: doNotDisturb),
             Scene(name: "71-closed-music-and-focus", phase: .closed, activity: .music, secondary: .focus(work), focus: work),
             Scene(name: "72-closed-focus-on", phase: .closed, activity: .notice(focusOn), focus: doNotDisturb),
@@ -146,7 +179,7 @@ enum SnapshotRenderer {
             // Widgets and the Tray
             Scene(name: "90-closed-screenshot", phase: .closed, activity: .notice(LiveNotice(
                 key: "screenshot", symbol: "camera.viewfinder", tint: .white, detail: "Screenshot added to the Tray"))),
-            Scene(name: "91-open-stats-bluetooth", phase: .open, tab: .stats) {
+            Scene(name: "91-open-control-bluetooth", phase: .open, tab: .stats) {
                 DeviceBatteryMonitor.shared.loadSample([], paired: samplePairedDevices,
                                                        connections: ["beats": .connecting, "speaker": .failed("Not in range")])
             },
@@ -165,6 +198,25 @@ enum SnapshotRenderer {
             },
             Scene(name: "95-closed-rain", phase: .closed, activity: .notice(LiveNotice(
                 key: "rain", symbol: "cloud.rain.fill", tint: .cyan, text: "in 15m", detail: "Rain starting soon"))),
+            // The command field, empty and with something typed.
+            Scene(name: "command-1-empty", phase: .open, command: ""),
+            Scene(name: "command-2-timer", phase: .open, command: "tea 4m"),
+            Scene(name: "command-3-sum", phase: .open, command: "18% of 240"),
+            Scene(name: "command-4-reminder", phase: .open, command: "remind Call Sam 5pm"),
+            Scene(name: "command-5-toggle", phase: .open, command: "dark"),
+            // Glances: resting the pointer on the notch.
+            Scene(name: "glance-1-music", phase: .glance, activity: .music),
+            Scene(name: "glance-2-pomodoro", phase: .glance, activity: .timer),
+            Scene(name: "glance-3-countdown", phase: .glance, activity: .countdown(tea)),
+            Scene(name: "glance-4-event", phase: .glance, hasTrack: false),
+            Scene(name: "glance-5-download", phase: .glance, activity: .download),
+            Scene(name: "glance-6-message", phase: .glance, activity: .notice(lateMessage)),
+            Scene(name: "glance-7-stopwatch", phase: .glance, activity: .stopwatch),
+            // Nothing within the next quarter hour, so the glance looks at the day.
+            Scene(name: "glance-8-today", phase: .glance, hasTrack: false, setUp: {
+                let lunch = CalendarService.shared.events.filter { $0.title == "Lunch with Sam" }
+                CalendarService.shared.loadSample(events: lunch, reminders: CalendarService.shared.reminders)
+            }),
             // The other widgets beside the player, busy cards and empty ones. These change the samples, so they go last.
             Scene(name: "96-open-nook-timer-toggles", phase: .open, tab: .home, prepare: {
                 (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.timer, .toggles)
@@ -184,12 +236,11 @@ enum SnapshotRenderer {
 
         let settings = AppSettings.shared
         let size = CGSize(width: settings.openWidth + NotchTheme.standard.topRadius * 2 + 80, height: settings.openHeight + 40)
-        let savedWidgets = (settings.homeWidgetA, settings.homeWidgetB)
-        let savedShortcuts = settings.pinnedShortcuts
         let savedTheme = settings.theme
         for scene in scenes {
             apply(scene.theme ?? savedTheme)
             scene.prepare?()
+            AppSettings.shared.focusShowsNotes = scene.focusShowsNotes
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
             resetAudioSamples()
             MicMonitor.shared.loadSample(muted: scene.micMuted, micInUse: scene.micInUse, cameraInUse: scene.cameraInUse)
@@ -200,12 +251,14 @@ enum SnapshotRenderer {
             let sceneGeometry = scene.geometry ?? geometry
             let viewModel = NotchViewModel(geometry: sceneGeometry)
             viewModel.stage(phase: scene.phase, activity: scene.activity, secondary: scene.secondary, tab: scene.tab,
-                            draggingFiles: scene.draggingFiles)
+                            draggingFiles: scene.draggingFiles, command: scene.command)
+            // The command field can make the notch taller than the setting.
+            let height = max(size.height, viewModel.metrics.height + 40)
             let content = ZStack(alignment: .top) {
                 Desktop(notchWidth: sceneGeometry.closedSize.width, menuBarHeight: sceneGeometry.closedSize.height)
                 NotchRootView(viewModel: viewModel)
             }
-            .frame(width: size.width, height: size.height)
+            .frame(width: size.width, height: height)
             .environment(\.isSnapshot, true)
 
             let renderer = ImageRenderer(content: content)
@@ -214,8 +267,6 @@ enum SnapshotRenderer {
                   let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else { continue }
             try? png.write(to: folder.appendingPathComponent(scene.name + ".png"))
         }
-        (settings.homeWidgetA, settings.homeWidgetB) = savedWidgets
-        if settings.pinnedShortcuts != savedShortcuts { settings.pinnedShortcuts = savedShortcuts }
         apply(savedTheme)
         print("Wrote \(scenes.count) snapshots to \(folder.path)")
         loadSampleProfiles()

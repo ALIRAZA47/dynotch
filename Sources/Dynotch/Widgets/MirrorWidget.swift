@@ -12,17 +12,21 @@ final class CameraService: ObservableObject {
     let session = AVCaptureSession()
     private let sessionQueue = DispatchQueue(label: "app.dynotch.camera")
     private var isConfigured = false
+    /// The mirror asked for the camera and hasn't been turned off or left the screen since.
+    private var isWanted = false
 
     private init() {}
 
     func start() {
+        isWanted = true
         status = AVCaptureDevice.authorizationStatus(for: .video)
         switch status {
         case .notDetermined:
             AVCaptureDevice.requestAccess(for: .video) { granted in
                 Task { @MainActor in
                     self.status = AVCaptureDevice.authorizationStatus(for: .video)
-                    if granted { self.start() }
+                    // The prompt may outlive the mirror; the camera only starts for one that's still there.
+                    if granted, self.isWanted { self.start() }
                 }
             }
             return
@@ -53,6 +57,7 @@ final class CameraService: ObservableObject {
     }
 
     func stop() {
+        isWanted = false
         guard isRunning else { return }
         isRunning = false
         let session = session

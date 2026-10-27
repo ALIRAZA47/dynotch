@@ -86,8 +86,8 @@ struct GeneralSettings: View {
     @ObservedObject private var settings = AppSettings.shared
 
     private let openers = [
-        SwitchOption(title: "Hover", detail: "Open when the pointer rests on the notch", symbol: "cursorarrow.rays",
-                     setting: \.openOnHover),
+        SwitchOption(title: "Hover", detail: "A glance, or the whole notch, when the pointer rests on it",
+                     symbol: "cursorarrow.rays", setting: \.openOnHover),
         SwitchOption(title: "Swipe", detail: "Swipe down on the trackpad to open, up to close, sideways to skip a track or, once it's open, to change tabs",
                      symbol: "rectangle.and.hand.point.up.left.fill",
                      setting: \.swipeGestures),
@@ -103,6 +103,8 @@ struct GeneralSettings: View {
                 SwitchGrid(options: openers)
                 if settings.openOnHover {
                     SettingsCard {
+                        HoverShowsRow()
+                        CardDivider()
                         SliderRow(title: "Hover delay", value: $settings.hoverDelay, range: 0...1, step: 0.05,
                                   format: { String(format: "%.2f s", $0) },
                                   spoken: { String(format: "%.2f seconds", $0) })
@@ -111,6 +113,15 @@ struct GeneralSettings: View {
                 }
             }
             .animation(.spring(response: 0.35, dampingFraction: 0.85), value: settings.openOnHover)
+
+            SettingsSection(title: "Command field",
+                            footer: "Start a timer (tea 4m), add a note or a reminder (remind Call Sam 5pm), flip a toggle, "
+                                + "switch a profile, run a shortcut or work out a sum. In the open notch, click Type a command.") {
+                SettingsCard {
+                    SwitchRow(title: "Open it with ⌃⌥K", detail: "From anywhere, ready to type", symbol: "magnifyingglass",
+                              isOn: $settings.commandShortcut)
+                }
+            }
 
             SettingsSection(title: "Show the notch on",
                             footer: "Displays without a notch get a virtual one that hangs from the top edge.") {
@@ -136,6 +147,28 @@ struct GeneralSettings: View {
                 }
             }
         }
+    }
+}
+
+/// What resting the pointer on the notch brings up: a glance at what's live, or the whole notch.
+private struct HoverShowsRow: View {
+    @ObservedObject private var settings = AppSettings.shared
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Text("Hover shows")
+                .font(.system(size: 13, weight: .medium))
+                .frame(width: 88, alignment: .leading)
+            HStack(spacing: 8) {
+                ForEach(HoverShows.allCases) { choice in
+                    ChoiceChip(title: choice.title, symbol: choice.symbol, isSelected: settings.hoverShows == choice) {
+                        settings.hoverShows = choice
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 }
 
@@ -687,8 +720,8 @@ struct NookSettings: View {
                      tint: .teal, spokenTitle: "Tray tab", setting: \.showTrayTab),
         SwitchOption(title: "Focus", detail: "Timer, reminders and notes", symbol: NotchTab.focus.symbol,
                      tint: PomodoroTimer.Phase.focus.color, spokenTitle: "Focus tab", setting: \.showFocusTab),
-        SwitchOption(title: "Stats", detail: "System, batteries and toggles", symbol: NotchTab.stats.symbol,
-                     tint: Color(red: 0.36, green: 0.56, blue: 1.0), spokenTitle: "Stats tab", setting: \.showStatsTab),
+        SwitchOption(title: "Control", detail: "Toggles, sliders and batteries", symbol: NotchTab.stats.symbol,
+                     tint: Color(red: 0.36, green: 0.56, blue: 1.0), spokenTitle: "Control tab", setting: \.showStatsTab),
     ]
 
     var body: some View {
@@ -696,7 +729,9 @@ struct NookSettings: View {
             SettingsSection(title: "Tabs", footer: "The Nook tab, with the player, is always there.") {
                 SwitchGrid(options: tabs, columns: 3)
             }
-            SettingsSection(title: "Next to the player") {
+            SettingsSection(title: "Stacked beside the player",
+                            footer: "One shows at a time. The stack turns by itself to whichever matters now: the calendar "
+                                + "shortly before an event, the weather before rain, the batteries when one runs low.") {
                 HStack(alignment: .top, spacing: 10) {
                     WidgetSlotPicker(title: "First widget", selection: $settings.homeWidgetA)
                     WidgetSlotPicker(title: "Second widget", selection: $settings.homeWidgetB)
@@ -1254,6 +1289,7 @@ struct FocusSettings: View {
 
 struct AboutSettings: View {
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var focus = FocusMonitor.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: 26) {
@@ -1293,6 +1329,9 @@ struct AboutSettings: View {
                     ShortcutRow(keys: ["⌃", "⌥", "M"], spokenKeys: "Control Option M", action: settings.micShortcut
                         ? "Mute or unmute the microphone" : "Mute or unmute the microphone (turned off in Live Activities)")
                     CardDivider()
+                    ShortcutRow(keys: ["⌃", "⌥", "K"], spokenKeys: "Control Option K", action: settings.commandShortcut
+                        ? "Open the command field" : "Open the command field (turned off in General)")
+                    CardDivider()
                     ShortcutRow(keys: ["⌃", "⌥", "S"], spokenKeys: "Control Option S", action: settings.captureShortcut
                         ? "Capture part of the screen" : "Capture part of the screen (turned off in Tray)")
                     CardDivider()
@@ -1301,6 +1340,30 @@ struct AboutSettings: View {
                     ShortcutRow(keys: ["↑", "↓"], spokenKeys: "Up or down arrow",
                                 action: "Move through the pages, once the sidebar is selected")
                 }
+            }
+
+            SettingsSection(title: "Diagnostics",
+                            footer: "For when the notch shows the wrong Focus. The report keeps the shape of the Focus settings, their identifiers and times; names and places are left out, so it can be shared.") {
+                HStack(spacing: 12) {
+                    SymbolBadge(symbol: "moon.fill", tint: .indigo, size: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Focus report")
+                            .font(.system(size: 13, weight: .medium))
+                        Text(focus.access == .denied ? "Needs Full Disk Access, under Permissions"
+                             : "What the Focus settings hold, and which Focus Dynotch makes of them")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .accessibilityElement(children: .combine)
+                    Spacer(minLength: 12)
+                    CapsuleButton(title: "Save…", symbol: "square.and.arrow.down") { FocusMonitor.shared.saveReport() }
+                        .accessibilityLabel("Save a Focus report")
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(CardBackground())
             }
         }
     }

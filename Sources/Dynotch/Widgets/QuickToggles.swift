@@ -74,64 +74,86 @@ final class QuickToggles: ObservableObject {
     }
 }
 
+/// The quick toggles in a card of their own, for the stack beside the player.
 struct QuickTogglesWidget: View {
-    var compact: Bool
-    @ObservedObject private var toggles = QuickToggles.shared
-    @ObservedObject private var volume = VolumeMonitor.shared
-
     var body: some View {
-        WidgetCard(title: compact ? nil : "Quick toggles", symbol: "switch.2") {
-            Grid(horizontalSpacing: 6, verticalSpacing: compact ? 6 : 8) {
-                GridRow {
-                    ToggleTile(symbol: toggles.isDarkMode ? "moon.fill" : "sun.max.fill", title: "Dark",
-                               isOn: toggles.isDarkMode, tint: .indigo, action: toggles.toggleDarkMode)
-                    ToggleTile(symbol: "cup.and.saucer.fill", title: "Awake",
-                               isOn: toggles.isKeepingAwake, tint: .orange, action: toggles.toggleKeepAwake)
-                    ToggleTile(symbol: volume.isMuted ? "speaker.slash.fill" : "speaker.wave.2.fill", title: "Mute",
-                               isOn: volume.isMuted, tint: .red) { volume.setMuted(!volume.isMuted) }
-                }
-                GridRow {
-                    ToggleTile(symbol: "eyedropper", title: "Color", isOn: false, tint: .teal, action: toggles.pickColor)
-                    ToggleTile(symbol: "camera.viewfinder", title: "Capture", isOn: false, tint: .white, action: toggles.takeScreenshot)
-                    ToggleTile(symbol: "moon.zzz.fill", title: "Sleep", isOn: false, tint: .white, action: toggles.sleepDisplay)
-                }
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        WidgetCard {
+            ControlToggleGrid(spacing: 6)
         }
     }
 }
 
-private struct ToggleTile: View {
+/// Six tiles: Dark Mode, Keep Awake and the microphone, which stay on, then the color picker, a
+/// screenshot and sleeping the display, which happen once. A tile that's on fills with the accent.
+struct ControlToggleGrid: View {
+    var spacing: CGFloat = 8
+    @ObservedObject private var toggles = QuickToggles.shared
+    @ObservedObject private var mic = MicMonitor.shared
+
+    var body: some View {
+        Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
+            GridRow {
+                ControlTile(symbol: toggles.isDarkMode ? "moon.fill" : "sun.max.fill", title: "Dark",
+                            state: toggles.isDarkMode ? "On" : "Off", isOn: toggles.isDarkMode, action: toggles.toggleDarkMode)
+                ControlTile(symbol: "cup.and.saucer.fill", title: "Awake", state: toggles.isKeepingAwake ? "On" : "Off",
+                            isOn: toggles.isKeepingAwake, action: toggles.toggleKeepAwake)
+                ControlTile(symbol: mic.isMuted ? "mic.slash.fill" : "mic.fill", title: "Mute mic",
+                            state: mic.hasInput ? (mic.isMuted ? "On" : "Off") : "No mic", isOn: mic.isMuted,
+                            action: mic.toggleMute)
+                    .disabled(!mic.hasInput)
+            }
+            GridRow {
+                ControlTile(symbol: "eyedropper", title: "Color", state: "Copy hex", action: toggles.pickColor)
+                ControlTile(symbol: "camera.viewfinder", title: "Capture", state: "Screenshot", action: toggles.takeScreenshot)
+                ControlTile(symbol: "moon.zzz.fill", title: "Sleep", state: "Display", action: toggles.sleepDisplay)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
+/// A rounded tile: a symbol at the top, its name and state at the bottom.
+private struct ControlTile: View {
     let symbol: String
     let title: String
-    let isOn: Bool
-    let tint: Color
+    let state: String
+    var isOn = false
     let action: () -> Void
     @Environment(\.notchTheme) private var theme
+    @Environment(\.isEnabled) private var isEnabled
     @ViewState private var hovering = false
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous)
         Button(action: action) {
-            VStack(spacing: 4) {
+            VStack(alignment: .leading, spacing: 0) {
                 Image(systemName: symbol)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(isOn ? Color.black : theme.primary.opacity(0.9))
-                    .frame(width: 34, height: 34)
-                    .background(Circle().fill(isOn ? AnyShapeStyle(tint) : AnyShapeStyle(hovering ? theme.controlHover : theme.control)))
-                    .overlay(Circle().strokeBorder(theme.primary.opacity(isOn ? 0 : 0.06)))
+                    .font(.system(size: 15, weight: .semibold))
                     .contentTransition(.symbolEffect(.replace))
+                Spacer(minLength: 4)
                 Text(title)
-                    .font(.system(size: 9.5, weight: .medium))
-                    .foregroundStyle(hovering || isOn ? theme.primary.opacity(0.85) : theme.secondary)
+                    .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+                    .minimumScaleFactor(0.8)
+                Text(state)
+                    .font(.system(size: 10, weight: .medium))
+                    .opacity(isOn ? 0.75 : 0.6)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
+            .foregroundStyle(isOn ? theme.onAccent : theme.primary)
+            .padding(9)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(shape.fill(isOn ? AnyShapeStyle(theme.accent) : AnyShapeStyle(hovering ? theme.controlHover : theme.control)))
+            .contentShape(shape)
+            .opacity(isEnabled ? 1 : 0.45)
         }
-        .buttonStyle(PressableButtonStyle())
+        .buttonStyle(PressableButtonStyle(scale: 0.95))
         .onHover { hovering = $0 }
         .animation(.notchHighlight, value: hovering)
         .animation(.easeOut(duration: 0.15), value: isOn)
+        .help("\(title): \(state)")
+        .accessibilityLabel(title)
+        .accessibilityValue(state)
     }
 }

@@ -37,7 +37,7 @@ final class UpdateChecker: ObservableObject {
     }
 
     @Published private(set) var status = Status.idle
-    @Published private(set) var lastChecked: Date? = UserDefaults.standard.object(forKey: "updateLastChecked") as? Date
+    @Published private(set) var lastChecked: Date? = UserDefaults.dynotch.object(forKey: "updateLastChecked") as? Date
 
     /// Once a day, while someone's looking; a day that passes while the Mac sleeps counts on waking.
     private static let cadence = Cadence(name: "Update check", every: 24 * 3600, onBattery: 24 * 3600, lowPower: 24 * 3600)
@@ -48,7 +48,7 @@ final class UpdateChecker: ObservableObject {
     private var running: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
     /// The version the notch has announced, so each one is announced once.
-    private var noticedVersion: String? = UserDefaults.standard.string(forKey: "updateNoticedVersion")
+    private var noticedVersion: String? = UserDefaults.dynotch.string(forKey: "updateNoticedVersion")
 
     private init() {}
 
@@ -97,7 +97,7 @@ final class UpdateChecker: ObservableObject {
             await check()
             guard case .available(let release) = status, noticedVersion != release.version else { return }
             noticedVersion = release.version
-            UserDefaults.standard.set(release.version, forKey: "updateNoticedVersion")
+            UserDefaults.dynotch.set(release.version, forKey: "updateNoticedVersion")
             LiveActivityCenter.shared.post(LiveNotice(key: "update", symbol: "arrow.down.circle.fill",
                                                       tint: NotchAccent.lavender.color, text: "Update",
                                                       detail: "Dynotch \(release.version) is ready to download"), for: 5)
@@ -111,7 +111,7 @@ final class UpdateChecker: ObservableObject {
         do {
             let release = try await Self.fetchLatest()
             lastChecked = .now
-            UserDefaults.standard.set(lastChecked, forKey: "updateLastChecked")
+            UserDefaults.dynotch.set(lastChecked, forKey: "updateLastChecked")
             status = Self.isNewer(release.version, than: Self.currentVersion) ? .available(release) : .upToDate
         } catch {
             status = .failed(Self.describe(error))

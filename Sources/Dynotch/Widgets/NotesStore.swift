@@ -37,14 +37,26 @@ final class NotesStore: ObservableObject {
     private var saveTasks: [Note.ID: Task<Void, Never>] = [:]
     private var reloadTask: Task<Void, Never>?
     private var terminationObserver: NSObjectProtocol?
+    /// The chosen folder was gone at launch, so Dynotch's own is in use.
+    private let folderWasMissing: Bool
 
     private static let currentKey = "notes.current"
 
     private init() {
         defaultFolder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Dynotch/Notes", isDirectory: true)
+        // Anything can write a path into the defaults; only a folder that's there is used, and never
+        // created, written to or watched on the strength of the setting alone.
         let path = AppSettings.shared.notesFolderPath
-        folder = path.isEmpty ? defaultFolder : URL(fileURLWithPath: path, isDirectory: true)
+        var isDirectory: ObjCBool = false
+        if !path.isEmpty, FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue {
+            folder = URL(fileURLWithPath: path, isDirectory: true)
+            folderWasMissing = false
+        } else {
+            folder = defaultFolder
+            folderWasMissing = !path.isEmpty
+            if folderWasMissing { AppSettings.shared.notesFolderPath = "" }
+        }
     }
 
     var current: Note? { notes.first { $0.id == currentID } }
@@ -56,6 +68,10 @@ final class NotesStore: ObservableObject {
         migrateScratchpad()
         reload()
         watch()
+        if folderWasMissing {
+            LiveActivityCenter.shared.post(LiveNotice(key: "notes", symbol: "note.text", tint: .yellow, text: "Notes",
+                                                      detail: "The notes folder is gone; using Dynotch's own"), for: 5)
+        }
         terminationObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification,
                                                                      object: nil, queue: .main) { _ in
             MainActor.assumeIsolated { NotesStore.shared.saveAll() }
@@ -171,7 +187,7 @@ final class NotesStore: ObservableObject {
             notes[index].savedText = note.text
             notes[index].isOnDisk = true
             saveFailed = false
-            if id == currentID { UserDefaults.standard.set(url.lastPathComponent, forKey: Self.currentKey) }
+            if id == currentID { UserDefaults.dynotch.set(url.lastPathComponent, forKey: Self.currentKey) }
         } catch {
             saveFailed = true
         }
@@ -187,7 +203,7 @@ final class NotesStore: ObservableObject {
     private func setCurrent(_ id: Note.ID?) {
         currentID = id
         if let note = current, note.isOnDisk {
-            UserDefaults.standard.set(note.url.lastPathComponent, forKey: Self.currentKey)
+            UserDefaults.dynotch.set(note.url.lastPathComponent, forKey: Self.currentKey)
         }
     }
 
@@ -239,7 +255,7 @@ final class NotesStore: ObservableObject {
         if loaded != notes { notes = loaded }
 
         if current == nil {
-            let remembered = UserDefaults.standard.string(forKey: Self.currentKey)
+            let remembered = UserDefaults.dynotch.string(forKey: Self.currentKey)
             currentID = notes.first { $0.url.lastPathComponent == remembered }?.id ?? notes.first?.id
         }
         if notes.isEmpty { newNote() }
@@ -280,16 +296,16 @@ final class NotesStore: ObservableObject {
     /// The single scratchpad Dynotch had before becomes the first note.
     private func migrateScratchpad() {
         let key = "notes.text"
-        guard let text = UserDefaults.standard.string(forKey: key) else { return }
+        guard let text = UserDefaults.dynotch.string(forKey: key) else { return }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            UserDefaults.standard.removeObject(forKey: key)
+            UserDefaults.dynotch.removeObject(forKey: key)
             return
         }
         let url = FileActions.uniqueURL(for: folder.appendingPathComponent(NoteLine.fileName(for: text) + ".md"))
         do {
             try text.write(to: url, atomically: true, encoding: .utf8)
-            UserDefaults.standard.removeObject(forKey: key)
-            UserDefaults.standard.set(url.lastPathComponent, forKey: Self.currentKey)
+            UserDefaults.dynotch.removeObject(forKey: key)
+            UserDefaults.dynotch.set(url.lastPathComponent, forKey: Self.currentKey)
         } catch {
             // Left in place for the next launch.
         }

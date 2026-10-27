@@ -63,7 +63,7 @@ enum EnergyProbe {
             Situation(name: "Idle: Focus, events, weather, Bluetooth, screenshot folder", entries: idle),
             Situation(name: "Idle, with an old partial download in ~/Downloads",
                       entries: idle + [Entry(cadence: .downloadDormant, before: Cadence.downloadStalled.every)]),
-            Situation(name: "Busy: Stats tab open, a download moving, a 25-minute Pomodoro",
+            Situation(name: "Busy: Control tab open, a download moving, a 25-minute Pomodoro",
                       entries: idle + [Entry(cadence: .systemStats), Entry(cadence: .downloadMoving),
                                        Entry(cadence: .countdown, endsAt: 25 * 60)]),
         ]
@@ -84,7 +84,7 @@ enum EnergyProbe {
     /// short for macOS to run them together, so this shows what that leeway buys.
     private static func measureRealTime() {
         let entries = [Entry(cadence: .systemStats), Entry(cadence: .downloadMoving), Entry(cadence: .countdown)]
-        let situation = Situation(name: "Real time, one minute on power: Stats tab, a download and a timer",
+        let situation = Situation(name: "Real time, one minute on power: Control tab, a download and a timer",
                                   entries: entries)
         let speed = 1.0
         let minute: TimeInterval = 60
