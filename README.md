@@ -18,7 +18,7 @@ dependencies.
 | **Nook tab** | Media player for Apple Music and Spotify: artwork, scrubber, play/pause, next/previous, shuffle, repeat, favorite. Its accent color comes from the album art. Two configurable widgets beside it: Calendar, Mirror, Shortcuts, Focus timer, Batteries, Quick toggles or Notes. |
 | **Tray tab** | Drag files toward the notch and it opens with drop zones: **Keep in Tray**, **AirDrop**, **Compress** and **Copy to…**. Tray items have Quick Look thumbnails, drag back out to any app, and survive relaunches. The right-click menu offers Open, Open With, Show in Finder, Copy, AirDrop, Share, Compress, Extract, Convert Image (PNG/JPEG/HEIC), Make Smaller, Copy to…, Move to… and Remove. Dropped images, links and text become files. New screenshots and screen recordings land in the Tray as macOS saves them, from whichever folder the Screenshot app uses. |
 | **Focus tab** | Pomodoro timer (focus, short and long breaks, sound, auto-start), Reminders (check off, add new) and a Notes scratchpad. |
-| **Stats tab** | CPU (with a sparkline), memory, disk and network; battery levels for the Mac, AirPods (each bud and the case), keyboards, mice and more; quick toggles for Dark Mode, Keep Awake, Mute, Color Picker (copies the hex code), Screenshot and Sleep Display. |
+| **Stats tab** | CPU (with a sparkline), memory, disk and network; battery levels for the Mac, AirPods (each bud and the case), keyboards, mice and more, with paired devices that aren't connected listed underneath (headphones first) and a Connect button for each; right-click a connected device to disconnect it; quick toggles for Dark Mode, Keep Awake, Mute, Color Picker (copies the hex code), Screenshot and Sleep Display. |
 | **Calendar** | A five-day strip; "in 12m" and "Now" labels; a Join button for Zoom, Meet, Teams, Webex and FaceTime links. |
 | **App** | Menu bar icon, Settings window (General, Appearance, Live Activities, Nook & Widgets, Tray, Focus Timer, Permissions, About), launch at login. Runs as an agent app with no Dock icon. |
 
@@ -92,7 +92,7 @@ Each permission is requested the first time you use the feature that needs it.
 | Automation: System Events | The Dark Mode toggle |
 | Calendar, Reminders | The Calendar and Reminders widgets |
 | Camera | The Mirror widget (it's only on while you're looking at it) |
-| Bluetooth | Battery levels of connected devices |
+| Bluetooth | Battery levels of connected devices, and connecting or disconnecting paired ones |
 | Desktop, Documents or Downloads folder | Adding new screenshots to the Tray (macOS asks for the folder screenshots are saved to) |
 
 Grants survive rebuilds as long as the app is signed with the local identity (see

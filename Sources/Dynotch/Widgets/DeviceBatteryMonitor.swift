@@ -24,6 +24,17 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
                 case .other: "dot.radiowaves.right"
                 }
             }
+
+            /// Headphones first in the list of devices to connect.
+            var connectOrder: Int {
+                switch self {
+                case .earbuds, .headphones: 0
+                case .speaker: 1
+                case .gamepad: 2
+                case .keyboard, .mouse, .trackpad: 3
+                case .other: 4
+                }
+            }
         }
 
         let id: String
@@ -37,8 +48,26 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
         var lowest: Int? { [main, left, right].compactMap { $0 }.min() }
     }
 
+    /// A paired accessory that isn't connected, which the Batteries widget offers to connect.
+    struct PairedDevice: Identifiable, Equatable {
+        /// The Bluetooth address, as xx:xx:xx:xx:xx:xx.
+        let id: String
+        let name: String
+        let kind: Device.Kind
+    }
+
+    /// A connect or disconnect in progress, or one that just failed.
+    enum Connection: Equatable {
+        case connecting, disconnecting
+        case failed(String)
+    }
+
     @Published private(set) var devices: [Device] = []
     @Published private(set) var isAuthorized = CBManager.authorization == .allowedAlways
+    /// Paired accessories that aren't connected, headphones first.
+    @Published private(set) var paired: [PairedDevice] = []
+    /// Keyed by Bluetooth address.
+    @Published private(set) var connections: [String: Connection] = [:]
 
     private var central: CBCentralManager?
     private var connectNotification: IOBluetoothUserNotification?
@@ -81,7 +110,98 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
         let result = await Shell.run("/usr/sbin/system_profiler", ["SPBluetoothDataType", "-json"])
         guard result.status == 0 else { return }
         devices = Self.parse(result.output)
+        paired = Self.parsePaired(result.output)
+        settleConnections()
         warnAboutLowBatteries()
+    }
+
+    // MARK: Connecting
+
+    /// Opens a connection to a paired device. The connect notification then announces it.
+    func connect(_ device: PairedDevice) {
+        guard connections[device.id] != .connecting else { return }
+        guard let bluetooth = IOBluetoothDevice(addressString: device.id) else {
+            fail(device.id, "Couldn't connect")
+            return
+        }
+        connections[device.id] = .connecting
+        let status = bluetooth.openConnection(self)
+        guard status == kIOReturnSuccess else {
+            fail(device.id, Self.message(for: status))
+            return
+        }
+        Task {
+            try? await Task.sleep(for: .seconds(25))
+            if connections[device.id] == .connecting { fail(device.id, "Didn't respond") }
+        }
+    }
+
+    func disconnect(_ device: Device) {
+        guard connections[device.id] != .disconnecting else { return }
+        guard let bluetooth = IOBluetoothDevice(addressString: device.id), bluetooth.isConnected() else {
+            fail(device.id, "Couldn't disconnect")
+            return
+        }
+        connections[device.id] = .disconnecting
+        guard bluetooth.closeConnection() == kIOReturnSuccess else {
+            fail(device.id, "Couldn't disconnect")
+            return
+        }
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            await refresh()
+            try? await Task.sleep(for: .seconds(10))
+            if connections[device.id] == .disconnecting { fail(device.id, "Couldn't disconnect") }
+        }
+    }
+
+    /// Called by IOBluetooth on the main thread when `openConnection(_:)` finishes.
+    @objc private func connectionComplete(_ device: IOBluetoothDevice, status: IOReturn) {
+        guard let address = device.addressString.map(Self.normalized), connections[address] == .connecting else { return }
+        guard status == kIOReturnSuccess else {
+            fail(address, Self.message(for: status))
+            return
+        }
+        // Stays "connecting" until system_profiler lists the device as connected.
+        Task {
+            for delay in [2.0, 4.0] {
+                try? await Task.sleep(for: .seconds(delay))
+                await refresh()
+                if connections[address] != .connecting { return }
+            }
+            connections[address] = nil
+        }
+    }
+
+    private func fail(_ address: String, _ message: String) {
+        connections[address] = .failed(message)
+        Task {
+            try? await Task.sleep(for: .seconds(8))
+            if connections[address] == .failed(message) { connections[address] = nil }
+        }
+    }
+
+    /// Clears connects and disconnects that system_profiler shows have happened.
+    private func settleConnections() {
+        let connected = Set(devices.map(\.id))
+        for (address, connection) in connections {
+            switch connection {
+            case .connecting where connected.contains(address), .disconnecting where !connected.contains(address):
+                connections[address] = nil
+            default:
+                break
+            }
+        }
+    }
+
+    private static func message(for status: IOReturn) -> String {
+        // 0x04 is the HCI page timeout: the device didn't answer.
+        status == kIOReturnTimeout || status == 0x04 ? "Not in range" : "Couldn't connect"
+    }
+
+    /// IOBluetooth writes addresses as xx-xx-xx-xx-xx-xx; system_profiler as XX:XX:XX:XX:XX:XX.
+    nonisolated private static func normalized(_ address: String) -> String {
+        address.replacingOccurrences(of: "-", with: ":").uppercased()
     }
 
     // MARK: Private
@@ -155,6 +275,28 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
         return devices.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
+    /// Paired accessories that aren't connected, from the same output. Phones, watches and other Macs
+    /// come without a minor type there, and connecting to them does nothing useful, so they're left out.
+    nonisolated static func parsePaired(_ json: String) -> [PairedDevice] {
+        guard let data = json.data(using: .utf8),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let controllers = root["SPBluetoothDataType"] as? [[String: Any]] else { return [] }
+        var devices: [PairedDevice] = []
+        for controller in controllers {
+            for entry in controller["device_not_connected"] as? [[String: Any]] ?? [] {
+                for (name, value) in entry {
+                    guard let properties = value as? [String: Any],
+                          let address = properties["device_address"] as? String else { continue }
+                    let minorType = properties["device_minorType"] as? String
+                    let kind = kind(name: name, minorType: minorType)
+                    guard minorType != nil || kind != .other else { continue }
+                    devices.append(PairedDevice(id: address.uppercased(), name: name, kind: kind))
+                }
+            }
+        }
+        return devices.sorted { ($0.kind.connectOrder, $0.name.lowercased()) < ($1.kind.connectOrder, $1.name.lowercased()) }
+    }
+
     nonisolated private static func percent(_ value: Any?) -> Int? {
         (value as? String).flatMap { Int($0.trimmingCharacters(in: CharacterSet(charactersIn: "% "))) }
     }
@@ -162,6 +304,8 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
     nonisolated private static func kind(name: String, minorType: String?) -> Device.Kind {
         let name = name.lowercased(), type = minorType?.lowercased() ?? ""
         if name.contains("airpods") || name.contains("buds") { return .earbuds }
+        // Some speakers report themselves as headsets.
+        if name.contains("speaker") { return .speaker }
         if type.contains("headphone") || type.contains("headset") || name.contains("beats") { return .headphones }
         if type.contains("keyboard") || name.contains("keyboard") { return .keyboard }
         if type.contains("mouse") || name.contains("mouse") { return .mouse }
@@ -173,8 +317,10 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
 
     // MARK: Snapshots
 
-    func loadSample(_ devices: [Device]) {
+    func loadSample(_ devices: [Device], paired: [PairedDevice] = [], connections: [String: Connection] = [:]) {
         isAuthorized = true
         self.devices = devices
+        self.paired = paired
+        self.connections = connections
     }
 }

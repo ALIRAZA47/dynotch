@@ -12,6 +12,8 @@ enum SnapshotRenderer {
         var tab: NotchTab = .home
         var draggingFiles = false
         var hasTrack = true
+        /// Sample state for this scene. Scenes after it keep it.
+        var prepare: (@MainActor () -> Void)?
     }
 
     static func render(into folder: URL) {
@@ -42,11 +44,17 @@ enum SnapshotRenderer {
             // Widgets and the Tray
             Scene(name: "20-closed-screenshot", phase: .closed, activity: .notice(LiveNotice(
                 key: "screenshot", symbol: "camera.viewfinder", tint: .white, detail: "Screenshot added to the Tray"))),
+            Scene(name: "21-open-stats-bluetooth", phase: .open, tab: .stats) {
+                DeviceBatteryMonitor.shared.loadSample([], paired: samplePairedDevices,
+                                                       connections: ["beats": .connecting, "speaker": .failed("Not in range")])
+            },
         ]
 
         let settings = AppSettings.shared
         let size = CGSize(width: settings.openWidth + NotchMetrics.openTopRadius * 2 + 80, height: settings.openHeight + 40)
+        let savedWidgets = (settings.homeWidgetA, settings.homeWidgetB)
         for scene in scenes {
+            scene.prepare?()
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
             let viewModel = NotchViewModel(geometry: geometry)
             viewModel.stage(phase: scene.phase, activity: scene.activity, tab: scene.tab, draggingFiles: scene.draggingFiles)
@@ -63,6 +71,7 @@ enum SnapshotRenderer {
                   let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else { continue }
             try? png.write(to: folder.appendingPathComponent(scene.name + ".png"))
         }
+        (settings.homeWidgetA, settings.homeWidgetB) = savedWidgets
         print("Wrote \(scenes.count) snapshots to \(folder.path)")
         renderSettings(into: folder)
     }
@@ -178,7 +187,7 @@ enum SnapshotRenderer {
         DeviceBatteryMonitor.shared.loadSample([
             .init(id: "airpods", name: "AirPods Pro", kind: .earbuds, left: 80, right: 78, batteryCase: 27),
             .init(id: "keyboard", name: "Magic Keyboard", kind: .keyboard, main: 64),
-        ])
+        ], paired: samplePairedDevices)
         // Registered, not saved, so a snapshot run never touches real notes.
         UserDefaults.standard.register(defaults: ["notes.text": "Call the bank about the card\nIdeas: notch widgets for weather"])
 
@@ -191,6 +200,12 @@ enum SnapshotRenderer {
         }
         TrayStore.shared.loadSample(urls)
     }
+
+    private static let samplePairedDevices: [DeviceBatteryMonitor.PairedDevice] = [
+        .init(id: "beats", name: "Beats Studio Pro", kind: .headphones),
+        .init(id: "speaker", name: "Kitchen Speaker", kind: .speaker),
+        .init(id: "mouse", name: "Magic Mouse", kind: .mouse),
+    ]
 
     /// A stand-in album cover.
     private static func sampleArtwork() -> NSImage {
