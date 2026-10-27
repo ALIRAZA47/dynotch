@@ -51,7 +51,8 @@ app is signed ad hoc, which looks like a new app to macOS after every build.
 
 For development, `swift build` and `.build/debug/Dynotch` also work.
 `Dynotch --snapshot <folder>` renders every notch state with sample data to PNGs,
-which is handy for reviewing UI changes.
+which is handy for reviewing UI changes. `Dynotch --energy-probe` counts how often the polls
+would run and wake the Mac in an hour, in each of the conditions under [Energy](#energy).
 
 ## Scripting
 
@@ -117,6 +118,34 @@ Notification Center** on, because that's where Dynotch reads them from.
 nothing a notification says is logged or saved. The only thing it remembers is the time of
 the newest notification it has seen, and only while it runs.
 
+## Energy
+
+Dynotch runs all day, so it keeps quiet when nobody's looking. While the displays sleep, the
+screen is locked, the screen saver runs or another user has the Mac, nothing polls, and the notch
+closes and takes its views off the screen, which stops their animations, the Stats sampling, the
+Mirror's camera and the live equalizer's audio tap. Timers still end on time, with their sound.
+When you're back, whatever came due meanwhile runs once.
+
+On battery and in Low Power Mode, the polls run less often. Everything else (music, volume,
+the microphone, notifications, files arriving) is driven by events and costs nothing while idle.
+
+| Poll | On power | On battery | Low Power Mode |
+|---|---|---|---|
+| Stats tab, only while it's open | 1.5 s | 3 s | 5 s |
+| Focus schedules | 30 s | 1 min | 2 min |
+| Event alerts | 30 s | 45 s | 45 s |
+| Bluetooth batteries (`system_profiler`) | 2 min | 5 min | 10 min |
+| Weather | 10 min | 15 min | 20 min |
+| The Screenshot app's save folder | 1 min | 2 min | 5 min |
+| A download: moving, stalled, still for half an hour | 1 s, 10 s, 30 s | 2 s, 20 s, 1 min | 3 s, 30 s, 2 min |
+| A running timer's countdown | 0.5 s | 0.5 s | 1 s |
+
+`Dynotch --energy-probe` measures this. With Focus, events, weather, Bluetooth and screenshots on,
+the polls run 336 times an hour before these changes and about 310 on power (timers now get
+leeway, so macOS runs them alongside other wakeups), 170 on battery, 120 in Low Power Mode, and
+none while the displays sleep. The closed notch with music playing wakes the app about 240 times
+a second for the equalizer's bars, and under 2 once its views are off the screen.
+
 ## Permissions
 
 Each permission is requested the first time you use the feature that needs it.
@@ -163,7 +192,7 @@ above). An ad hoc build may lose them.
 
 ```
 Sources/Dynotch/
-  App/        entry point, settings model, hot key, helpers
+  App/        entry point, settings model, hot key, energy coordinator, helpers
   Notch/      panel, geometry, shape, pointer handling, live activities, open/closed views
   Media/      Now Playing service (distributed notifications + AppleScript), player UI
   Calendar/   EventKit service, calendar and reminders widgets
@@ -174,7 +203,8 @@ Sources/Dynotch/
   Activities/ microphone and camera, downloads, Focus
   Profiles/   saved setups and the rules that switch them
   Settings/   settings window and permissions page
-  Debug/      snapshot renderer
+  Welcome/    the first-run welcome tour
+  Debug/      snapshot renderer, energy probe
 Support/      Info.plist, app icon
 scripts/      build script, icon generator
 ```

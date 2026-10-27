@@ -32,8 +32,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        if arguments.contains("--energy-probe") {
+            EnergyProbe.run()
+            NSApp.terminate(nil)
+            return
+        }
 
         NSApp.mainMenu = Self.makeMainMenu()
+        // Paces every service's polls, so it knows from the start whether anyone's looking.
+        EnergyCoordinator.shared.start()
         // First, so a profile a rule picks is in place before the services read their settings.
         ProfileStore.shared.start()
         TrayStore.shared.load()

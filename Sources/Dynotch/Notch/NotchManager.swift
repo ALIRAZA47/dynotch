@@ -41,6 +41,16 @@ final class NotchManager {
         NotificationCenter.default.publisher(for: NSMenu.didEndTrackingNotification)
             .sink { [weak self] _ in self?.controllers.forEach { $0.viewModel.isMenuOpen = false } }
             .store(in: &cancellables)
+
+        // Nobody can see the screen: close the notch and let its views rest.
+        EnergyCoordinator.shared.$conditions
+            .map(\.isQuiet)
+            .removeDuplicates()
+            .sink { [weak self] quiet in
+                if quiet { self?.close() }
+                self?.controllers.forEach { $0.setQuiet(quiet) }
+            }
+            .store(in: &cancellables)
     }
 
     /// Opens the notch under the pointer (or closes the open one).
@@ -96,6 +106,7 @@ final class NotchManager {
                 controller.viewModel.onOpen = { [weak self, weak controller] in
                     self?.controllers.filter { $0 !== controller }.forEach { $0.dismiss() }
                 }
+                if EnergyCoordinator.shared.isQuiet { controller.setQuiet(true) }
                 kept.append(controller)
             }
         }
@@ -128,6 +139,7 @@ final class NotchManager {
     }
 
     private func route(_ event: NSEvent) {
+        EnergyCoordinator.shared.sawInput()
         let point = NSEvent.mouseLocation
         switch event.type {
         case .mouseMoved:

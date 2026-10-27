@@ -29,7 +29,7 @@ final class ScreenshotWatcher: ObservableObject {
 
     private static let domain = "com.apple.screencapture" as CFString
     private var watches: [Watch] = []
-    private var locationTimer: Timer?
+    private var locationPoll: Poll?
     private var cancellable: AnyCancellable?
 
     private init() {}
@@ -83,22 +83,18 @@ final class ScreenshotWatcher: ObservableObject {
         }
 
         // The save location can change in the Screenshot app's Options menu, and nothing announces it.
-        let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                let current = Self.folders().map(\.path)
-                if current != self.watches.map(\.folder.path) { self.watch() }
-            }
+        locationPoll = EnergyCoordinator.shared.schedule(.screenshotFolder) { [weak self] in
+            guard let self else { return }
+            let current = Self.folders().map(\.path)
+            if current != self.watches.map(\.folder.path) { self.watch() }
         }
-        RunLoop.main.add(timer, forMode: .common)
-        locationTimer = timer
     }
 
     private func stop() {
         watches.forEach { $0.source.cancel() }
         watches.removeAll()
-        locationTimer?.invalidate()
-        locationTimer = nil
+        locationPoll?.cancel()
+        locationPoll = nil
     }
 
     private func scan(_ watch: Watch) {

@@ -71,8 +71,9 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
 
     private var central: CBCentralManager?
     private var connectNotification: IOBluetoothUserNotification?
-    private var timer: Timer?
+    private var poll: Poll?
     private var isRefreshing = false
+    private var lastRefresh = Date.distantPast
     private var warnedLow: Set<String> = []
 
     private override init() {
@@ -103,9 +104,12 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
         }
     }
 
-    func refresh() async {
-        guard isAuthorized, !isRefreshing else { return }
+    /// Reads the levels with `system_profiler`, which takes a moment of CPU. Without `force`, a
+    /// reading from the last half minute will do, as when the Batteries widget appears.
+    func refresh(force: Bool = false) async {
+        guard isAuthorized, !isRefreshing, force || Date.now.timeIntervalSince(lastRefresh) > 30 else { return }
         isRefreshing = true
+        lastRefresh = .now
         defer { isRefreshing = false }
         let result = await Shell.run("/usr/sbin/system_profiler", ["SPBluetoothDataType", "-json"])
         guard result.status == 0 else { return }
@@ -149,7 +153,7 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
         }
         Task {
             try? await Task.sleep(for: .seconds(1.5))
-            await refresh()
+            await refresh(force: true)
             try? await Task.sleep(for: .seconds(10))
             if connections[device.id] == .disconnecting { fail(device.id, "Couldn't disconnect") }
         }
@@ -166,7 +170,7 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
         Task {
             for delay in [2.0, 4.0] {
                 try? await Task.sleep(for: .seconds(delay))
-                await refresh()
+                await refresh(force: true)
                 if connections[address] != .connecting { return }
             }
             connections[address] = nil
@@ -209,15 +213,10 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
     private func beginMonitoring() {
         guard connectNotification == nil else { return }
         connectNotification = IOBluetoothDevice.register(forConnectNotifications: self, selector: #selector(deviceConnected(_:device:)))
-        Task { await refresh() }
-        let timer = Timer(timeInterval: 120, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                Task { await self.refresh() }
-            }
+        Task { await refresh(force: true) }
+        poll = EnergyCoordinator.shared.schedule(.bluetoothBatteries) { [weak self] in
+            Task { await self?.refresh(force: true) }
         }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
     }
 
     @objc private func deviceConnected(_ notification: IOBluetoothUserNotification, device: IOBluetoothDevice) {
@@ -226,7 +225,7 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
         Task {
             // Battery levels are reported a moment after the connection.
             try? await Task.sleep(for: .seconds(3))
-            await refresh()
+            await refresh(force: true)
             guard AppSettings.shared.liveDevices else { return }
             let match = devices.first { $0.name == name }
             LiveActivityCenter.shared.post(LiveNotice(key: "device", symbol: match?.kind.symbol ?? "dot.radiowaves.right", tint: .white,
@@ -236,7 +235,7 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
 
     @objc private func deviceDisconnected(_ notification: IOBluetoothUserNotification, device: IOBluetoothDevice) {
         notification.unregister()
-        Task { await refresh() }
+        Task { await refresh(force: true) }
     }
 
     private func warnAboutLowBatteries() {

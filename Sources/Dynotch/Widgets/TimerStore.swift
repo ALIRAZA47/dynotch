@@ -54,7 +54,7 @@ final class TimerStore: ObservableObject {
     /// Moves on twice a second while anything runs, so the views keep time.
     @Published private(set) var now = Date.now
 
-    private var ticker: Timer?
+    private var ticker: Poll?
 
     private init() {}
 
@@ -106,13 +106,14 @@ final class TimerStore: ObservableObject {
         now = .now
         let running = stopwatch.isRunning || countdowns.contains(where: \.isRunning)
         if running, ticker == nil {
-            let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
-                MainActor.assumeIsolated { self?.tick() }
+            // While nobody's looking, it only wakes when the next timer ends.
+            ticker = EnergyCoordinator.shared.schedule(.countdown, deadline: { [weak self] in
+                self?.countdowns.compactMap(\.endDate).min()
+            }) { [weak self] in
+                self?.tick()
             }
-            RunLoop.main.add(timer, forMode: .common)
-            ticker = timer
         } else if !running {
-            ticker?.invalidate()
+            ticker?.cancel()
             ticker = nil
         }
     }

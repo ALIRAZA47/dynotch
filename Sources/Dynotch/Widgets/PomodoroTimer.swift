@@ -30,7 +30,7 @@ final class PomodoroTimer: ObservableObject {
 
     /// When the current phase ends, while the timer runs.
     private(set) var endDate: Date?
-    private var ticker: Timer?
+    private var ticker: Poll?
     /// The current phase has been started at least once, so new durations wait for the next one.
     private var phaseStarted = false
     private var settingsObserver: AnyCancellable?
@@ -60,11 +60,10 @@ final class PomodoroTimer: ObservableObject {
         endDate = Date.now.addingTimeInterval(remaining)
         phaseStarted = true
         isRunning = true
-        let timer = Timer(timeInterval: 0.5, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.tick() }
+        // Counts down twice a second for the notch; while nobody's looking, only wakes at the end.
+        ticker = EnergyCoordinator.shared.schedule(.countdown, deadline: { [weak self] in self?.endDate }) { [weak self] in
+            self?.tick()
         }
-        RunLoop.main.add(timer, forMode: .common)
-        ticker = timer
     }
 
     func pause() {
@@ -72,7 +71,7 @@ final class PomodoroTimer: ObservableObject {
         tick()
         isRunning = false
         endDate = nil
-        ticker?.invalidate()
+        ticker?.cancel()
         ticker = nil
     }
 

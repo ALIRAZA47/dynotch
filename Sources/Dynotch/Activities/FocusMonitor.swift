@@ -41,7 +41,7 @@ final class FocusMonitor: ObservableObject {
     private var isWatching = false
     private var hasRead = false
     private var source: DispatchSourceFileSystemObject?
-    private var poll: Timer?
+    private var poll: Poll?
     private var cancellables = Set<AnyCancellable>()
 
     private init() {}
@@ -51,10 +51,6 @@ final class FocusMonitor: ObservableObject {
             .map { $0 || $1 }
             .removeDuplicates()
             .sink { [weak self] on in on ? self?.watch() : self?.stopWatching() }
-            .store(in: &cancellables)
-        // A schedule can start or end while the Mac sleeps.
-        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)
-            .sink { [weak self] _ in self?.refresh() }
             .store(in: &cancellables)
     }
 
@@ -70,18 +66,15 @@ final class FocusMonitor: ObservableObject {
         guard !isWatching else { return }
         isWatching = true
         hasRead = false
-        // Schedules change without touching the files, so look again now and then.
-        let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refresh() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        poll = timer
+        // Schedules change without touching the files, so look again now and then, and when
+        // someone's back after the displays slept, since a schedule may have started meanwhile.
+        poll = EnergyCoordinator.shared.schedule(.focusSchedules) { [weak self] in self?.refresh() }
         refresh()
     }
 
     private func stopWatching() {
         isWatching = false
-        poll?.invalidate()
+        poll?.cancel()
         poll = nil
         source?.cancel()
         source = nil
