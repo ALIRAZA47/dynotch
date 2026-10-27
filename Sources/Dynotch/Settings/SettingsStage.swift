@@ -10,10 +10,14 @@ struct SettingsStage: View {
     var body: some View {
         let page = navigation.page
         ZStack(alignment: .bottom) {
+            // Both are decoration. The backdrop's glow is stretched past the stage, where `clipped`
+            // hides it but hit testing still finds it: it swallowed clicks on the sidebar's top rows.
             StageBackdrop()
+                .allowsHitTesting(false)
             StagePreview(navigation: navigation)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .accessibilityHidden(true)
+                .allowsHitTesting(false)
             HStack(alignment: .bottom, spacing: 16) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(page.title)
