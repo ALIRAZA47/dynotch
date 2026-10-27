@@ -162,12 +162,13 @@ struct NotchSurface: View {
     }
 
     /// Keeps the tabs clear of the menu bar behind them, and lets the camera housing blend in.
+    /// It's solid down to the menu bar's bottom edge: any less and the menu bar's text shows through.
     private var band: some View {
         GeometryReader { proxy in
             let height = max(proxy.size.height, 1)
             LinearGradient(stops: [
-                .init(color: .black.opacity(0.9), location: 0),
-                .init(color: .black.opacity(0.9), location: min(1, max(0, bandHeight - 8) / height)),
+                .init(color: .black, location: 0),
+                .init(color: .black, location: min(1, bandHeight / height)),
                 .init(color: .black.opacity(0), location: min(1, (bandHeight + 16) / height)),
             ], startPoint: .top, endPoint: .bottom)
         }
