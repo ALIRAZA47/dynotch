@@ -270,6 +270,7 @@ private struct VirtualNotchSketch: View {
 /// The live activities that can be turned off, and a sample of each for the preview.
 enum LiveActivityKind: String, CaseIterable, Identifiable {
     case music, trackPeek, timer, levels, charging, lowBattery, events, devices
+    case notifications
 
     var id: String { rawValue }
 
@@ -283,6 +284,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .lowBattery: "Low battery"
         case .events: "Upcoming events"
         case .devices: "Bluetooth devices"
+        case .notifications: "Notifications"
         }
     }
 
@@ -296,6 +298,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .lowBattery: "For the Mac and Bluetooth devices"
         case .events: "Five minutes before they start"
         case .devices: "When one connects, with its battery"
+        case .notifications: "Messages, Mail, Slack and more as they arrive"
         }
     }
 
@@ -309,6 +312,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .lowBattery: "battery.25percent"
         case .events: "calendar"
         case .devices: "airpodspro"
+        case .notifications: "bell.badge.fill"
         }
     }
 
@@ -322,6 +326,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .lowBattery: .red
         case .events: .orange
         case .devices: .teal
+        case .notifications: .indigo
         }
     }
 
@@ -336,6 +341,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .lowBattery: \.lowBatteryAlerts
         case .events: \.liveEvents
         case .devices: \.liveDevices
+        case .notifications: \.liveNotifications
         }
     }
 
@@ -358,6 +364,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .events: .notice(LiveNotice(key: "event", symbol: "calendar", tint: .orange, text: "in 5m", detail: "Design review"))
         case .devices:
             .notice(LiveNotice(key: "device", symbol: "airpodspro", tint: .white, text: "80%", detail: "AirPods Pro connected"))
+        case .notifications: .notice(NotificationPeek.sample())
         }
     }
 }
@@ -380,6 +387,18 @@ struct ActivitySettings: View {
     }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 26) {
+            activities
+            if settings.liveNotifications {
+                NotificationSettingsSection()
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: settings.liveNotifications)
+    }
+
+    @ViewBuilder
+    private var activities: some View {
         let onCount = LiveActivityKind.allCases.filter { settings[keyPath: $0.setting] }.count
         SettingsSection(title: "Show in the closed notch", trailing: "\(onCount) of \(LiveActivityKind.allCases.count) on",
                         footer: "Live activities appear beside the camera without opening the notch. Point at one to see it above.") {

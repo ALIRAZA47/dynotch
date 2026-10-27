@@ -41,6 +41,9 @@ final class PermissionStatus: ObservableObject {
                           DeviceBatteryMonitor.shared.objectWillChange)
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        NotificationMirror.shared.objectWillChange
+            .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &cancellables)
     }
 
     var privacy: [Item] {
@@ -59,6 +62,10 @@ final class PermissionStatus: ObservableObject {
                  action: camera.requestAccess),
             Item(title: "Bluetooth", purpose: "Battery levels of AirPods, keyboards and mice", symbol: "airpodspro",
                  tint: .blue, state: devices.isAuthorized ? .granted : .notDetermined, action: devices.requestAccess),
+            // There's no prompt for Full Disk Access, only the switch in System Settings.
+            Item(title: "Full Disk Access", purpose: "Notification peeks, read from Notification Center", symbol: "internaldrive.fill",
+                 tint: .gray, state: NotificationMirror.shared.hasAccess ? .granted : .denied,
+                 action: NotificationMirror.shared.openAccessSettings),
         ]
     }
 
