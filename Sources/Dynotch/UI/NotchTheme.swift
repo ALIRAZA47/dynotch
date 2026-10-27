@@ -105,19 +105,26 @@ struct NotchTheme: Equatable {
     var primary: Color { .white }
     /// Second lines, values and idle controls.
     var secondary: Color { .white.opacity(isGlass ? 0.68 : 0.6) }
-    /// Card titles, hints and placeholders.
-    var tertiary: Color { .white.opacity(isGlass ? 0.48 : 0.38) }
+    /// Card titles, hints and placeholders. No fainter, so small text stays readable.
+    var tertiary: Color { .white.opacity(isGlass ? 0.56 : 0.5) }
     /// The empty part of a meter or a ring.
     var track: Color { .white.opacity(isGlass ? 0.22 : 0.16) }
-    var card: Color { .white.opacity(isGlass ? 0.1 : 0.07) }
-    var cardHover: Color { .white.opacity(isGlass ? 0.15 : 0.11) }
+    var card: Color { .white.opacity(isGlass ? 0.1 : 0.06) }
+    var cardHover: Color { .white.opacity(isGlass ? 0.15 : 0.1) }
     /// A hairline that keeps a card's edge crisp.
-    var cardStroke: Color { .white.opacity(isGlass ? 0.12 : 0.05) }
+    var cardStroke: Color { .white.opacity(isGlass ? 0.12 : 0.06) }
+    /// Between the parts of a card.
+    var divider: Color { .white.opacity(isGlass ? 0.12 : 0.07) }
     /// Fields and buttons inside a card.
     var control: Color { .white.opacity(isGlass ? 0.12 : 0.08) }
     var controlHover: Color { .white.opacity(isGlass ? 0.18 : 0.14) }
     /// Behind the selected tab, day or file.
-    var selection: Color { accent.opacity(0.28) }
+    var selection: Color { accent.opacity(0.26) }
+    /// Behind a selected file or clipboard item, inside a ring of `selectionRing`.
+    var selectionFill: Color { accent.opacity(0.16) }
+    var selectionRing: Color { accent.opacity(0.6) }
+    /// Text and symbols on a button filled with the accent.
+    var onAccent: Color { Color(red: 0.08, green: 0.06, blue: 0.17) }
 }
 
 /// What the notch is made of: black, or Liquid Glass when `isGlass`. Glass stays black along the
@@ -191,8 +198,8 @@ extension EnvironmentValues {
 /// The notch's type scale: SF Pro in a few sizes, small enough for the notch, with weight doing
 /// the rest. Numbers use the rounded face with digits of one width, so they don't jitter as they change.
 enum NotchFont {
-    /// Card titles, in capitals: TIMERS, REMINDERS.
-    static let label = Font.system(size: 9.5, weight: .bold)
+    /// Card titles: Up next, Timers, Batteries.
+    static let label = Font.system(size: 11, weight: .semibold)
     /// The line under a row: a due date, when an event starts, a device's status.
     static let caption = Font.system(size: 10, weight: .medium)
     /// Hints and messages in empty cards.

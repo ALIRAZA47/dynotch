@@ -110,6 +110,8 @@ extension Animation {
     static let notchOpen = Animation.spring(response: 0.42, dampingFraction: 0.76)
     static let notchClose = Animation.spring(response: 0.36, dampingFraction: 0.95)
     static let notchHover = Animation.spring(response: 0.28, dampingFraction: 0.7)
+    /// The hovered notch growing into a glance: quicker and calmer than opening.
+    static let notchGlance = Animation.spring(response: 0.34, dampingFraction: 0.82)
     static let notchActivity = Animation.spring(response: 0.42, dampingFraction: 0.8)
     /// The selected tab's pill moving along the tab bar.
     static let notchTab = Animation.spring(response: 0.32, dampingFraction: 0.82)

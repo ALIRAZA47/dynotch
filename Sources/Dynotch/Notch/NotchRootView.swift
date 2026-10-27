@@ -21,6 +21,12 @@ struct NotchRootView: View {
                             insertion: (reduceMotion ? AnyTransition.opacity : .opacity.combined(with: .scale(scale: 0.92, anchor: .top)))
                                 .animation(.spring(response: 0.4, dampingFraction: 0.82).delay(0.04)),
                             removal: .opacity.animation(.easeOut(duration: 0.1))))
+                } else if viewModel.isGlancing {
+                    GlanceView(viewModel: viewModel)
+                        .transition(.asymmetric(
+                            insertion: (reduceMotion ? AnyTransition.opacity : .opacity.combined(with: .scale(scale: 0.95, anchor: .top)))
+                                .animation(.spring(response: 0.34, dampingFraction: 0.84).delay(0.05)),
+                            removal: .opacity.animation(.easeOut(duration: 0.08))))
                 } else {
                     ClosedNotchView(viewModel: viewModel)
                         .transition(.asymmetric(
@@ -48,7 +54,8 @@ struct NotchRootView: View {
                 }
             }
             // Glass carries a lighter shadow: a heavy one shows through it.
-            .shadow(color: .black.opacity(viewModel.isOpen && settings.showOpenShadow ? (theme.isGlass ? 0.3 : 0.5) : 0),
+            .shadow(color: .black.opacity((viewModel.isOpen || viewModel.isGlancing) && settings.showOpenShadow
+                        ? (viewModel.isOpen && theme.isGlass ? 0.3 : 0.5) : 0),
                     radius: 18, y: 8)
             // The line is faint until the pointer finds it.
             .opacity(isLine ? (viewModel.phase == .hovering ? 0.7 : 0.4) : 1)

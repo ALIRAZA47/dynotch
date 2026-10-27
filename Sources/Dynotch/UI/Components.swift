@@ -156,7 +156,7 @@ struct WidgetCard<Content: View, Accessory: View>: View {
     }
 }
 
-/// A card's title row: a symbol and a name in small capitals, then a count or buttons on the right.
+/// A card's title row: a symbol and a name, then a count or buttons on the right.
 struct CardTitle<Accessory: View>: View {
     let title: String
     var symbol: String?
@@ -175,8 +175,7 @@ struct CardTitle<Accessory: View>: View {
             if let symbol {
                 Image(systemName: symbol)
             }
-            Text(title.uppercased())
-                .tracking(0.6)
+            Text(title)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityLabel(title)
@@ -249,6 +248,60 @@ struct PermissionPrompt: View {
     }
 }
 
+/// A small switch between a card's views, in its title row: Reminders | Notes.
+struct CardSegments<Value: Hashable>: View {
+    struct Segment {
+        var value: Value
+        var title: String
+        var count: Int?
+    }
+
+    @Binding var selection: Value
+    let segments: [Segment]
+    @Environment(\.notchTheme) private var theme
+    @Namespace private var highlight
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(segments.indices, id: \.self) { index in
+                segment(segments[index])
+            }
+        }
+        .padding(2)
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(theme.control))
+    }
+
+    private func segment(_ segment: Segment) -> some View {
+        let isSelected = segment.value == selection
+        return Button {
+            withAnimation(.notchTab) { selection = segment.value }
+        } label: {
+            HStack(spacing: 5) {
+                Text(segment.title)
+                    .font(isSelected ? NotchFont.bodyStrong : NotchFont.body)
+                if let count = segment.count {
+                    Text("\(count)")
+                        .font(NotchFont.numeric(10.5))
+                        .foregroundStyle(theme.tertiary)
+                }
+            }
+            .foregroundStyle(isSelected ? theme.primary : theme.secondary)
+            .padding(.horizontal, 10)
+            .frame(height: 22)
+            .background {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(theme.controlHover)
+                        .matchedGeometryEffect(id: "segment", in: highlight)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableButtonStyle(scale: 0.95))
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
+}
+
 /// A one-line field in a card, with a plus in front: a new timer, a new reminder.
 struct CardField: View {
     let placeholder: String
@@ -310,6 +363,9 @@ struct IconButton: View {
     var size: CGFloat = 14
     var isActive = false
     var activeColor: Color = .white
+    /// How strong the symbol is while it's neither active nor under the pointer. Secondary
+    /// controls, like shuffle beside the play button, sit back further.
+    var idleOpacity: Double = 0.82
     var help: String?
     let action: () -> Void
     @Environment(\.notchTheme) private var theme
@@ -319,7 +375,7 @@ struct IconButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(isActive ? activeColor : theme.primary.opacity(hovering ? 1 : 0.82))
+                .foregroundStyle(isActive ? activeColor : theme.primary.opacity(hovering ? 1 : idleOpacity))
                 .frame(width: size + 16, height: size + 14)
                 .background(Circle().fill(hovering ? theme.controlHover : .clear))
                 .contentShape(Circle())

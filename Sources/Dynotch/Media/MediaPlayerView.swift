@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// The player on the Nook tab: artwork, track, scrubber and transport controls. It fills the
-/// height of the cards beside it: the artwork lines up with their tops, the controls with their bottoms.
+/// The player on the Nook tab: the artwork beside the track, then the scrubber and the controls.
+/// It sits straight on the notch, lit by a soft glow in the artwork's color, with the stack of
+/// widgets beside it.
 struct MediaPlayerView: View {
     @ObservedObject private var media = NowPlayingService.shared
     @ObservedObject private var settings = AppSettings.shared
@@ -12,6 +13,7 @@ struct MediaPlayerView: View {
         GeometryReader { proxy in
             player(artwork: Self.artworkSide(for: proxy.size.height))
         }
+        .background(alignment: .topLeading) { glow }
         .opacity(outputs.isPickerShown ? 0 : 1)
         .allowsHitTesting(!outputs.isPickerShown)
         .frame(maxHeight: .infinity)
@@ -26,29 +28,27 @@ struct MediaPlayerView: View {
 
     /// As large as the height allows once the scrubber and the controls have their room.
     static func artworkSide(for height: CGFloat) -> CGFloat {
-        min(96, max(64, (height - 62).rounded()))
+        min(84, max(56, (height - 98).rounded()))
     }
 
     @ViewBuilder
     private func player(artwork side: CGFloat) -> some View {
         if let track = media.track {
             VStack(alignment: .leading, spacing: 0) {
-                HStack(alignment: .top, spacing: 12) {
+                HStack(alignment: .center, spacing: 14) {
                     ArtworkView(image: media.artwork, size: side, cornerRadius: theme.cardRadius,
                                 glow: settings.artworkTint ? tint : nil)
                         .overlay { ArtworkVolumeOverlay(cornerRadius: theme.cardRadius) }
-                        .overlay(alignment: .bottomTrailing) { playerBadge }
                         .overlay {
                             if !outputs.isPickerShown { VolumeScrollArea() }
                         }
                         .onTapGesture { media.openPlayer() }
                         .help("Open \(media.player?.name ?? "player"). Scroll to change the volume.")
                     details(track)
-                        .frame(height: side)
                 }
-                Spacer(minLength: 6)
+                Spacer(minLength: 8)
                 PlaybackScrubber(tint: tint)
-                Spacer(minLength: 4)
+                Spacer(minLength: 6)
                 transport
             }
         } else {
@@ -57,8 +57,8 @@ struct MediaPlayerView: View {
     }
 
     private func details(_ track: NowPlayingService.Track) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(track.title)
                     .font(NotchFont.title)
                     .lineLimit(1)
@@ -68,28 +68,43 @@ struct MediaPlayerView: View {
                     Button(action: media.toggleFavorite) {
                         Image(systemName: favorite ? "star.fill" : "star")
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(favorite ? tint : theme.tertiary)
+                            .foregroundStyle(favorite ? theme.accent : theme.tertiary)
                             .contentTransition(.symbolEffect(.replace))
+                            .frame(width: 20, height: 20)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(PressableButtonStyle())
                     .help(favorite ? "Remove from favorites" : "Favorite")
                 }
-                OutputButton(tint: tint)
             }
-            Text(track.artist.isEmpty ? " " : track.artist)
+            Text(byline(track))
                 .font(NotchFont.subheadline)
                 .foregroundStyle(theme.secondary)
                 .lineLimit(1)
-            if !track.album.isEmpty {
-                Text(track.album)
-                    .font(NotchFont.footnote)
+                .help(byline(track))
+            HStack(spacing: 8) {
+                AudioBars(isPlaying: media.isPlaying, color: tint)
+                    .frame(width: 16, height: 12)
+                Text(playingOn)
+                    .font(NotchFont.caption)
                     .foregroundStyle(theme.tertiary)
                     .lineLimit(1)
             }
-            Spacer(minLength: 0)
-            AudioBars(isPlaying: media.isPlaying, color: tint)
-                .frame(width: 22, height: 14)
+            .padding(.top, 9)
         }
+    }
+
+    /// The artist and the album, whichever there are.
+    private func byline(_ track: NowPlayingService.Track) -> String {
+        let parts = [track.artist, track.album].filter { !$0.isEmpty }
+        return parts.isEmpty ? " " : parts.joined(separator: " · ")
+    }
+
+    /// Which player, and where the sound goes.
+    private var playingOn: String {
+        let player = media.player?.name ?? "Playing"
+        guard let output = outputs.current?.name else { return player }
+        return "\(player) on \(output)"
     }
 
     /// The album art's color, or the accent while Artwork tint is off.
@@ -97,34 +112,63 @@ struct MediaPlayerView: View {
         settings.artworkTint ? Color(nsColor: media.accent) : theme.accent
     }
 
+    /// The artwork's color, glowing faintly behind it.
     @ViewBuilder
-    private var playerBadge: some View {
-        if let url = media.player?.appURL {
-            Image(nsImage: IconCache.icon(forFile: url.path, side: 24))
-                .resizable()
-                .frame(width: 24, height: 24)
-                .shadow(color: .black.opacity(0.5), radius: 3)
-                .offset(x: 6, y: 6)
+    private var glow: some View {
+        if settings.artworkTint, media.track != nil {
+            RadialGradient(colors: [tint.opacity(0.24), tint.opacity(0)], center: .center, startRadius: 0, endRadius: 130)
+                .frame(width: 300, height: 200)
+                .offset(x: -50, y: -46)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
         }
     }
 
     private var transport: some View {
         HStack(spacing: 0) {
-            IconButton(symbol: "shuffle", size: 12, isActive: media.shuffle, activeColor: tint, help: "Shuffle",
-                       action: media.toggleShuffle)
+            IconButton(symbol: "shuffle", size: 12, isActive: media.shuffle, activeColor: tint, idleOpacity: 0.5,
+                       help: "Shuffle", action: media.toggleShuffle)
             Spacer(minLength: 0)
             IconButton(symbol: "backward.fill", size: 16, help: "Previous", action: media.previous)
             Spacer(minLength: 0)
-            IconButton(symbol: media.isPlaying ? "pause.fill" : "play.fill", size: 22,
-                       help: media.isPlaying ? "Pause" : "Play", action: media.playPause)
-                .contentTransition(.symbolEffect(.replace))
+            PlayButton(isPlaying: media.isPlaying, action: media.playPause)
             Spacer(minLength: 0)
             IconButton(symbol: "forward.fill", size: 16, help: "Next", action: media.next)
             Spacer(minLength: 0)
             IconButton(symbol: media.repeatMode.symbol, size: 12, isActive: media.repeatMode != .off, activeColor: tint,
-                       help: "Repeat", action: media.cycleRepeat)
+                       idleOpacity: 0.5, help: "Repeat", action: media.cycleRepeat)
+            Spacer(minLength: 0)
+            OutputButton(tint: tint)
         }
-        .frame(height: 30)
+        .frame(height: 40)
+    }
+}
+
+/// The big round play and pause button, white like the one in Music.
+struct PlayButton: View {
+    let isPlaying: Bool
+    var side: CGFloat = 40
+    let action: () -> Void
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: isPlaying ? "pause.fill" : "play.fill")
+                .font(.system(size: side * 0.4, weight: .bold))
+                .foregroundStyle(Color.black)
+                // The triangle's weight sits left of its frame's center.
+                .offset(x: isPlaying ? 0 : side * 0.04)
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: side, height: side)
+                .background(Circle().fill(Color.white.opacity(hovering ? 1 : 0.94)))
+                .shadow(color: .black.opacity(0.45), radius: 6, y: 3)
+                .contentShape(Circle())
+        }
+        .buttonStyle(PressableButtonStyle(scale: 0.9))
+        .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: hovering)
+        .help(isPlaying ? "Pause" : "Play")
+        .accessibilityLabel(isPlaying ? "Pause" : "Play")
     }
 }
 
@@ -148,7 +192,7 @@ struct PlaybackScrubber: View {
                     ZStack(alignment: .leading) {
                         Capsule().fill(theme.track)
                         Capsule()
-                            .fill(dragFraction == nil ? theme.primary : tint)
+                            .fill(tint)
                             .frame(width: max(0, proxy.size.width * min(1, fraction)))
                     }
                     .frame(height: hovering || dragFraction != nil ? 7 : 4)
@@ -167,11 +211,11 @@ struct PlaybackScrubber: View {
                 .frame(height: 12)
                 .onHover { hovering = $0 }
                 .disabled(duration <= 0)
-                Text(duration > 0 ? "-" + Format.duration(max(0, duration - elapsed)) : "LIVE")
+                Text(duration > 0 ? "−" + Format.duration(max(0, duration - elapsed)) : "Live")
                     .frame(width: 40, alignment: .trailing)
             }
-            .font(NotchFont.numeric(10.5, .medium))
-            .foregroundStyle(theme.secondary)
+            .font(NotchFont.numeric(10.5))
+            .foregroundStyle(theme.tertiary)
             .animation(.easeOut(duration: 0.15), value: hovering)
         }
     }

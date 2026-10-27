@@ -104,17 +104,25 @@ final class CalendarService: ObservableObject {
         }
     }
 
-    func addReminder(titled title: String) {
+    /// Adds a reminder to the default list. With a due date, Reminders alerts then too.
+    @discardableResult
+    func addReminder(titled title: String, due: Date? = nil) -> Bool {
         let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let list = store.defaultCalendarForNewReminders() else { return }
+        guard !trimmed.isEmpty, let list = store.defaultCalendarForNewReminders() else { return false }
         let item = EKReminder(eventStore: store)
         item.title = trimmed
         item.calendar = list
+        if let due {
+            item.dueDateComponents = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: due)
+            item.addAlarm(EKAlarm(absoluteDate: due))
+        }
         do {
             try store.save(item, commit: true)
             loadReminders()
+            return true
         } catch {
             NSSound.beep()
+            return false
         }
     }
 

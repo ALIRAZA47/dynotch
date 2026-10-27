@@ -272,8 +272,8 @@ private struct InfoTileView: View {
 
 private struct NotchStep: View {
     private let ways = [
-        InfoTile(symbol: "cursorarrow.rays", title: "Hover", detail: "Rest the pointer on the notch"),
-        InfoTile(symbol: "cursorarrow.click.2", title: "Click", detail: "Opens it right away"),
+        InfoTile(symbol: "cursorarrow.rays", title: "Hover", detail: "Rest the pointer for a glance at what's live"),
+        InfoTile(symbol: "cursorarrow.click.2", title: "Click", detail: "Opens the whole notch"),
         InfoTile(symbol: "rectangle.and.hand.point.up.left.fill", title: "Swipe",
                  detail: "Two fingers down to open, up to close"),
         InfoTile(symbol: "command", title: "⌃⌥N", detail: "Opens or closes it from anywhere"),
@@ -321,8 +321,8 @@ private struct NotchStep: View {
 
 private struct HighlightsStep: View {
     private let highlights = [
-        InfoTile(symbol: "circle.grid.2x1.right.filled", title: "Two at once",
-                 detail: "A second activity keeps a glyph in the right ear", tint: Palette.lavender),
+        InfoTile(symbol: "magnifyingglass", title: "Command field",
+                 detail: "⌃⌥K: start a timer, add a note or a reminder, work out a sum", tint: Palette.lavender),
         InfoTile(symbol: "mic.slash.fill", title: "Mute and on air",
                  detail: "⌃⌥M mutes the mic in every app; a ring shows while a camera or mic is in use", tint: .red),
         InfoTile(symbol: "hourglass", title: "Timers",
@@ -337,7 +337,7 @@ private struct HighlightsStep: View {
 
     var body: some View {
         SettingsSection(title: "Highlights",
-                        footer: "Also new: black or glass themes in your accent color, the volume and brightness keys without the system's HUD, an equalizer that follows the music, an output switcher, Quick Look and screenshots in the Tray, and connecting Bluetooth devices from the Stats tab.") {
+                        footer: "Also new: black or glass themes in your accent color, the volume and brightness keys without the system's HUD, an equalizer that follows the music, an output switcher, Quick Look and screenshots in the Tray, connecting Bluetooth devices from the Control tab, and a second activity as a glyph in the right ear.") {
             TileGrid(items: highlights, columns: 3) { InfoTileView(tile: $0) }
         }
     }

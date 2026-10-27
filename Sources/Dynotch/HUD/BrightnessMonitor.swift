@@ -2,10 +2,15 @@ import AppKit
 
 /// Shows the built-in display's brightness in the notch when the brightness keys are pressed.
 /// There's no public API to read it on Apple silicon, so this uses DisplayServices when it's there
-/// and stays quiet when it isn't. With the system HUD replaced, it sets the brightness too.
+/// and stays quiet when it isn't. With the system HUD replaced, it sets the brightness too, and
+/// the Control tab's slider sets it whenever it can.
 @MainActor
-final class BrightnessMonitor {
+final class BrightnessMonitor: ObservableObject {
     static let shared = BrightnessMonitor()
+
+    /// The built-in display's brightness from 0 to 1, as last read or set. Nil until it's been read,
+    /// and where DisplayServices can't read it.
+    @Published private(set) var level: Float?
 
     private typealias GetBrightness = @convention(c) (CGDirectDisplayID, UnsafeMutablePointer<Float>) -> Int32
     private typealias SetBrightness = @convention(c) (CGDirectDisplayID, Float) -> Int32
@@ -59,7 +64,29 @@ final class BrightnessMonitor {
         return true
     }
 
+    /// The Control tab can set the built-in display wherever the pointer is.
+    var canSetLevel: Bool { getBrightness != nil && setBrightness != nil && builtInDisplay != nil }
+
+    /// Reads the brightness again, for the slider about to show it.
+    func refresh() {
+        level = currentBrightness()
+    }
+
+    /// The Control tab's slider, from 0 to 1. The open notch shows the level itself, so there's no meter.
+    func set(_ value: Float) {
+        guard let display = builtInDisplay, let setBrightness else { return }
+        let value = min(1, max(0, value))
+        if setBrightness(display, value) == 0 { level = value }
+    }
+
     // MARK: Private
+
+    /// The built-in display, while it's on and DisplayServices can change it.
+    private var builtInDisplay: CGDirectDisplayID? {
+        guard let display = NSScreen.screens.first(where: { CGDisplayIsBuiltin($0.displayID) != 0 })?.displayID else { return nil }
+        if let canChangeBrightness, !canChangeBrightness(display) { return nil }
+        return display
+    }
 
     /// The built-in display, while it's on and the pointer is on it.
     private var keyTarget: CGDirectDisplayID? {
@@ -89,6 +116,7 @@ final class BrightnessMonitor {
     }
 
     private func showMeter(_ level: Float) {
+        self.level = level
         let symbol = level < 0.5 ? "sun.min.fill" : "sun.max.fill"
         LiveActivityCenter.shared.showMeter(key: "brightness", symbol: symbol, level: Double(level))
     }

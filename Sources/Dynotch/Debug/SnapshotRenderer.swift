@@ -26,6 +26,10 @@ enum SnapshotRenderer {
         var theme: NotchTheme?
         /// A display other than a MacBook's, for this scene only.
         var geometry: NotchGeometry?
+        /// The command field, with this typed into it.
+        var command: String?
+        /// The Focus tab's second card shows the notes.
+        var focusShowsNotes = false
         /// More sample state for this scene; `resetAudioSamples` undoes it before the next one.
         var setUp: (@MainActor () -> Void)?
         /// Sample state for this scene. Scenes after it keep it.
@@ -86,11 +90,12 @@ enum SnapshotRenderer {
             Scene(name: "12-open-tray", phase: .open, tab: .tray),
             Scene(name: "13-open-tray-dropping", phase: .open, tab: .tray, draggingFiles: true),
             Scene(name: "14-open-focus", phase: .open, tab: .focus),
-            Scene(name: "15-open-stats", phase: .open, tab: .stats),
+            Scene(name: "14-open-focus-notes", phase: .open, tab: .focus, focusShowsNotes: true),
+            Scene(name: "15-open-control", phase: .open, tab: .stats),
             // Themes
             Scene(name: "16-open-nook-glass", phase: .open, tab: .home, theme: NotchTheme(material: .glass)),
             Scene(name: "17-open-focus-glass", phase: .open, tab: .focus, theme: NotchTheme(material: .glass)),
-            Scene(name: "18-open-stats-pink-round", phase: .open, tab: .stats,
+            Scene(name: "18-open-control-pink-round", phase: .open, tab: .stats,
                   theme: NotchTheme(accent: .pink, topRadius: 18, bottomRadius: 40)),
             Scene(name: "19-open-tray-teal-square", phase: .open, tab: .tray,
                   theme: NotchTheme(accent: .teal, topRadius: 8, bottomRadius: 18),
@@ -146,7 +151,7 @@ enum SnapshotRenderer {
             // Widgets and the Tray
             Scene(name: "90-closed-screenshot", phase: .closed, activity: .notice(LiveNotice(
                 key: "screenshot", symbol: "camera.viewfinder", tint: .white, detail: "Screenshot added to the Tray"))),
-            Scene(name: "91-open-stats-bluetooth", phase: .open, tab: .stats) {
+            Scene(name: "91-open-control-bluetooth", phase: .open, tab: .stats) {
                 DeviceBatteryMonitor.shared.loadSample([], paired: samplePairedDevices,
                                                        connections: ["beats": .connecting, "speaker": .failed("Not in range")])
             },
@@ -165,6 +170,25 @@ enum SnapshotRenderer {
             },
             Scene(name: "95-closed-rain", phase: .closed, activity: .notice(LiveNotice(
                 key: "rain", symbol: "cloud.rain.fill", tint: .cyan, text: "in 15m", detail: "Rain starting soon"))),
+            // The command field, empty and with something typed.
+            Scene(name: "command-1-empty", phase: .open, command: ""),
+            Scene(name: "command-2-timer", phase: .open, command: "tea 4m"),
+            Scene(name: "command-3-sum", phase: .open, command: "18% of 240"),
+            Scene(name: "command-4-reminder", phase: .open, command: "remind Call Sam 5pm"),
+            Scene(name: "command-5-toggle", phase: .open, command: "dark"),
+            // Glances: resting the pointer on the notch.
+            Scene(name: "glance-1-music", phase: .glance, activity: .music),
+            Scene(name: "glance-2-pomodoro", phase: .glance, activity: .timer),
+            Scene(name: "glance-3-countdown", phase: .glance, activity: .countdown(tea)),
+            Scene(name: "glance-4-event", phase: .glance, hasTrack: false),
+            Scene(name: "glance-5-download", phase: .glance, activity: .download),
+            Scene(name: "glance-6-message", phase: .glance, activity: .notice(lateMessage)),
+            Scene(name: "glance-7-stopwatch", phase: .glance, activity: .stopwatch),
+            // Nothing within the next quarter hour, so the glance looks at the day.
+            Scene(name: "glance-8-today", phase: .glance, hasTrack: false, setUp: {
+                let lunch = CalendarService.shared.events.filter { $0.title == "Lunch with Sam" }
+                CalendarService.shared.loadSample(events: lunch, reminders: CalendarService.shared.reminders)
+            }),
             // The other widgets beside the player, busy cards and empty ones. These change the samples, so they go last.
             Scene(name: "96-open-nook-timer-toggles", phase: .open, tab: .home, prepare: {
                 (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.timer, .toggles)
@@ -190,6 +214,7 @@ enum SnapshotRenderer {
         for scene in scenes {
             apply(scene.theme ?? savedTheme)
             scene.prepare?()
+            AppSettings.shared.focusShowsNotes = scene.focusShowsNotes
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
             resetAudioSamples()
             MicMonitor.shared.loadSample(muted: scene.micMuted, micInUse: scene.micInUse, cameraInUse: scene.cameraInUse)
@@ -200,12 +225,14 @@ enum SnapshotRenderer {
             let sceneGeometry = scene.geometry ?? geometry
             let viewModel = NotchViewModel(geometry: sceneGeometry)
             viewModel.stage(phase: scene.phase, activity: scene.activity, secondary: scene.secondary, tab: scene.tab,
-                            draggingFiles: scene.draggingFiles)
+                            draggingFiles: scene.draggingFiles, command: scene.command)
+            // The command field can make the notch taller than the setting.
+            let height = max(size.height, viewModel.metrics.height + 40)
             let content = ZStack(alignment: .top) {
                 Desktop(notchWidth: sceneGeometry.closedSize.width, menuBarHeight: sceneGeometry.closedSize.height)
                 NotchRootView(viewModel: viewModel)
             }
-            .frame(width: size.width, height: size.height)
+            .frame(width: size.width, height: height)
             .environment(\.isSnapshot, true)
 
             let renderer = ImageRenderer(content: content)

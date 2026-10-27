@@ -13,7 +13,7 @@ struct Cadence: Equatable {
 /// Core Audio and IOKit listeners, file system sources, distributed notifications.
 extension Cadence {
     /// CPU, memory, disk and network, while the Stats tab is on screen.
-    static let systemStats = Cadence(name: "Stats tab", every: 1.5, onBattery: 3, lowPower: 5)
+    static let systemStats = Cadence(name: "Control tab", every: 1.5, onBattery: 3, lowPower: 5)
     /// Focus schedules start and end without touching the files that are watched.
     static let focusSchedules = Cadence(name: "Focus schedules", every: 30, onBattery: 60, lowPower: 120)
     /// `system_profiler` for Bluetooth battery levels, which nothing announces.

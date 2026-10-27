@@ -75,6 +75,15 @@ final class VolumeMonitor: ObservableObject {
         announce()
     }
 
+    /// The Control tab's slider, from 0 to 1. The open notch shows the level itself, so there's no meter.
+    func setVolume(_ value: Float) {
+        guard canSetVolume else { return }
+        let value = min(1, max(0, value))
+        if isMuted, value > 0 { setMuted(false) }
+        writeVolume(value)
+        reread()
+    }
+
     /// Scrolling over the open player's artwork. The open notch shows the level itself, so there's no meter.
     func nudge(by delta: Float) {
         guard delta != 0, canSetVolume else { return }

@@ -69,6 +69,11 @@ final class NotchManager {
         activeController()?.present(tab: tab)
     }
 
+    /// Opens the notch under the pointer straight into the command field, ready to type.
+    func openCommand() {
+        activeController()?.presentCommand()
+    }
+
     func close() {
         controllers.forEach { $0.dismiss() }
     }
@@ -162,7 +167,12 @@ final class NotchManager {
 
     private func handleKey(_ event: NSEvent) -> Bool {
         guard event.keyCode == 53, let open = controllers.first(where: { $0.viewModel.isOpen }) else { return false }
-        open.dismiss()
+        // In the command field, Escape clears what's typed, then leaves the field; the next one closes the notch.
+        if open.viewModel.isCommandMode {
+            open.viewModel.escapeCommand()
+        } else {
+            open.dismiss()
+        }
         return true
     }
 
