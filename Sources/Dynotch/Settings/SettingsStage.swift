@@ -635,3 +635,58 @@ private struct TraySketch: View {
         }
     }
 }
+
+// MARK: Model notch elsewhere
+
+/// The header's night sky, for windows other than Settings.
+struct StageSky: View {
+    var body: some View {
+        StageBackdrop()
+    }
+}
+
+/// The header's model notch on its own, for the welcome tour: closed with a live activity, under
+/// the pointer, or open on a tab.
+struct ModelNotch: View {
+    enum Pose: Equatable {
+        case closed(ClosedActivity, secondary: CompactActivity? = nil)
+        case hovering
+        case open(NotchTab)
+    }
+
+    let pose: Pose
+    @ObservedObject private var settings = AppSettings.shared
+
+    // As in StagePreview: the closed notch larger than life, the open one smaller.
+    private static let closedScale: CGFloat = 1.4
+    private static let openScale: CGFloat = 0.46
+    private static let hardwareNotch = CGSize(width: 185, height: 32)
+
+    var body: some View {
+        switch pose {
+        case .open(let tab):
+            let scale = Self.openScale
+            PreviewNotch(size: CGSize(width: settings.openWidth * scale, height: settings.openHeight * scale),
+                         topRadius: NotchMetrics.openTopRadius * scale, bottomRadius: NotchMetrics.openBottomRadius * scale,
+                         shadow: settings.showOpenShadow) {
+                OpenPreview(tab: tab, scale: scale)
+            }
+        case .closed, .hovering:
+            let (activity, secondary): (ClosedActivity, CompactActivity?) = if case .closed(let activity, let secondary) = pose {
+                (activity, secondary)
+            } else {
+                (.idle, nil)
+            }
+            let layout = ClosedLayout(activity: activity, secondary: secondary, notch: Self.hardwareNotch)
+            let hovering = pose == .hovering
+            let scale = Self.closedScale
+            PreviewNotch(size: CGSize(width: (layout.totalWidth + (hovering ? 14 : 0)) * scale,
+                                      height: (layout.totalHeight + (hovering ? 3 : 0)) * scale),
+                         topRadius: 6 * scale,
+                         bottomRadius: (layout.rowHeight > 0 ? 16 : hovering ? 12 : 10) * scale) {
+                ClosedPreview(activity: activity, secondary: secondary, layout: layout, scale: scale,
+                              timerText: "\(settings.focusMinutes):00", tintArtwork: settings.artworkTint)
+            }
+        }
+    }
+}

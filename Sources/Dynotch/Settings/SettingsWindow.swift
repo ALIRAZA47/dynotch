@@ -96,7 +96,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 
     func windowWillClose(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        DockPresence.windowWillClose(window)
     }
 }
 

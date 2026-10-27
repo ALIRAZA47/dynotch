@@ -80,7 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         if !settings.hasLaunchedBefore {
             settings.hasLaunchedBefore = true
-            SettingsWindowController.shared.show(page: .general)
+            WelcomeWindowController.shared.show()
         }
     }
 
@@ -123,6 +123,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(item("Settings…", #selector(openSettings), key: ","))
         menu.addItem(item("About Dynotch", #selector(openAbout)))
+        menu.addItem(item("Welcome Tour…", #selector(openWelcome)))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Dynotch", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         return menu
@@ -139,6 +140,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openTray() { NotchManager.shared.open(tab: .tray) }
     @objc private func openSettings() { SettingsWindowController.shared.show() }
     @objc private func openAbout() { SettingsWindowController.shared.show(page: .about) }
+    @objc private func openWelcome() { WelcomeWindowController.shared.show() }
 
     @objc private func startTimer() {
         PomodoroTimer.shared.start()

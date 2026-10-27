@@ -1049,6 +1049,8 @@ struct AboutSettings: View {
                 Text("Inspired by NotchNook and MacNotch.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary)
+                CapsuleButton(title: "Welcome Tour", symbol: "sparkles") { WelcomeWindowController.shared.show() }
+                    .padding(.top, 4)
             }
             .padding(.vertical, 30)
             .frame(maxWidth: .infinity)

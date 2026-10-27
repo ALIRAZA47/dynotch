@@ -171,6 +171,39 @@ enum SnapshotRenderer {
         loadSampleProfiles()
         renderSettings(into: folder)
         renderProfiles(into: folder)
+        renderWelcome(into: folder)
+    }
+
+    // MARK: Welcome tour
+
+    /// Each step of the welcome tour, light and dark, plus its end when it scrolls.
+    private static func renderWelcome(into folder: URL) {
+        var count = 0
+        for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            for step in WelcomeTour.Step.allCases {
+                let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: WelcomeWindowController.contentSize),
+                                             styleMask: WelcomeWindowController.styleMask, backing: .buffered, defer: false)
+                let tour = WelcomeTour()
+                tour.step = step
+                WelcomeWindowController.configure(window, tour: tour, isSnapshot: true)
+                window.appearance = NSAppearance(named: appearance)
+                window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(count) * 1_000, y: -50_000))
+                window.orderFrontRegardless()
+                RunLoop.main.run(until: .now + 1.2)
+                let name = "welcome-\(step.rawValue + 1)-\(step)-\(suffix)"
+                if save(window, to: folder.appendingPathComponent(name + ".png")) { count += 1 }
+                if let scrollView = window.contentView.flatMap(overflowingScrollView), let document = scrollView.documentView,
+                   document.isFlipped {
+                    scrollView.contentView.scroll(to: NSPoint(x: 0, y: document.frame.height - scrollView.contentView.bounds.height))
+                    scrollView.reflectScrolledClipView(scrollView.contentView)
+                    RunLoop.main.run(until: .now + 0.8)
+                    if save(window, to: folder.appendingPathComponent(name + "-end.png")) { count += 1 }
+                }
+                window.orderOut(nil)
+                window.close()
+            }
+        }
+        print("Wrote \(count) welcome tour snapshots to \(folder.path)")
     }
 
     // MARK: Profiles

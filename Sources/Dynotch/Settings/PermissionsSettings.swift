@@ -20,6 +20,8 @@ final class PermissionStatus: ObservableObject {
         var tint: Color = Palette.accent
         /// Shown instead of the symbol: the app that the permission is for.
         var appBundleID: String?
+        /// False when macOS never asks, like Full Disk Access: the button opens System Settings.
+        var hasPrompt = true
         let state: State
         let action: () -> Void
 
@@ -123,7 +125,7 @@ final class PermissionStatus: ObservableObject {
             focus.access == .unknown ? .notDetermined : .denied
         }
         return Item(title: "Full Disk Access", purpose: "Notification peeks and the Focus that's on",
-                    symbol: "internaldrive.fill", tint: .gray, state: state,
+                    symbol: "internaldrive.fill", tint: .gray, hasPrompt: false, state: state,
                     action: NotificationMirror.shared.openAccessSettings)
     }
 
@@ -211,7 +213,8 @@ struct PermissionsSettings: View {
     }
 }
 
-private struct PermissionRow: View {
+/// A permission, what it's for, and where it stands, with a button to ask for it.
+struct PermissionRow: View {
     let item: PermissionStatus.Item
 
     var body: some View {
@@ -239,8 +242,9 @@ private struct PermissionRow: View {
                     .frame(height: 26)
                     .background(Capsule().fill(Color.green.opacity(0.12)))
             case .denied:
-                CapsuleButton(title: "Open System Settings", symbol: "arrow.up.forward", action: item.action)
-                    .accessibilityLabel("Open System Settings for \(item.title)")
+                openSettingsButton
+            case .notDetermined where !item.hasPrompt:
+                openSettingsButton
             case .notDetermined:
                 CapsuleButton(title: "Allow…", kind: .prominent, action: item.action)
                     .accessibilityLabel("Allow \(item.title)…")
@@ -252,6 +256,11 @@ private struct PermissionRow: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+    }
+
+    private var openSettingsButton: some View {
+        CapsuleButton(title: "Open System Settings", symbol: "arrow.up.forward", action: item.action)
+            .accessibilityLabel("Open System Settings for \(item.title)")
     }
 }
 

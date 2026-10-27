@@ -29,6 +29,7 @@ dependencies.
 | **Calendar** | A five-day strip; "in 12m" and "Now" labels; a Join button for Zoom, Meet, Teams, Webex and FaceTime links. |
 | **Profiles** | Saved setups such as Work, Home and Presenting. A profile keeps what the notch shows and how it opens: tabs, widgets, live activities (and which apps' notifications peek), size and displays. Switch from the menu bar's **Profiles** menu, **Settings → General → Profiles**, or `dynotch profile Work`. The profile that's on keeps the changes you make. A profile can switch on by itself when a Focus turns on (a particular one, or any) or when an external display connects; when that Focus ends or the display goes, the notch goes back to how it was, unless you switched profiles by hand in between. Focus rules need Full Disk Access, like the Focus activity. |
 | **App** | Menu bar icon, Settings window (General, Appearance, Live Activities, Nook & Widgets, Tray, Focus Timer, Permissions, About), launch at login. Runs as an agent app with no Dock icon. |
+| **Welcome tour** | On first launch, four short steps: how to open the notch and what shows beside the camera, what's new, the permissions worth allowing (each with its status and an Allow or Open System Settings button), and where things are. **Settings → About** and **Welcome Tour…** in the menu bar menu bring it back. |
 
 ## Build and run
 
