@@ -9,6 +9,7 @@ struct CompactActivityView: View {
         switch activity {
         case .timer: TimerGlyph()
         case .music: MusicGlyph()
+        case .micMuted: MuteBadge()
         }
     }
 }
@@ -29,5 +30,19 @@ private struct MusicGlyph: View {
 
     var body: some View {
         ArtworkView(image: media.artwork, size: ClosedLayout.glyphSize, cornerRadius: 4)
+    }
+}
+
+/// A red disc with a crossed-out microphone, while the mic is muted.
+struct MuteBadge: View {
+    var size: CGFloat = ClosedLayout.glyphSize
+
+    var body: some View {
+        Image(systemName: "mic.slash.fill")
+            .font(.system(size: size * 0.52, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: size, height: size)
+            .background(Circle().fill(Color.red))
+            .accessibilityLabel("Microphone muted")
     }
 }

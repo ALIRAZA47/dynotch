@@ -33,14 +33,20 @@ enum ClosedActivity: Equatable {
 enum CompactActivity: Equatable {
     case timer
     case music
+    /// The microphone is muted. Its badge shows even when nothing else does.
+    case micMuted
 
     /// The main activity already shows this one.
     func isShown(by activity: ClosedActivity) -> Bool {
         switch (self, activity) {
         case (.timer, .timer), (.music, .music), (.music, .trackPeek): true
+        case (.micMuted, .notice(let notice)): notice.key == "mic"
         default: false
         }
     }
+
+    /// A state rather than something going on, so it may show on its own while "Two at once" is off.
+    var isStatus: Bool { self == .micMuted }
 }
 
 /// Everything in the closed notch: the main activity and the glyph of a second one beside it.
@@ -51,7 +57,7 @@ struct ClosedContent: Equatable {
 
 /// Decides what the closed notch shows. The main activity goes by priority: notices, a new
 /// track, a running focus timer, then music that's playing. The most important of the others
-/// that has a compact form shows beside it.
+/// that has a compact form shows beside it, the mute badge first.
 @MainActor
 final class LiveActivityCenter: ObservableObject {
     static let shared = LiveActivityCenter()
@@ -76,6 +82,7 @@ final class LiveActivityCenter: ObservableObject {
             media.$isPlaying.map { _ in () }.eraseToAnyPublisher(),
             media.$track.map { _ in () }.eraseToAnyPublisher(),
             timer.$isRunning.map { _ in () }.eraseToAnyPublisher(),
+            MicMonitor.shared.$isMuted.map { _ in () }.eraseToAnyPublisher(),
             AppSettings.shared.objectWillChange.map { _ in () }.eraseToAnyPublisher()
         )
         // @Published fires before the value changes; read it on the next turn.
@@ -134,9 +141,12 @@ final class LiveActivityCenter: ObservableObject {
 
         // The ones with a compact form, most important first.
         var compact: [CompactActivity] = []
+        if settings.liveMicMuted, MicMonitor.shared.isMuted { compact.append(.micMuted) }
         if timerRunning { compact.append(.timer) }
         if musicPlaying { compact.append(.music) }
-        let secondary = settings.liveSecondary ? compact.first { !$0.isShown(by: activity) } : nil
+        var secondary = compact.first { !$0.isShown(by: activity) }
+        // Without "Two at once", only a status like the mute badge shows, and only when nothing else does.
+        if !settings.liveSecondary, activity != .idle || secondary?.isStatus != true { secondary = nil }
 
         let next = ClosedContent(activity: activity, secondary: secondary)
         guard next != content else { return }

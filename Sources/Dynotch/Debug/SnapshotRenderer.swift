@@ -13,6 +13,9 @@ enum SnapshotRenderer {
         var tab: NotchTab = .home
         var draggingFiles = false
         var hasTrack = true
+        var micMuted = false
+        var micInUse = false
+        var cameraInUse = false
     }
 
     static func render(into folder: URL) {
@@ -25,6 +28,7 @@ enum SnapshotRenderer {
         let volume = LiveNotice(key: "volume", symbol: "speaker.wave.2.fill", tint: .white, kind: .meter(0.62))
         let charging = LiveNotice(key: "power", symbol: "bolt.fill", tint: .green, text: "82%")
         let event = LiveNotice(key: "event", symbol: "calendar", tint: .orange, text: "in 5m", detail: "Design review")
+        let muted = LiveNotice(key: "mic", symbol: "mic.slash.fill", tint: .red, text: "Muted")
         let scenes = [
             Scene(name: "01-closed-idle", phase: .closed),
             Scene(name: "02-closed-hover", phase: .hovering),
@@ -45,12 +49,21 @@ enum SnapshotRenderer {
             Scene(name: "22-closed-track-peek-and-timer", phase: .closed, activity: .trackPeek, secondary: .timer),
             Scene(name: "23-closed-event-and-timer", phase: .closed, activity: .notice(event), secondary: .timer),
             Scene(name: "24-hover-timer-and-music", phase: .hovering, activity: .timer, secondary: .music),
+            Scene(name: "30-closed-muted", phase: .closed, secondary: .micMuted, micMuted: true),
+            Scene(name: "31-closed-music-muted", phase: .closed, activity: .music, secondary: .micMuted, micMuted: true),
+            Scene(name: "32-closed-mute-notice", phase: .closed, activity: .notice(muted), micMuted: true),
+            Scene(name: "33-closed-on-air-camera", phase: .closed, cameraInUse: true),
+            Scene(name: "34-closed-on-air-mic-muted", phase: .closed, activity: .music, secondary: .micMuted,
+                  micMuted: true, micInUse: true),
+            Scene(name: "35-hover-on-air-timer", phase: .hovering, activity: .timer, micInUse: true, cameraInUse: true),
+            Scene(name: "36-open-on-air", phase: .open, tab: .home, cameraInUse: true),
         ]
 
         let settings = AppSettings.shared
         let size = CGSize(width: settings.openWidth + NotchMetrics.openTopRadius * 2 + 80, height: settings.openHeight + 40)
         for scene in scenes {
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
+            MicMonitor.shared.loadSample(muted: scene.micMuted, micInUse: scene.micInUse, cameraInUse: scene.cameraInUse)
             let viewModel = NotchViewModel(geometry: geometry)
             viewModel.stage(phase: scene.phase, activity: scene.activity, secondary: scene.secondary, tab: scene.tab,
                             draggingFiles: scene.draggingFiles)
@@ -105,6 +118,28 @@ enum SnapshotRenderer {
             }
         }
         print("Wrote \(count) settings snapshots to \(folder.path)")
+        renderSpotlights(into: folder)
+    }
+
+    /// The Live Activities page with its preview held on each activity, as when pointing at its tile.
+    private static func renderSpotlights(into folder: URL) {
+        var count = 0
+        for (index, kind) in LiveActivityKind.allCases.enumerated() {
+            let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
+                                         styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
+            let navigation = SettingsNavigation()
+            navigation.page = .activities
+            navigation.spotlight = kind
+            SettingsWindowController.configure(window, navigation: navigation)
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -30_000))
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: .now + 1.2)
+            if save(window, to: folder.appendingPathComponent("stage-\(kind.rawValue).png")) { count += 1 }
+            window.orderOut(nil)
+            window.close()
+        }
+        print("Wrote \(count) live activity previews to \(folder.path)")
     }
 
     /// Writes the window to a PNG, trying again if the window server hands back a blank frame.

@@ -122,14 +122,15 @@ private struct StagePreview: View {
             }
         } else {
             let activity = closedActivity(featured: featured)
-            let layout = ClosedLayout(activity: activity, notch: Self.hardwareNotch)
+            let secondary = page == .activities ? featured?.sampleSecondary : nil
+            let layout = ClosedLayout(activity: activity, secondary: secondary, notch: Self.hardwareNotch)
             let hovering = page == .general
             let scale = Self.closedScale
             PreviewNotch(size: CGSize(width: (layout.totalWidth + (hovering ? 14 : 0)) * scale,
                                       height: (layout.totalHeight + (hovering ? 3 : 0)) * scale),
                          topRadius: 6 * scale,
                          bottomRadius: (layout.rowHeight > 0 ? 16 : hovering ? 12 : 10) * scale) {
-                ClosedPreview(activity: activity, layout: layout, scale: scale,
+                ClosedPreview(activity: activity, secondary: secondary, layout: layout, scale: scale,
                               timerText: "\(settings.focusMinutes):00", tintArtwork: settings.artworkTint)
             }
         }
@@ -231,6 +232,7 @@ private struct CaptionText: View {
 /// The closed notch with a live activity in its ears, like `ClosedNotchView` but with sample content.
 private struct ClosedPreview: View {
     let activity: ClosedActivity
+    var secondary: CompactActivity?
     let layout: ClosedLayout
     let scale: CGFloat
     let timerText: String
@@ -243,9 +245,15 @@ private struct ClosedPreview: View {
                     .padding(.leading, 10 * scale)
                     .frame(width: layout.earWidth * scale, height: layout.notchHeight * scale, alignment: .leading)
                 Color.clear.frame(width: layout.notchWidth * scale)
-                trailing
-                    .padding(.trailing, 11 * scale)
-                    .frame(width: layout.earWidth * scale, height: layout.notchHeight * scale, alignment: .trailing)
+                HStack(spacing: ClosedLayout.glyphSpacing * scale) {
+                    trailing
+                    if let secondary {
+                        glyph(secondary)
+                            .frame(width: ClosedLayout.glyphSize * scale, height: ClosedLayout.glyphSize * scale)
+                    }
+                }
+                .padding(.trailing, 11 * scale)
+                .frame(width: layout.earWidth * scale, height: layout.notchHeight * scale, alignment: .trailing)
             }
             if layout.rowHeight > 0 {
                 detail
@@ -316,6 +324,21 @@ private struct ClosedPreview: View {
             if let detail = notice.detail { Text(detail) }
         default:
             EmptyView()
+        }
+    }
+
+    /// A second activity's glyph, like `CompactActivityView` but with sample content.
+    @ViewBuilder
+    private func glyph(_ activity: CompactActivity) -> some View {
+        switch activity {
+        case .timer:
+            ProgressRing(progress: 0.3, color: PomodoroTimer.Phase.focus.color, lineWidth: 2.4 * scale)
+                .padding(1.5 * scale)
+        case .music:
+            RoundedRectangle(cornerRadius: 4 * scale, style: .continuous)
+                .fill(Palette.sunset)
+        case .micMuted:
+            MuteBadge(size: ClosedLayout.glyphSize * scale)
         }
     }
 }

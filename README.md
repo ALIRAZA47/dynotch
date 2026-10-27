@@ -16,6 +16,7 @@ dependencies.
 | **Notch shell** | Hover, click, trackpad swipe or ⌃⌥N to open; swipe up, Esc or move away to close. Spring animations, haptics, hover grow. A virtual notch on Macs and displays without one. Choose the built-in display, the main display or all displays. |
 | **Live activities** (closed notch) | Album art and an equalizer while music plays; the song title when the track changes; focus-timer countdown; volume and brightness HUD; charging; low battery (Mac and Bluetooth devices); upcoming events five minutes ahead; Bluetooth devices connecting; Shortcuts finishing. |
 | **Two at once** | A second activity keeps a small glyph at the end of the right ear while another takes the notch: the timer's ring beside a notice or the song title, the album art beside the timer. |
+| **Microphone** | ⌃⌥M, or **Mute Microphone** in the menu bar menu, mutes the mic in every app (by its mute control, or by turning its input level down when it has none). A red badge stays in the closed notch while it's muted. An on-air ring outlines the closed notch while a camera (green) or the mic (orange) is in use. |
 | **Nook tab** | Media player for Apple Music and Spotify: artwork, scrubber, play/pause, next/previous, shuffle, repeat, favorite. Its accent color comes from the album art. Two configurable widgets beside it: Calendar, Mirror, Shortcuts, Focus timer, Batteries, Quick toggles or Notes. |
 | **Tray tab** | Drag files toward the notch and it opens with drop zones: **Keep in Tray**, **AirDrop**, **Compress** and **Copy to…**. Tray items have Quick Look thumbnails, drag back out to any app, and survive relaunches. The right-click menu offers Open, Open With, Show in Finder, Copy, AirDrop, Share, Compress, Extract, Convert Image (PNG/JPEG/HEIC), Make Smaller, Copy to…, Move to… and Remove. Dropped images, links and text become files. |
 | **Focus tab** | Pomodoro timer (focus, short and long breaks, sound, auto-start), Reminders (check off, add new) and a Notes scratchpad. |
@@ -124,6 +125,7 @@ Sources/Dynotch/
   Tray/       tray store, file actions, tray UI and drop zones
   Widgets/    mirror, focus timer, notes, system stats, batteries, quick toggles, shortcuts
   HUD/        volume (CoreAudio) and brightness monitors
+  Activities/ microphone and camera monitor
   Settings/   settings window and permissions page
   Debug/      snapshot renderer
 Support/      Info.plist, app icon

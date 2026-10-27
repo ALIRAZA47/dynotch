@@ -161,6 +161,18 @@ final class AppSettings: ObservableObject {
     @Published var liveSecondary: Bool = AppSettings.value("liveSecondary", true) {
         didSet { save("liveSecondary", liveSecondary) }
     }
+    /// A red badge while the microphone is muted.
+    @Published var liveMicMuted: Bool = AppSettings.value("liveMicMuted", true) {
+        didSet { save("liveMicMuted", liveMicMuted) }
+    }
+    /// ⌃⌥M mutes and unmutes the microphone.
+    @Published var micShortcut: Bool = AppSettings.value("micShortcut", true) {
+        didSet { save("micShortcut", micShortcut) }
+    }
+    /// An outline around the closed notch while a camera or the microphone is in use.
+    @Published var onAirRing: Bool = AppSettings.value("onAirRing", true) {
+        didSet { save("onAirRing", onAirRing) }
+    }
 
     // MARK: Nook
 

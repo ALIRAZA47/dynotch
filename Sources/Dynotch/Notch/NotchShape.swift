@@ -5,6 +5,8 @@ import SwiftUI
 struct NotchShape: Shape {
     var topRadius: CGFloat
     var bottomRadius: CGFloat
+    /// Off for an outline: stroking it then draws no line along the top of the screen.
+    var includesTopEdge = true
 
     var animatableData: AnimatablePair<CGFloat, CGFloat> {
         get { AnimatablePair(topRadius, bottomRadius) }
@@ -30,7 +32,7 @@ struct NotchShape: Shape {
         path.addLine(to: CGPoint(x: rect.maxX - top, y: rect.minY + top))
         path.addQuadCurve(to: CGPoint(x: rect.maxX, y: rect.minY),
                           control: CGPoint(x: rect.maxX - top, y: rect.minY))
-        path.closeSubpath()
+        if includesTopEdge { path.closeSubpath() }
         return path
     }
 }

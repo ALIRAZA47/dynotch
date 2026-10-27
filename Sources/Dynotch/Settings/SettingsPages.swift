@@ -270,6 +270,7 @@ private struct VirtualNotchSketch: View {
 /// The live activities that can be turned off, and a sample of each for the preview.
 enum LiveActivityKind: String, CaseIterable, Identifiable {
     case music, trackPeek, timer, levels, charging, lowBattery, events, devices
+    case micMuted
 
     var id: String { rawValue }
 
@@ -283,6 +284,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .lowBattery: "Low battery"
         case .events: "Upcoming events"
         case .devices: "Bluetooth devices"
+        case .micMuted: "Muted microphone"
         }
     }
 
@@ -296,6 +298,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .lowBattery: "For the Mac and Bluetooth devices"
         case .events: "Five minutes before they start"
         case .devices: "When one connects, with its battery"
+        case .micMuted: "A red badge while the mic is muted"
         }
     }
 
@@ -309,6 +312,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .lowBattery: "battery.25percent"
         case .events: "calendar"
         case .devices: "airpodspro"
+        case .micMuted: "mic.slash.fill"
         }
     }
 
@@ -322,6 +326,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .lowBattery: .red
         case .events: .orange
         case .devices: .teal
+        case .micMuted: .red
         }
     }
 
@@ -336,6 +341,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .lowBattery: \.lowBatteryAlerts
         case .events: \.liveEvents
         case .devices: \.liveDevices
+        case .micMuted: \.liveMicMuted
         }
     }
 
@@ -358,6 +364,15 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .events: .notice(LiveNotice(key: "event", symbol: "calendar", tint: .orange, text: "in 5m", detail: "Design review"))
         case .devices:
             .notice(LiveNotice(key: "device", symbol: "airpodspro", tint: .white, text: "80%", detail: "AirPods Pro connected"))
+        case .micMuted: .idle
+        }
+    }
+
+    /// A glyph at the end of the right ear, for the activities that only ever show as one.
+    var sampleSecondary: CompactActivity? {
+        switch self {
+        case .micMuted: .micMuted
+        default: nil
         }
     }
 }
@@ -369,6 +384,10 @@ struct ActivitySettings: View {
     private let options = [
         SwitchOption(title: "Two at once", detail: "A second activity as a small glyph at the end of the right ear",
                      symbol: "circle.grid.2x1.right.filled", tint: Palette.lavender, setting: \.liveSecondary),
+        SwitchOption(title: "On-air ring", detail: "A thin outline around the notch while a camera or the mic is in use",
+                     symbol: "record.circle", tint: .green, setting: \.onAirRing),
+        SwitchOption(title: "Mute shortcut", detail: "⌃⌥M mutes and unmutes the mic in every app",
+                     symbol: "mic.fill", tint: .orange, setting: \.micShortcut),
     ]
 
     /// The activities, then a tile that shows a sample in the real notch.
@@ -402,7 +421,7 @@ struct ActivitySettings: View {
                 }
             }
             SettingsSection(title: "Options",
-                            footer: "With two at once, the timer or the music you're playing keeps a small glyph while something else takes the notch.") {
+                            footer: "With two at once, the mute badge, the timer or the music you're playing keeps a small glyph while something else takes the notch. The ring is green for a camera and orange for the mic.") {
                 SwitchGrid(options: options)
             }
         }
@@ -729,6 +748,9 @@ struct AboutSettings: View {
                 SettingsCard {
                     ShortcutRow(keys: ["⌃", "⌥", "N"], spokenKeys: "Control Option N", action: settings.globalShortcut
                         ? "Open or close the notch" : "Open or close the notch (turned off in General)")
+                    CardDivider()
+                    ShortcutRow(keys: ["⌃", "⌥", "M"], spokenKeys: "Control Option M", action: settings.micShortcut
+                        ? "Mute or unmute the microphone" : "Mute or unmute the microphone (turned off in Live Activities)")
                     CardDivider()
                     ShortcutRow(keys: ["⌘", "1 – 8"], spokenKeys: "Command 1 to 8", action: "Jump to a page of these settings")
                     CardDivider()
