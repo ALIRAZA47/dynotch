@@ -45,6 +45,12 @@ final class PermissionStatus: ObservableObject {
                           AudioLevels.shared.$permission.map { _ in () })
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        DownloadMonitor.shared.$access
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+        FocusMonitor.shared.$access
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
     }
 
     var privacy: [Item] {
@@ -69,11 +75,35 @@ final class PermissionStatus: ObservableObject {
                  symbol: "waveform", tint: .pink, state: audioCaptureState, action: AudioLevels.shared.requestPermission),
             Item(title: "Bluetooth", purpose: "Battery levels of AirPods, keyboards and mice", symbol: "airpodspro",
                  tint: .blue, state: devices.isAuthorized ? .granted : .notDetermined, action: devices.requestAccess),
-            // There's no prompt for Full Disk Access, only the switch in System Settings.
-            Item(title: "Full Disk Access", purpose: "Notification peeks, read from Notification Center", symbol: "internaldrive.fill",
-                 tint: .gray, state: NotificationMirror.shared.hasAccess ? .granted : .denied,
-                 action: NotificationMirror.shared.openAccessSettings),
+            downloadsItem,
+            fullDiskAccessItem,
         ]
+    }
+
+    /// There's no prompt for Full Disk Access; the button opens its pane in System Settings.
+    /// One switch in System Settings serves both readers, so either one seeing its file means it's on.
+    /// There's no prompt for Full Disk Access, only that switch.
+    private var fullDiskAccessItem: Item {
+        let focus = FocusMonitor.shared
+        let state: State = if NotificationMirror.shared.hasAccess || focus.access == .granted {
+            .granted
+        } else {
+            focus.access == .unknown ? .notDetermined : .denied
+        }
+        return Item(title: "Full Disk Access", purpose: "Notification peeks and the Focus that's on",
+                    symbol: "internaldrive.fill", tint: .gray, state: state,
+                    action: NotificationMirror.shared.openAccessSettings)
+    }
+
+    private var downloadsItem: Item {
+        let downloads = DownloadMonitor.shared
+        let state: State = switch downloads.access {
+        case .granted: .granted
+        case .denied: .denied
+        case .unknown: .notDetermined
+        }
+        return Item(title: "Downloads folder", purpose: "Download progress in the notch, and finished files in the Tray",
+                    symbol: "arrow.down.circle.fill", tint: .blue, state: state, action: downloads.requestAccess)
     }
 
     var automationItems: [Item] {

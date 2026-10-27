@@ -5,13 +5,23 @@ import SwiftUI
 /// so the UI can be reviewed without driving the real thing.
 @MainActor
 enum SnapshotRenderer {
+    /// The moment sample timers count from, so every snapshot shows the same times.
+    private static let sampleTime = Date.now
+
     private struct Scene {
         let name: String
         let phase: NotchViewModel.Phase
         var activity: ClosedActivity = .idle
+        var secondary: CompactActivity?
         var tab: NotchTab = .home
         var draggingFiles = false
         var hasTrack = true
+        var micMuted = false
+        var micInUse = false
+        var cameraInUse = false
+        var hasTimers = true
+        var downloadKnowsSize = true
+        var focus: FocusMode?
         /// More sample state for this scene; `resetAudioSamples` undoes it before the next one.
         var setUp: (@MainActor () -> Void)?
     }
@@ -28,6 +38,21 @@ enum SnapshotRenderer {
         let event = LiveNotice(key: "event", symbol: "calendar", tint: .orange, text: "in 5m", detail: "Design review")
         let message = NotificationPeek.sample()
         let privateMessage = NotificationPeek.sample(hideText: true)
+        let muted = LiveNotice(key: "mic", symbol: "mic.slash.fill", tint: .red, text: "Muted")
+        let tea = TimerStore.shared.countdowns[0], laundry = TimerStore.shared.countdowns[1]
+        let roast = Countdown(id: UUID(), name: "Slow roast pork", duration: 4 * 3600,
+                              endDate: TimerStore.shared.now.addingTimeInterval(2 * 3600 + 750))
+        let timerDone = LiveNotice(key: "countdown", symbol: "bell.fill", tint: TimerStore.tint, text: "Done", detail: "Tea · 4 min")
+        let lateMessage = LiveNotice(key: "notification", symbol: "message.fill", tint: .green, text: "Anna",
+                                 detail: "Running ten minutes late, start the review without me")
+        let longMessage = LiveNotice(key: "notification", symbol: "message.fill", tint: .green, text: "Anna",
+                                     detail: "Are we still on for lunch tomorrow? I booked the place by the river for half past twelve")
+        let downloaded = LiveNotice(key: "download", symbol: "arrow.down.circle.fill", tint: DownloadMonitor.tint,
+                                    text: "Downloaded", detail: "Keynote Themes.zip")
+        let doNotDisturb = FocusMode(id: "dnd", name: "Do Not Disturb", symbol: "moon.fill", tint: .indigo)
+        let work = FocusMode(id: "work", name: "Work", symbol: "briefcase.fill", tint: .teal)
+        let focusOn = LiveNotice(key: "focus", symbol: "moon.fill", tint: .indigo, text: "On", detail: "Do Not Disturb")
+        let focusOff = LiveNotice(key: "focus", symbol: "briefcase.fill", tint: Color.white.opacity(0.6), text: "Off", detail: "Work")
         let scenes = [
             Scene(name: "01-closed-idle", phase: .closed),
             Scene(name: "02-closed-hover", phase: .hovering),
@@ -45,14 +70,47 @@ enum SnapshotRenderer {
             Scene(name: "13-open-tray-dropping", phase: .open, tab: .tray, draggingFiles: true),
             Scene(name: "14-open-focus", phase: .open, tab: .focus),
             Scene(name: "15-open-stats", phase: .open, tab: .stats),
-            Scene(name: "30-open-nook-volume", phase: .open, tab: .home,
+            Scene(name: "20-closed-timer-and-music", phase: .closed, activity: .timer, secondary: .music),
+            Scene(name: "21-closed-volume-and-timer", phase: .closed, activity: .notice(volume), secondary: .timer),
+            Scene(name: "22-closed-track-peek-and-timer", phase: .closed, activity: .trackPeek, secondary: .timer),
+            Scene(name: "23-closed-event-and-timer", phase: .closed, activity: .notice(event), secondary: .timer),
+            Scene(name: "24-hover-timer-and-music", phase: .hovering, activity: .timer, secondary: .music),
+            Scene(name: "30-closed-muted", phase: .closed, secondary: .micMuted, micMuted: true),
+            Scene(name: "31-closed-music-muted", phase: .closed, activity: .music, secondary: .micMuted, micMuted: true),
+            Scene(name: "32-closed-mute-notice", phase: .closed, activity: .notice(muted), micMuted: true),
+            Scene(name: "33-closed-on-air-camera", phase: .closed, cameraInUse: true),
+            Scene(name: "34-closed-on-air-mic-muted", phase: .closed, activity: .music, secondary: .micMuted,
+                  micMuted: true, micInUse: true),
+            Scene(name: "35-hover-on-air-timer", phase: .hovering, activity: .timer, micInUse: true, cameraInUse: true),
+            Scene(name: "36-open-on-air", phase: .open, tab: .home, cameraInUse: true),
+            Scene(name: "40-closed-countdown", phase: .closed, activity: .countdown(tea)),
+            Scene(name: "41-closed-countdown-and-pomodoro", phase: .closed, activity: .countdown(tea), secondary: .timer),
+            Scene(name: "42-closed-two-countdowns", phase: .closed, activity: .countdown(tea), secondary: .countdown(laundry)),
+            Scene(name: "43-closed-long-countdown", phase: .closed, activity: .countdown(roast), secondary: .stopwatch),
+            Scene(name: "44-closed-stopwatch-and-music", phase: .closed, activity: .stopwatch, secondary: .music),
+            Scene(name: "45-closed-timer-done", phase: .closed, activity: .notice(timerDone)),
+            Scene(name: "46-open-focus-no-timers", phase: .open, tab: .focus, hasTimers: false),
+            Scene(name: "50-closed-message", phase: .closed, activity: .notice(lateMessage)),
+            Scene(name: "51-closed-long-message", phase: .closed, activity: .notice(longMessage)),
+            Scene(name: "52-closed-message-and-timer", phase: .closed, activity: .notice(lateMessage), secondary: .timer),
+            Scene(name: "60-closed-download", phase: .closed, activity: .download),
+            Scene(name: "61-closed-download-size", phase: .closed, activity: .download, downloadKnowsSize: false),
+            Scene(name: "62-closed-download-and-music", phase: .closed, activity: .download, secondary: .music),
+            Scene(name: "63-closed-timer-and-download", phase: .closed, activity: .timer, secondary: .download),
+            Scene(name: "64-closed-downloaded", phase: .closed, activity: .notice(downloaded)),
+            Scene(name: "70-closed-focus", phase: .closed, secondary: .focus(doNotDisturb), focus: doNotDisturb),
+            Scene(name: "71-closed-music-and-focus", phase: .closed, activity: .music, secondary: .focus(work), focus: work),
+            Scene(name: "72-closed-focus-on", phase: .closed, activity: .notice(focusOn), focus: doNotDisturb),
+            Scene(name: "73-closed-focus-off", phase: .closed, activity: .notice(focusOff)),
+            Scene(name: "74-closed-muted-and-focus", phase: .closed, secondary: .micMuted, micMuted: true, focus: work),
+            Scene(name: "80-open-nook-volume", phase: .open, tab: .home,
                   setUp: { VolumeMonitor.shared.loadSample(volume: 0.62, changing: true) }),
-            Scene(name: "31-open-nook-outputs", phase: .open, tab: .home, setUp: { loadOutputs(pickerShown: true) }),
-            Scene(name: "32-open-nook-empty-outputs", phase: .open, tab: .home, hasTrack: false,
+            Scene(name: "81-open-nook-outputs", phase: .open, tab: .home, setUp: { loadOutputs(pickerShown: true) }),
+            Scene(name: "82-open-nook-empty-outputs", phase: .open, tab: .home, hasTrack: false,
                   setUp: { loadOutputs(pickerShown: true) }),
-            Scene(name: "33-closed-music-live-levels", phase: .closed, activity: .music,
+            Scene(name: "83-closed-music-live-levels", phase: .closed, activity: .music,
                   setUp: { AudioLevels.shared.loadSample([0.95, 0.45, 0.7, 0.25]) }),
-            Scene(name: "34-open-nook-live-levels", phase: .open, tab: .home,
+            Scene(name: "84-open-nook-live-levels", phase: .open, tab: .home,
                   setUp: { AudioLevels.shared.loadSample([0.3, 0.9, 0.55, 0.8]) }),
         ]
 
@@ -61,9 +119,14 @@ enum SnapshotRenderer {
         for scene in scenes {
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
             resetAudioSamples()
+            MicMonitor.shared.loadSample(muted: scene.micMuted, micInUse: scene.micInUse, cameraInUse: scene.cameraInUse)
+            if scene.hasTimers { TimerStore.shared.loadSample(at: sampleTime) } else { TimerStore.shared.clearSample() }
+            DownloadMonitor.shared.loadSample(knowsSize: scene.downloadKnowsSize)
+            FocusMonitor.shared.loadSample(scene.focus)
             scene.setUp?()
             let viewModel = NotchViewModel(geometry: geometry)
-            viewModel.stage(phase: scene.phase, activity: scene.activity, tab: scene.tab, draggingFiles: scene.draggingFiles)
+            viewModel.stage(phase: scene.phase, activity: scene.activity, secondary: scene.secondary, tab: scene.tab,
+                            draggingFiles: scene.draggingFiles)
             let content = ZStack(alignment: .top) {
                 Desktop(notchWidth: geometry.closedSize.width, menuBarHeight: geometry.closedSize.height)
                 NotchRootView(viewModel: viewModel)
@@ -115,6 +178,28 @@ enum SnapshotRenderer {
             }
         }
         print("Wrote \(count) settings snapshots to \(folder.path)")
+        renderSpotlights(into: folder)
+    }
+
+    /// The Live Activities page with its preview held on each activity, as when pointing at its tile.
+    private static func renderSpotlights(into folder: URL) {
+        var count = 0
+        for (index, kind) in LiveActivityKind.allCases.enumerated() {
+            let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
+                                         styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
+            let navigation = SettingsNavigation()
+            navigation.page = .activities
+            navigation.spotlight = kind
+            SettingsWindowController.configure(window, navigation: navigation)
+            window.appearance = NSAppearance(named: .darkAqua)
+            window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -30_000))
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: .now + 1.2)
+            if save(window, to: folder.appendingPathComponent("stage-\(kind.rawValue).png")) { count += 1 }
+            window.orderOut(nil)
+            window.close()
+        }
+        print("Wrote \(count) live activity previews to \(folder.path)")
     }
 
     /// Writes the window to a PNG, trying again if the window server hands back a blank frame.
@@ -199,6 +284,7 @@ enum SnapshotRenderer {
                 .init(id: "c", title: "Water the plants", dueDate: nil, color: .green),
             ])
         PomodoroTimer.shared.loadSample(remaining: 18 * 60 + 24, running: true)
+        TimerStore.shared.loadSample(at: sampleTime)
         SystemMonitor.shared.loadSample()
         DeviceBatteryMonitor.shared.loadSample([
             .init(id: "airpods", name: "AirPods Pro", kind: .earbuds, left: 80, right: 78, batteryCase: 27),

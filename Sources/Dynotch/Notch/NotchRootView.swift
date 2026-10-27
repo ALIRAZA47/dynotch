@@ -4,6 +4,7 @@ import SwiftUI
 struct NotchRootView: View {
     @ObservedObject var viewModel: NotchViewModel
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var mic = MicMonitor.shared
 
     var body: some View {
         let metrics = viewModel.metrics
@@ -26,11 +27,43 @@ struct NotchRootView: View {
             .padding(.horizontal, metrics.topRadius)
             .background(Color.black)
             .clipShape(NotchShape(topRadius: metrics.topRadius, bottomRadius: metrics.bottomRadius))
+            .overlay {
+                if let color = onAirColor {
+                    // A beat before it shows, so the Mirror's camera winding down as the notch closes doesn't flash it.
+                    OnAirRing(color: color, metrics: metrics)
+                        .transition(.asymmetric(insertion: .opacity.animation(.easeIn(duration: 0.3).delay(0.6)),
+                                                removal: .opacity.animation(.easeOut(duration: 0.2))))
+                }
+            }
             .shadow(color: .black.opacity(viewModel.isOpen && settings.showOpenShadow ? 0.5 : 0), radius: 18, y: 8)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .environment(\.colorScheme, .dark)
+    }
+
+    /// Green while a camera is on, orange while only the microphone is. The closed notch only.
+    private var onAirColor: Color? {
+        guard settings.onAirRing, !viewModel.isOpen else { return nil }
+        return mic.cameraInUse ? .green : mic.micInUse ? .orange : nil
+    }
+}
+
+/// A thin glowing outline around the closed notch, open along the top edge of the screen.
+private struct OnAirRing: View {
+    let color: Color
+    let metrics: NotchMetrics
+
+    private static let lineWidth: CGFloat = 1.6
+
+    var body: some View {
+        // Just outside the black, so the hardware cutout doesn't hide half the line.
+        let inset = Self.lineWidth / 2
+        NotchShape(topRadius: metrics.topRadius, bottomRadius: metrics.bottomRadius + inset, includesTopEdge: false)
+            .stroke(color, style: StrokeStyle(lineWidth: Self.lineWidth, lineCap: .round, lineJoin: .round))
+            .padding(-inset)
+            .shadow(color: color.opacity(0.75), radius: 3)
+            .allowsHitTesting(false)
     }
 }
 
@@ -49,9 +82,16 @@ struct ClosedNotchView: View {
                     .padding(.leading, 10)
                     .frame(width: layout.earWidth, height: layout.notchHeight, alignment: .leading)
                 Color.clear.frame(width: layout.notchWidth)
-                trailing
-                    .padding(.trailing, 11)
-                    .frame(width: layout.earWidth, height: layout.notchHeight, alignment: .trailing)
+                HStack(spacing: ClosedLayout.glyphSpacing) {
+                    trailing
+                    if let secondary = viewModel.secondary {
+                        CompactActivityView(activity: secondary)
+                            .frame(width: ClosedLayout.glyphSize, height: ClosedLayout.glyphSize)
+                            .transition(.scale(scale: 0.5).combined(with: .opacity))
+                    }
+                }
+                .padding(.trailing, 11)
+                .frame(width: layout.earWidth, height: layout.notchHeight, alignment: .trailing)
             }
             if layout.rowHeight > 0 {
                 detailRow
@@ -85,6 +125,14 @@ struct ClosedNotchView: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(notice.tint)
                 .contentTransition(.symbolEffect(.replace))
+        case .countdown(let countdown):
+            CountdownLabel(countdown: countdown)
+        case .stopwatch:
+            Image(systemName: "stopwatch.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(TimerStore.stopwatchTint)
+        case .download:
+            DownloadLabel()
         }
     }
 
@@ -113,6 +161,12 @@ struct ClosedNotchView: View {
                     .foregroundStyle(notice.tint)
                     .lineLimit(1)
             }
+        case .countdown(let countdown):
+            CountdownTime(countdown: countdown)
+        case .stopwatch:
+            StopwatchTime()
+        case .download:
+            DownloadAmount()
         }
     }
 

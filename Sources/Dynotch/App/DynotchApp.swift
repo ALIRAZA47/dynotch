@@ -20,6 +20,7 @@ enum DynotchApp {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var hotKey: HotKey?
+    private var muteHotKey: HotKey?
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -42,6 +43,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AudioOutputs.shared.start()
         AudioLevels.shared.start()
         DeviceBatteryMonitor.shared.start()
+        MicMonitor.shared.start()
+        DownloadMonitor.shared.start()
+        FocusMonitor.shared.start()
         LiveActivityCenter.shared.start()
         NotificationMirror.shared.start()
         NotchManager.shared.start()
@@ -55,6 +59,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.hotKey?.unregister()
                 self?.hotKey = enabled
                     ? HotKey(keyCode: kVK_ANSI_N, modifiers: controlKey | optionKey) { NotchManager.shared.toggle() }
+                    : nil
+            }
+            .store(in: &cancellables)
+        settings.$micShortcut
+            .sink { [weak self] enabled in
+                self?.muteHotKey?.unregister()
+                self?.muteHotKey = enabled
+                    ? HotKey(keyCode: kVK_ANSI_M, modifiers: controlKey | optionKey) { MicMonitor.shared.toggleMute() }
                     : nil
             }
             .store(in: &cancellables)
@@ -96,6 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(item("Open Notch", #selector(openNotch), key: "n", modifiers: [.control, .option]))
         menu.addItem(item("Open Tray", #selector(openTray)))
         menu.addItem(item("Start Focus Timer", #selector(startTimer)))
+        menu.addItem(item("Mute Microphone", #selector(toggleMicMute), key: "m", modifiers: [.control, .option]))
         menu.addItem(.separator())
         menu.addItem(item("Settings…", #selector(openSettings), key: ","))
         menu.addItem(item("About Dynotch", #selector(openAbout)))
@@ -118,6 +131,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func startTimer() {
         PomodoroTimer.shared.start()
+    }
+
+    @objc private func toggleMicMute() {
+        MicMonitor.shared.toggleMute()
     }
 
     /// A tiny screen with a notch, drawn as a template so it follows the menu bar's color.
@@ -167,5 +184,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowItem.submenu = window
         main.addItem(windowItem)
         return main
+    }
+}
+
+extension AppDelegate: NSMenuItemValidation {
+    /// Ticks Mute Microphone while the mic is muted, and shows ⌃⌥M only while that shortcut is on.
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        guard menuItem.action == #selector(toggleMicMute) else { return true }
+        let mic = MicMonitor.shared
+        menuItem.state = mic.isMuted ? .on : .off
+        menuItem.keyEquivalent = AppSettings.shared.micShortcut ? "m" : ""
+        return mic.hasInput
     }
 }

@@ -164,6 +164,41 @@ final class AppSettings: ObservableObject {
         didSet { save("liveDevices", liveDevices) }
     }
 
+    // MARK: Live activities: two at once, microphone, timers, downloads, Focus
+
+    /// A second activity as a glyph in the right ear.
+    @Published var liveSecondary: Bool = AppSettings.value("liveSecondary", true) {
+        didSet { save("liveSecondary", liveSecondary) }
+    }
+    /// A red badge while the microphone is muted.
+    @Published var liveMicMuted: Bool = AppSettings.value("liveMicMuted", true) {
+        didSet { save("liveMicMuted", liveMicMuted) }
+    }
+    /// ⌃⌥M mutes and unmutes the microphone.
+    @Published var micShortcut: Bool = AppSettings.value("micShortcut", true) {
+        didSet { save("micShortcut", micShortcut) }
+    }
+    /// An outline around the closed notch while a camera or the microphone is in use.
+    @Published var onAirRing: Bool = AppSettings.value("onAirRing", true) {
+        didSet { save("onAirRing", onAirRing) }
+    }
+    /// Named timers and the stopwatch from the Focus tab.
+    @Published var liveCountdowns: Bool = AppSettings.value("liveCountdowns", true) {
+        didSet { save("liveCountdowns", liveCountdowns) }
+    }
+    /// Progress while files arrive in ~/Downloads, and a notice when one is done.
+    @Published var liveDownloads: Bool = AppSettings.value("liveDownloads", true) {
+        didSet { save("liveDownloads", liveDownloads) }
+    }
+    /// Finished downloads go into the Tray.
+    @Published var downloadsToTray: Bool = AppSettings.value("downloadsToTray", false) {
+        didSet { save("downloadsToTray", downloadsToTray) }
+    }
+    /// The Focus that's on, by its symbol, and a notice when it changes.
+    @Published var liveFocus: Bool = AppSettings.value("liveFocus", true) {
+        didSet { save("liveFocus", liveFocus) }
+    }
+
     // MARK: Nook
 
     @Published var homeWidgetA: HomeWidget = AppSettings.value("homeWidgetA", HomeWidget.calendar) {

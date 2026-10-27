@@ -270,6 +270,7 @@ private struct VirtualNotchSketch: View {
 /// The live activities that can be turned off, and a sample of each for the preview.
 enum LiveActivityKind: String, CaseIterable, Identifiable {
     case music, trackPeek, timer, levels, charging, lowBattery, events, devices
+    case micMuted, countdowns, downloads, focusMode
     case notifications
 
     var id: String { rawValue }
@@ -284,6 +285,10 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .lowBattery: "Low battery"
         case .events: "Upcoming events"
         case .devices: "Bluetooth devices"
+        case .micMuted: "Muted microphone"
+        case .countdowns: "Timers"
+        case .downloads: "Downloads"
+        case .focusMode: "Focus"
         case .notifications: "Notifications"
         }
     }
@@ -298,6 +303,10 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .lowBattery: "For the Mac and Bluetooth devices"
         case .events: "Five minutes before they start"
         case .devices: "When one connects, with its battery"
+        case .micMuted: "A red badge while the mic is muted"
+        case .countdowns: "Named timers and the stopwatch from the Focus tab"
+        case .downloads: "Progress as a file downloads, and a notice when it's done"
+        case .focusMode: "Your Focus's symbol while one is on, and a notice when it changes"
         case .notifications: "Messages, Mail, Slack and more as they arrive"
         }
     }
@@ -312,6 +321,10 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .lowBattery: "battery.25percent"
         case .events: "calendar"
         case .devices: "airpodspro"
+        case .micMuted: "mic.slash.fill"
+        case .countdowns: "hourglass"
+        case .downloads: "arrow.down.circle.fill"
+        case .focusMode: "moon.fill"
         case .notifications: "bell.badge.fill"
         }
     }
@@ -326,6 +339,10 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .lowBattery: .red
         case .events: .orange
         case .devices: .teal
+        case .micMuted: .red
+        case .countdowns: TimerStore.tint
+        case .downloads: DownloadMonitor.tint
+        case .focusMode: .indigo
         case .notifications: .indigo
         }
     }
@@ -341,6 +358,10 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .lowBattery: \.lowBatteryAlerts
         case .events: \.liveEvents
         case .devices: \.liveDevices
+        case .micMuted: \.liveMicMuted
+        case .countdowns: \.liveCountdowns
+        case .downloads: \.liveDownloads
+        case .focusMode: \.liveFocus
         case .notifications: \.liveNotifications
         }
     }
@@ -365,6 +386,21 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .devices:
             .notice(LiveNotice(key: "device", symbol: "airpodspro", tint: .white, text: "80%", detail: "AirPods Pro connected"))
         case .notifications: .notice(NotificationPeek.sample())
+        case .micMuted: .idle
+        case .countdowns: .countdown(Self.sampleCountdown)
+        case .downloads: .download
+        case .focusMode: .idle
+        }
+    }
+
+    private static let sampleCountdown = Countdown(id: UUID(), name: "Tea", duration: 240, pausedRemaining: 221)
+
+    /// A glyph at the end of the right ear, for the activities that only ever show as one.
+    var sampleSecondary: CompactActivity? {
+        switch self {
+        case .micMuted: .micMuted
+        case .focusMode: .focus(FocusMode(id: "sample", name: "Do Not Disturb", symbol: "moon.fill", tint: .indigo))
+        default: nil
         }
     }
 }
@@ -372,6 +408,18 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
 struct ActivitySettings: View {
     @ObservedObject var navigation: SettingsNavigation
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var focus = FocusMonitor.shared
+
+    private let options = [
+        SwitchOption(title: "Two at once", detail: "A second activity as a small glyph at the end of the right ear",
+                     symbol: "circle.grid.2x1.right.filled", tint: Palette.lavender, setting: \.liveSecondary),
+        SwitchOption(title: "On-air ring", detail: "A thin outline around the notch while a camera or the mic is in use",
+                     symbol: "record.circle", tint: .green, setting: \.onAirRing),
+        SwitchOption(title: "Mute shortcut", detail: "⌃⌥M mutes and unmutes the mic in every app",
+                     symbol: "mic.fill", tint: .orange, setting: \.micShortcut),
+        SwitchOption(title: "Downloads to the Tray", detail: "Put each finished download in the Tray",
+                     symbol: "tray.and.arrow.down.fill", tint: .teal, setting: \.downloadsToTray),
+    ]
 
     /// The activities, then a tile that shows a sample in the real notch.
     private enum Tile: Identifiable {
@@ -401,25 +449,33 @@ struct ActivitySettings: View {
     @ViewBuilder
     private var activities: some View {
         let onCount = LiveActivityKind.allCases.filter { settings[keyPath: $0.setting] }.count
-        SettingsSection(title: "Show in the closed notch", trailing: "\(onCount) of \(LiveActivityKind.allCases.count) on",
-                        footer: "Live activities appear beside the camera without opening the notch. Point at one to see it above.") {
-            TileGrid(items: LiveActivityKind.allCases.map(Tile.activity) + [.preview], columns: 3) { tile in
-                switch tile {
-                case .activity(let kind):
-                    activityTile(kind)
-                case .preview:
-                    ActionTile(title: "Preview", detail: "Show a sample in the notch", symbol: "sparkles") {
-                        LiveActivityCenter.shared.post(LiveNotice(key: "preview", symbol: "sparkles", tint: .yellow, text: "Hi!",
-                                                                  detail: "This is a live activity"), for: 3)
+        VStack(alignment: .leading, spacing: 26) {
+            SettingsSection(title: "Show in the closed notch", trailing: "\(onCount) of \(LiveActivityKind.allCases.count) on",
+                            footer: "Live activities appear beside the camera without opening the notch. Point at one to see it above.") {
+                TileGrid(items: LiveActivityKind.allCases.map(Tile.activity) + [.preview], columns: 3) { tile in
+                    switch tile {
+                    case .activity(let kind):
+                        activityTile(kind)
+                    case .preview:
+                        ActionTile(title: "Preview", detail: "Show a sample in the notch", symbol: "sparkles") {
+                            LiveActivityCenter.shared.post(LiveNotice(key: "preview", symbol: "sparkles", tint: .yellow, text: "Hi!",
+                                                                      detail: "This is a live activity"), for: 3)
+                        }
                     }
                 }
+            }
+            SettingsSection(title: "Options",
+                            footer: "With two at once, the mute badge, a timer, a download, your Focus or the music you're playing keeps a small glyph while something else takes the notch. The ring is green for a camera and orange for the mic.") {
+                SwitchGrid(options: options)
             }
         }
     }
 
     private func activityTile(_ kind: LiveActivityKind) -> some View {
         let needsMusic = kind == .trackPeek && !settings.liveMusic
-        return SwitchTile(title: kind.title, detail: needsMusic ? "Needs Now playing" : kind.detail,
+        let needsDiskAccess = kind == .focusMode && settings.liveFocus && focus.access == .denied
+        let detail = needsMusic ? "Needs Now playing" : needsDiskAccess ? "Needs Full Disk Access, under Permissions" : kind.detail
+        return SwitchTile(title: kind.title, detail: detail,
                           symbol: kind.symbol, tint: kind.tint, isOn: $settings[dynamicMember: kind.setting])
             .disabled(needsMusic)
             .onHover { inside in
@@ -671,7 +727,7 @@ struct FocusSettings: View {
     private let behavior = [
         SwitchOption(title: "Auto-start", detail: "Start the next phase automatically", symbol: "forward.fill",
                      tint: PomodoroTimer.Phase.shortBreak.color, setting: \.autoStartNextPhase),
-        SwitchOption(title: "Sound", detail: "Play a sound when a phase ends", symbol: "bell.fill",
+        SwitchOption(title: "Sound", detail: "Play a sound when a phase or a named timer ends", symbol: "bell.fill",
                      tint: .orange, setting: \.timerSound),
     ]
 
@@ -738,6 +794,9 @@ struct AboutSettings: View {
                 SettingsCard {
                     ShortcutRow(keys: ["⌃", "⌥", "N"], spokenKeys: "Control Option N", action: settings.globalShortcut
                         ? "Open or close the notch" : "Open or close the notch (turned off in General)")
+                    CardDivider()
+                    ShortcutRow(keys: ["⌃", "⌥", "M"], spokenKeys: "Control Option M", action: settings.micShortcut
+                        ? "Mute or unmute the microphone" : "Mute or unmute the microphone (turned off in Live Activities)")
                     CardDivider()
                     ShortcutRow(keys: ["⌘", "1 – 8"], spokenKeys: "Command 1 to 8", action: "Jump to a page of these settings")
                     CardDivider()

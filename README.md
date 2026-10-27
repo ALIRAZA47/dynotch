@@ -15,9 +15,14 @@ dependencies.
 |---|---|
 | **Notch shell** | Hover, click, trackpad swipe or ⌃⌥N to open; swipe up, Esc or move away to close. Spring animations, haptics, hover grow. A virtual notch on Macs and displays without one. Choose the built-in display, the main display or all displays. |
 | **Live activities** (closed notch) | Album art and an equalizer while music plays; the song title when the track changes; focus-timer countdown; volume and brightness HUD; charging; low battery (Mac and Bluetooth devices); upcoming events five minutes ahead; Bluetooth devices connecting; Shortcuts finishing; notifications from Messages, Mail, Slack and other apps (see [Notification peeks](#notification-peeks)). |
+| **Two at once** | A second activity keeps a small glyph at the end of the right ear while another takes the notch: the mute badge, a timer's or a download's ring, the Focus that's on, or the album art. The main activity keeps the order above: notices, the song title, the timer that ends soonest, a download, then music. |
+| **Microphone** | ⌃⌥M, or **Mute Microphone** in the menu bar menu, mutes the mic in every app (by its mute control, or by turning its input level down when it has none). A red badge stays in the closed notch while it's muted. An on-air ring outlines the closed notch while a camera (green) or the mic (orange) is in use. |
+| **Downloads** | A ring in the closed notch while files arrive in ~/Downloads: a real percentage for Safari, which records its progress, and the size so far for Chrome, Firefox and Opera, whose partial files only grow. A notice names the file when it's done, and an option puts finished downloads in the Tray. |
+| **Focus** | The symbol of the Focus that's on, in its color, at the end of the right ear, and a notice when a Focus turns on or off, whether by hand or on a schedule. macOS only tells apps whether a Focus is on, so Dynotch reads which one from the Focus settings, which takes Full Disk Access. Without it, nothing shows. |
 | **Nook tab** | Media player for Apple Music and Spotify: artwork, scrubber, play/pause, next/previous, shuffle, repeat, favorite. Its accent color comes from the album art. Two configurable widgets beside it: Calendar, Mirror, Shortcuts, Focus timer, Batteries, Quick toggles or Notes. |
 | **Tray tab** | Drag files toward the notch and it opens with drop zones: **Keep in Tray**, **AirDrop**, **Compress** and **Copy to…**. Tray items have Quick Look thumbnails, drag back out to any app, and survive relaunches. The right-click menu offers Open, Open With, Show in Finder, Copy, AirDrop, Share, Compress, Extract, Convert Image (PNG/JPEG/HEIC), Make Smaller, Copy to…, Move to… and Remove. Dropped images, links and text become files. |
 | **Focus tab** | Pomodoro timer (focus, short and long breaks, sound, auto-start), Reminders (check off, add new) and a Notes scratchpad. |
+| **Timers** | Beside the Pomodoro, type "tea 4m", "eggs 90s", "nap 1h30" or "laundry 45" (a number on its own is minutes) to start a named timer; pause, resume or cancel it, and run a stopwatch. The closed notch shows the timer that ends soonest, the Pomodoro included, with the next one as a glyph beside it. At zero, a notice and a sound. |
 | **Stats tab** | CPU (with a sparkline), memory, disk and network; battery levels for the Mac, AirPods (each bud and the case), keyboards, mice and more; quick toggles for Dark Mode, Keep Awake, Mute, Color Picker (copies the hex code), Screenshot and Sleep Display. |
 | **Audio and keys** | **Live equalizer** (opt-in, macOS 14.2 or later) makes the equalizer bars follow the music: a Core Audio process tap listens to Music or Spotify, only while it plays and some bars are on screen, and splits the sound into four bands. **Replace system HUD** (opt-in) takes over the volume, mute and brightness keys so only Dynotch's meter shows, in steps of a sixteenth (a sixty-fourth with ⇧⌥), even at either end of the range. Keys Dynotch can't handle, like an output without a volume control or an external display, go to macOS as usual. Swipe two fingers sideways over the notch to skip tracks (left for next, right for previous), and scroll over the artwork in the Nook to change the volume. The output button beside the player lists the Mac's outputs (speakers, headphones, displays, Bluetooth) and switches the default output; AirPlay speakers and TVs come from AVKit's AirPlay picker in the same list. |
 | **Calendar** | A five-day strip; "in 12m" and "Now" labels; a Join button for Zoom, Meet, Teams, Webex and FaceTime links. |
@@ -122,7 +127,8 @@ Each permission is requested the first time you use the feature that needs it.
 | Accessibility | Replace system HUD: handling the volume and brightness keys. Asked for when you turn it on |
 | System audio recording | Live equalizer: hearing what Music or Spotify plays. Nothing is recorded. Asked for when you turn it on |
 | Bluetooth | Battery levels of connected devices |
-| Full Disk Access | Notification peeks. There's no prompt for this one; turn it on in System Settings. |
+| Downloads folder | Download progress in the closed notch, and finished downloads in the Tray |
+| Full Disk Access | Notification peeks, and which Focus is on. There's no prompt for this one; **Settings → Permissions** opens its pane in System Settings. |
 
 Grants survive rebuilds as long as the app is signed with the local identity (see
 above). An ad hoc build may lose them.
@@ -159,6 +165,7 @@ Sources/Dynotch/
   Widgets/    mirror, focus timer, notes, system stats, batteries, quick toggles, shortcuts
   HUD/        volume (CoreAudio) and brightness monitors, media-key tap
   Notifications/  notification peeks: Notification Center reader, settings
+  Activities/ microphone and camera, downloads, Focus
   Settings/   settings window and permissions page
   Debug/      snapshot renderer
 Support/      Info.plist, app icon

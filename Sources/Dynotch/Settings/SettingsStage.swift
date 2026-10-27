@@ -122,14 +122,15 @@ private struct StagePreview: View {
             }
         } else {
             let activity = closedActivity(featured: featured)
-            let layout = ClosedLayout(activity: activity, notch: Self.hardwareNotch)
+            let secondary = page == .activities ? featured?.sampleSecondary : nil
+            let layout = ClosedLayout(activity: activity, secondary: secondary, notch: Self.hardwareNotch)
             let hovering = page == .general
             let scale = Self.closedScale
             PreviewNotch(size: CGSize(width: (layout.totalWidth + (hovering ? 14 : 0)) * scale,
                                       height: (layout.totalHeight + (hovering ? 3 : 0)) * scale),
                          topRadius: 6 * scale,
                          bottomRadius: (layout.rowHeight > 0 ? 16 : hovering ? 12 : 10) * scale) {
-                ClosedPreview(activity: activity, layout: layout, scale: scale,
+                ClosedPreview(activity: activity, secondary: secondary, layout: layout, scale: scale,
                               timerText: "\(settings.focusMinutes):00", tintArtwork: settings.artworkTint)
             }
         }
@@ -231,6 +232,7 @@ private struct CaptionText: View {
 /// The closed notch with a live activity in its ears, like `ClosedNotchView` but with sample content.
 private struct ClosedPreview: View {
     let activity: ClosedActivity
+    var secondary: CompactActivity?
     let layout: ClosedLayout
     let scale: CGFloat
     let timerText: String
@@ -243,9 +245,15 @@ private struct ClosedPreview: View {
                     .padding(.leading, 10 * scale)
                     .frame(width: layout.earWidth * scale, height: layout.notchHeight * scale, alignment: .leading)
                 Color.clear.frame(width: layout.notchWidth * scale)
-                trailing
-                    .padding(.trailing, 11 * scale)
-                    .frame(width: layout.earWidth * scale, height: layout.notchHeight * scale, alignment: .trailing)
+                HStack(spacing: ClosedLayout.glyphSpacing * scale) {
+                    trailing
+                    if let secondary {
+                        glyph(secondary)
+                            .frame(width: ClosedLayout.glyphSize * scale, height: ClosedLayout.glyphSize * scale)
+                    }
+                }
+                .padding(.trailing, 11 * scale)
+                .frame(width: layout.earWidth * scale, height: layout.notchHeight * scale, alignment: .trailing)
             }
             if layout.rowHeight > 0 {
                 detail
@@ -276,6 +284,22 @@ private struct ClosedPreview: View {
             Image(systemName: notice.symbol)
                 .font(.system(size: 13 * scale, weight: .semibold))
                 .foregroundStyle(notice.tint)
+        case .countdown(let countdown):
+            HStack(spacing: 6 * scale) {
+                ProgressRing(progress: countdown.progress(at: .now), color: TimerStore.tint, lineWidth: 2.6 * scale)
+                    .frame(width: 17 * scale, height: 17 * scale)
+                Text(countdown.name)
+                    .font(.system(size: 12 * scale, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(1)
+            }
+        case .stopwatch:
+            Image(systemName: "stopwatch.fill")
+                .font(.system(size: 13 * scale, weight: .semibold))
+                .foregroundStyle(TimerStore.stopwatchTint)
+        case .download:
+            DownloadRing(fraction: 0.45, lineWidth: 2.6 * scale, arrowSize: 7 * scale)
+                .frame(width: 17 * scale, height: 17 * scale)
         }
     }
 
@@ -304,6 +328,21 @@ private struct ClosedPreview: View {
                     .foregroundStyle(notice.tint)
                     .lineLimit(1)
             }
+        case .countdown(let countdown):
+            Text(Format.duration(countdown.remaining(at: .now).rounded(.up)))
+                .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(TimerStore.tint)
+        case .stopwatch:
+            Text("12:34")
+                .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(TimerStore.stopwatchTint)
+        case .download:
+            Text("45%")
+                .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(DownloadMonitor.tint)
         }
     }
 
@@ -316,6 +355,32 @@ private struct ClosedPreview: View {
             if let detail = notice.detail { Text(detail) }
         default:
             EmptyView()
+        }
+    }
+
+    /// A second activity's glyph, like `CompactActivityView` but with sample content.
+    @ViewBuilder
+    private func glyph(_ activity: CompactActivity) -> some View {
+        switch activity {
+        case .timer:
+            ProgressRing(progress: 0.3, color: PomodoroTimer.Phase.focus.color, lineWidth: 2.4 * scale)
+                .padding(1.5 * scale)
+        case .music:
+            RoundedRectangle(cornerRadius: 4 * scale, style: .continuous)
+                .fill(Palette.sunset)
+        case .micMuted:
+            MuteBadge(size: ClosedLayout.glyphSize * scale)
+        case .countdown(let countdown):
+            ProgressRing(progress: countdown.progress(at: .now), color: TimerStore.tint, lineWidth: 2.4 * scale)
+                .padding(1.5 * scale)
+        case .stopwatch:
+            ProgressRing(progress: 0.55, color: TimerStore.stopwatchTint, lineWidth: 2.4 * scale)
+                .padding(1.5 * scale)
+        case .download:
+            DownloadRing(fraction: 0.45, lineWidth: 2.4 * scale, arrowSize: 6 * scale)
+                .padding(1.5 * scale)
+        case .focus(let mode):
+            FocusGlyph(mode: mode, size: ClosedLayout.glyphSize * scale)
         }
     }
 }

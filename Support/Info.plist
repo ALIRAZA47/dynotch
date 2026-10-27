@@ -61,5 +61,7 @@
 	<string>With Live equalizer on, Dynotch listens to Music or Spotify while they play so the equalizer bars follow the music. Nothing is recorded or saved.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Dynotch shows the battery level of your connected Bluetooth devices.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Dynotch shows the progress of files you download in the notch, and can put finished downloads in the Tray.</string>
 </dict>
 </plist>
