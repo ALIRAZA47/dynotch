@@ -219,11 +219,15 @@ struct PermissionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            if let bundleID = item.appBundleID {
-                AppIconView(bundleID: bundleID, fallback: "app.fill", side: 30)
-            } else {
-                SymbolBadge(symbol: item.symbol, tint: item.tint, size: 28)
+            // App icons and symbols take the same width, so the titles line up.
+            Group {
+                if let bundleID = item.appBundleID {
+                    AppIconView(bundleID: bundleID, fallback: "app.fill", side: 30)
+                } else {
+                    SymbolBadge(symbol: item.symbol, tint: item.tint, size: 28)
+                }
             }
+            .frame(width: 30)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.title)
                     .font(.system(size: 13, weight: .medium))

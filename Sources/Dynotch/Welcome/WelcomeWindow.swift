@@ -337,7 +337,7 @@ private struct HighlightsStep: View {
 
     var body: some View {
         SettingsSection(title: "Highlights",
-                        footer: "Also new: the volume and brightness keys without the system's HUD, an equalizer that follows the music, an output switcher, Quick Look and screenshots in the Tray, and connecting Bluetooth devices from the Stats tab.") {
+                        footer: "Also new: black or glass themes in your accent color, the volume and brightness keys without the system's HUD, an equalizer that follows the music, an output switcher, Quick Look and screenshots in the Tray, and connecting Bluetooth devices from the Stats tab.") {
             TileGrid(items: highlights, columns: 3) { InfoTileView(tile: $0) }
         }
     }
