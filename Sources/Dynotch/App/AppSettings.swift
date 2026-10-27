@@ -190,6 +190,9 @@ final class AppSettings: ObservableObject {
     @Published var trayOpensOnDrag: Bool = AppSettings.value("trayOpensOnDrag", true) {
         didSet { save("trayOpensOnDrag", trayOpensOnDrag) }
     }
+    @Published var screenshotsToTray: Bool = AppSettings.value("screenshotsToTray", true) {
+        didSet { save("screenshotsToTray", screenshotsToTray) }
+    }
 
     // MARK: Focus timer
 

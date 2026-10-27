@@ -41,6 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DeviceBatteryMonitor.shared.start()
         LiveActivityCenter.shared.start()
         NotchManager.shared.start()
+        // Last, since reading the screenshot folder can bring up macOS's folder-access prompt.
+        ScreenshotWatcher.shared.start()
 
         let settings = AppSettings.shared
         settings.$showMenuBarIcon

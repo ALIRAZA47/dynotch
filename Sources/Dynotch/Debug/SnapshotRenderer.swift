@@ -39,6 +39,9 @@ enum SnapshotRenderer {
             Scene(name: "13-open-tray-dropping", phase: .open, tab: .tray, draggingFiles: true),
             Scene(name: "14-open-focus", phase: .open, tab: .focus),
             Scene(name: "15-open-stats", phase: .open, tab: .stats),
+            // Widgets and the Tray
+            Scene(name: "20-closed-screenshot", phase: .closed, activity: .notice(LiveNotice(
+                key: "screenshot", symbol: "camera.viewfinder", tint: .white, detail: "Screenshot added to the Tray"))),
         ]
 
         let settings = AppSettings.shared

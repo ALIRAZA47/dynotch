@@ -581,6 +581,7 @@ struct AppIconView: View {
 
 struct TraySettings: View {
     @ObservedObject private var tray = TrayStore.shared
+    @ObservedObject private var settings = AppSettings.shared
 
     private let options = [
         SwitchOption(title: "Open on drag", detail: "Open the tray when files are dragged toward the notch",
@@ -594,6 +595,13 @@ struct TraySettings: View {
             SettingsSection(title: "Dropping files",
                             footer: "With copies, the originals can be moved or deleted and the tray keeps its own. Copies go to the Trash when you remove them.") {
                 SwitchGrid(options: options)
+            }
+            SettingsSection(title: "Screenshots",
+                            footer: "Dynotch watches the folder the Screenshot app saves to: \(ScreenshotWatcher.folderNames).") {
+                SettingsCard {
+                    SwitchRow(title: "Add screenshots to the tray", detail: "New screenshots and screen recordings show up here",
+                              symbol: "camera.viewfinder", tint: .orange, isOn: $settings.screenshotsToTray)
+                }
             }
             SettingsSection(title: "In the tray") {
                 HStack(spacing: 16) {

@@ -41,6 +41,9 @@ final class PermissionStatus: ObservableObject {
                           DeviceBatteryMonitor.shared.objectWillChange)
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        ScreenshotWatcher.shared.objectWillChange
+            .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &cancellables)
     }
 
     var privacy: [Item] {
@@ -59,7 +62,26 @@ final class PermissionStatus: ObservableObject {
                  action: camera.requestAccess),
             Item(title: "Bluetooth", purpose: "Battery levels of AirPods, keyboards and mice", symbol: "airpodspro",
                  tint: .blue, state: devices.isAuthorized ? .granted : .notDetermined, action: devices.requestAccess),
-        ]
+        ] + (AppSettings.shared.screenshotsToTray ? [screenshotsItem] : [])
+    }
+
+    /// Reading the folder screenshots are saved to. macOS asks for the Desktop, Documents and Downloads.
+    private var screenshotsItem: Item {
+        let watcher = ScreenshotWatcher.shared
+        let state: State
+        switch watcher.access {
+        case .granted: state = .granted
+        case .denied: state = .denied
+        case .unknown: state = .notDetermined
+        }
+        return Item(title: "Screenshots folder", purpose: "New screenshots in the Tray (\(ScreenshotWatcher.folderNames))",
+                    symbol: "camera.viewfinder", tint: .orange, state: state) {
+            if watcher.access == .denied {
+                CalendarService.openPrivacySettings("Privacy_FilesAndFolders")
+            } else {
+                watcher.restart()
+            }
+        }
     }
 
     var automationItems: [Item] {
