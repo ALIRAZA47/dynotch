@@ -7,3 +7,5 @@ build/
 media/*.mp4
 # Agent worktrees.
 .claude/worktrees/
+# Release packages from scripts/package.sh.
+dist/

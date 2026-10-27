@@ -6,7 +6,7 @@ Hover the notch (or swipe down on the trackpad) and it opens into a panel with
 your music, files, calendar, a focus timer and more. When it's closed, live activities
 show up beside the camera.
 
-It's a native SwiftUI + AppKit app, about 5,800 lines of Swift, with no third-party
+It's a native SwiftUI + AppKit app, about 17,700 lines of Swift, with no third-party
 dependencies.
 
 ## Features
@@ -32,6 +32,56 @@ dependencies.
 | **App** | Menu bar icon, Settings window (General, Appearance, Live Activities, Nook & Widgets, Tray, Focus Timer, Permissions, About), launch at login. Runs as an agent app with no Dock icon. |
 | **Welcome tour** | On first launch, four short steps: how to open the notch and what shows beside the camera, what's new, the permissions worth allowing (each with its status and an Allow or Open System Settings button), and where things are. **Settings → About** and **Welcome Tour…** in the menu bar menu bring it back. |
 
+## Install
+
+Dynotch needs macOS 14 or later. It's made for MacBooks with a notch, and draws a virtual
+one on displays without.
+
+1. Download `Dynotch-<version>.dmg` from
+   [Releases](https://github.com/ALIRAZA47/dynotch/releases/latest). The repository is
+   private, so sign in to GitHub with an account that can see it. Or use the
+   [GitHub CLI](https://cli.github.com):
+
+   ```bash
+   gh release download --repo ALIRAZA47/dynotch --pattern '*.dmg'
+   ```
+
+2. Open the DMG and drag **Dynotch** onto **Applications**.
+3. Open Dynotch from Applications. It isn't notarized by Apple, so the first time, macOS
+   says it can't check it for malicious software. Click **Done**, open **System Settings →
+   Privacy & Security**, and under **Security** click **Open Anyway** next to the message
+   about Dynotch. Or remove the download mark in Terminal instead:
+
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Dynotch.app
+   ```
+
+   A DMG fetched with `gh` doesn't carry that mark, so macOS doesn't ask.
+4. Dynotch lives in the notch and the menu bar, with no Dock icon. On first launch the
+   welcome tour walks through the permissions worth allowing; **Settings → Permissions**
+   lists them all.
+
+To use the `dynotch` command from Terminal, see [Scripting](#scripting).
+
+**Updating.** Quit Dynotch from its menu bar icon and replace the app in Applications with
+the new one. Settings, notes and Tray files stay. So do the permissions you gave it:
+releases are signed with the same certificate, so macOS sees the same app.
+
+**Uninstalling.**
+
+1. If **Launch at login** is on, turn it off in **Settings → General** first.
+2. Quit Dynotch and move it from Applications to the Trash.
+3. To remove what it saved as well (this deletes the notes and Tray files kept there):
+
+   ```bash
+   rm -rf ~/Library/Application\ Support/Dynotch ~/Library/Logs/Dynotch
+   defaults delete app.dynotch.Dynotch
+   ```
+
+   Notes you moved to iCloud Drive stay in its **Dynotch Notes** folder.
+4. The permissions you gave it stay listed in **System Settings → Privacy & Security**
+   until you remove them there.
+
 ## Build and run
 
 Requires macOS 14 or later and the Swift toolchain (Xcode or the Command Line Tools).
@@ -49,6 +99,10 @@ Run `./scripts/make-signing-identity.sh` once first. It creates a self-signed
 "Dynotch Local Signing" certificate in your login keychain, and `build.sh` signs
 with it, so macOS keeps Dynotch's permissions across rebuilds. Without it, the
 app is signed ad hoc, which looks like a new app to macOS after every build.
+
+`./scripts/package.sh` builds and signs a release and puts `Dynotch-<version>.dmg` and a
+`.zip` of the app in `dist/`, with their SHA-256 checksums. The version comes from
+`Support/Info.plist`.
 
 For development, `swift build` and `.build/debug/Dynotch` also work.
 `Dynotch --snapshot <folder>` renders every notch state with sample data to PNGs,
