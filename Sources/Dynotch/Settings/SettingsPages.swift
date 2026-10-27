@@ -208,8 +208,8 @@ struct AppearanceSettings: View {
     @ObservedObject private var settings = AppSettings.shared
 
     private let style = [
-        SwitchOption(title: "Artwork tint", detail: "Color the player with the album art's color", symbol: "paintpalette.fill",
-                     tint: Palette.magenta, setting: \.artworkTint),
+        SwitchOption(title: "Artwork tint", detail: "Color the player with the album art instead of the accent",
+                     symbol: "paintpalette.fill", tint: Palette.magenta, setting: \.artworkTint),
         SwitchOption(title: "Shadow", detail: "A soft shadow under the open notch", symbol: "square.2.layers.3d.bottom.filled",
                      tint: Palette.indigo, setting: \.showOpenShadow),
     ]
@@ -227,6 +227,10 @@ struct AppearanceSettings: View {
                               format: points, spoken: spokenPoints)
                 }
             }
+            ThemeSettings()
+            SettingsSection(title: "Style") {
+                SwitchGrid(options: style)
+            }
             SettingsSection(title: "Virtual notch", footer: "Used on displays without a camera notch.") {
                 SettingsCard {
                     VirtualNotchSketch(width: settings.virtualNotchWidth)
@@ -236,10 +240,143 @@ struct AppearanceSettings: View {
                               format: points, spoken: spokenPoints)
                 }
             }
-            SettingsSection(title: "Style") {
-                SwitchGrid(options: style)
+        }
+    }
+}
+
+/// The open notch's material, accent color and corners. The header above shows each change.
+private struct ThemeSettings: View {
+    @ObservedObject private var settings = AppSettings.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 26) {
+            SettingsSection(title: "Material",
+                            footer: "The closed notch stays black either way, so it blends with the camera housing.") {
+                HStack(spacing: 10) {
+                    ForEach(NotchMaterial.allCases) { material in
+                        let isAvailable = material != .glass || NotchMaterial.isGlassAvailable
+                        ChoiceTile(title: material.title, detail: detail(for: material, isAvailable: isAvailable),
+                                   isSelected: settings.notchMaterial == material) {
+                            settings.notchMaterial = material
+                        } art: {
+                            MaterialArt(material: material)
+                        }
+                        .disabled(!isAvailable)
+                        .opacity(isAvailable ? 1 : 0.5)
+                    }
+                }
+            }
+            SettingsSection(title: "Accent color", trailing: settings.notchAccent.title,
+                            footer: "For the selected tab, selections and buttons, and for the player while Artwork tint is off.") {
+                AccentPicker(selection: $settings.notchAccent)
+            }
+            SettingsSection(title: "Corners", footer: "The cards inside the open notch round off with its bottom corners.") {
+                SettingsCard {
+                    SliderRow(title: "Top", spokenTitle: "Top corners", value: $settings.notchTopRadius,
+                              range: Double(NotchTheme.topRadiusRange.lowerBound)...Double(NotchTheme.topRadiusRange.upperBound),
+                              step: 1, format: points, spoken: spokenPoints)
+                    CardDivider()
+                    SliderRow(title: "Bottom", spokenTitle: "Bottom corners", value: $settings.notchBottomRadius,
+                              range: Double(NotchTheme.bottomRadiusRange.lowerBound)...Double(NotchTheme.bottomRadiusRange.upperBound),
+                              step: 1, format: points, spoken: spokenPoints)
+                }
             }
         }
+    }
+
+    private func detail(for material: NotchMaterial, isAvailable: Bool) -> String {
+        switch material {
+        case .black: "Like the camera housing"
+        case .glass: isAvailable ? "See the desktop through it" : "Needs macOS 26 or later"
+        }
+    }
+}
+
+/// A strip of desktop with an open notch hanging from it, black or glass.
+private struct MaterialArt: View {
+    let material: NotchMaterial
+
+    var body: some View {
+        let shape = NotchShape(topRadius: 3, bottomRadius: 9)
+        ZStack(alignment: .top) {
+            LinearGradient(colors: [Color(red: 0.36, green: 0.52, blue: 0.86), Color(red: 0.86, green: 0.55, blue: 0.62)],
+                           startPoint: .leading, endPoint: .trailing)
+            Rectangle().fill(.white.opacity(0.5)).frame(height: 7)
+            Group {
+                if material == .glass, !NotchMaterial.isGlassAvailable {
+                    shape.fill(.white.opacity(0.3))
+                } else {
+                    NotchSurface(isGlass: material == .glass, topRadius: 3, bottomRadius: 9, bandHeight: 7)
+                }
+            }
+            .clipShape(shape)
+            .overlay(alignment: .top) {
+                // A tab and a card, so the material reads as the notch.
+                HStack(spacing: 3) {
+                    Capsule().fill(.white.opacity(0.85)).frame(width: 9, height: 3)
+                    Capsule().fill(.white.opacity(0.3)).frame(width: 5, height: 3)
+                }
+                .padding(.top, 5)
+            }
+            .frame(width: 58, height: 26)
+        }
+        .frame(width: 86, height: 34)
+        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .accessibilityHidden(true)
+    }
+}
+
+/// The accent colors as a row of swatches, as in System Settings.
+private struct AccentPicker: View {
+    @Binding var selection: NotchAccent
+
+    var body: some View {
+        HStack(spacing: 10) {
+            ForEach(NotchAccent.allCases) { accent in
+                AccentSwatch(accent: accent, isSelected: selection == accent) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { selection = accent }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 11)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CardBackground())
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Accent color")
+    }
+}
+
+private struct AccentSwatch: View {
+    let accent: NotchAccent
+    let isSelected: Bool
+    let action: () -> Void
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Circle()
+                .fill(accent.color.gradient)
+                .overlay(Circle().strokeBorder(.black.opacity(0.12)))
+                .overlay {
+                    if isSelected {
+                        Circle().fill(.white).frame(width: 7, height: 7)
+                            .shadow(color: .black.opacity(0.25), radius: 1)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                .frame(width: 22, height: 22)
+                .padding(3)
+                .overlay(Circle().strokeBorder(accent.color.opacity(isSelected ? 0.9 : hovering ? 0.35 : 0), lineWidth: 2))
+                .contentShape(Circle())
+        }
+        .buttonStyle(PressableButtonStyle(scale: 0.9))
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+        .help(accent.title)
+        .accessibilityLabel(accent.title)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
 

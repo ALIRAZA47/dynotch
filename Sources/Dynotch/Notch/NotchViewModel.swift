@@ -10,9 +10,6 @@ struct NotchMetrics: Equatable {
     var bottomRadius: CGFloat
 
     var outerWidth: CGFloat { width + topRadius * 2 }
-
-    static let openTopRadius: CGFloat = 12
-    static let openBottomRadius: CGFloat = 26
 }
 
 /// The closed notch: the hardware cutout in the middle, with matching "ears"
@@ -160,16 +157,16 @@ final class NotchViewModel: ObservableObject {
         let settings = AppSettings.shared
         switch phase {
         case .open:
+            let theme = settings.theme
             return NotchMetrics(width: settings.openWidth, height: settings.openHeight,
-                                topRadius: NotchMetrics.openTopRadius, bottomRadius: NotchMetrics.openBottomRadius)
+                                topRadius: theme.topRadius, bottomRadius: theme.bottomRadius)
         case .closed, .hovering:
             let layout = closedLayout
             let hovering = phase == .hovering
-            let tall = layout.rowHeight > 0
             return NotchMetrics(width: layout.totalWidth + (hovering ? 14 : 0),
                                 height: layout.totalHeight + (hovering ? 3 : 0),
-                                topRadius: 6,
-                                bottomRadius: tall ? 16 : (hovering ? 12 : 10))
+                                topRadius: NotchTheme.closedTopRadius,
+                                bottomRadius: NotchTheme.closedBottomRadius(hasRow: layout.rowHeight > 0, isHovering: hovering))
         }
     }
 

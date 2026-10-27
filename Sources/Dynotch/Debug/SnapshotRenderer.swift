@@ -22,6 +22,8 @@ enum SnapshotRenderer {
         var hasTimers = true
         var downloadKnowsSize = true
         var focus: FocusMode?
+        /// A look other than the user's, for this scene only.
+        var theme: NotchTheme?
         /// More sample state for this scene; `resetAudioSamples` undoes it before the next one.
         var setUp: (@MainActor () -> Void)?
         /// Sample state for this scene. Scenes after it keep it.
@@ -72,6 +74,14 @@ enum SnapshotRenderer {
             Scene(name: "13-open-tray-dropping", phase: .open, tab: .tray, draggingFiles: true),
             Scene(name: "14-open-focus", phase: .open, tab: .focus),
             Scene(name: "15-open-stats", phase: .open, tab: .stats),
+            // Themes
+            Scene(name: "16-open-nook-glass", phase: .open, tab: .home, theme: NotchTheme(material: .glass)),
+            Scene(name: "17-open-focus-glass", phase: .open, tab: .focus, theme: NotchTheme(material: .glass)),
+            Scene(name: "18-open-stats-pink-round", phase: .open, tab: .stats,
+                  theme: NotchTheme(accent: .pink, topRadius: 18, bottomRadius: 40)),
+            Scene(name: "19-open-tray-teal-square", phase: .open, tab: .tray,
+                  theme: NotchTheme(accent: .teal, topRadius: 8, bottomRadius: 18),
+                  setUp: { TrayStore.shared.select(TrayStore.shared.items[1]) }),
             Scene(name: "20-closed-timer-and-music", phase: .closed, activity: .timer, secondary: .music),
             Scene(name: "21-closed-volume-and-timer", phase: .closed, activity: .notice(volume), secondary: .timer),
             Scene(name: "22-closed-track-peek-and-timer", phase: .closed, activity: .trackPeek, secondary: .timer),
@@ -136,12 +146,30 @@ enum SnapshotRenderer {
             },
             Scene(name: "95-closed-rain", phase: .closed, activity: .notice(LiveNotice(
                 key: "rain", symbol: "cloud.rain.fill", tint: .cyan, text: "in 15m", detail: "Rain starting soon"))),
+            // The other widgets beside the player, busy cards and empty ones. These change the samples, so they go last.
+            Scene(name: "96-open-nook-timer-toggles", phase: .open, tab: .home, prepare: {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.timer, .toggles)
+            }),
+            Scene(name: "97-open-focus-busy", phase: .open, tab: .focus, setUp: {
+                TimerStore.shared.start("pizza 12m")
+            }, prepare: loadBusySamples),
+            Scene(name: "98-open-nook-shortcuts-calendar", phase: .open, tab: .home, prepare: {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.shortcuts, .calendar)
+                AppSettings.shared.pinnedShortcuts = ["Morning routine", "Log a glass of water", "Focus playlist"]
+            }),
+            Scene(name: "99-open-focus-empty", phase: .open, tab: .focus, hasTimers: false, prepare: {
+                CalendarService.shared.loadSample(events: [], reminders: [])
+                NotesStore.shared.loadSample([""])
+            }),
         ]
 
         let settings = AppSettings.shared
-        let size = CGSize(width: settings.openWidth + NotchMetrics.openTopRadius * 2 + 80, height: settings.openHeight + 40)
+        let size = CGSize(width: settings.openWidth + NotchTheme.standard.topRadius * 2 + 80, height: settings.openHeight + 40)
         let savedWidgets = (settings.homeWidgetA, settings.homeWidgetB)
+        let savedShortcuts = settings.pinnedShortcuts
+        let savedTheme = settings.theme
         for scene in scenes {
+            apply(scene.theme ?? savedTheme)
             scene.prepare?()
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
             resetAudioSamples()
@@ -167,8 +195,21 @@ enum SnapshotRenderer {
             try? png.write(to: folder.appendingPathComponent(scene.name + ".png"))
         }
         (settings.homeWidgetA, settings.homeWidgetB) = savedWidgets
+        if settings.pinnedShortcuts != savedShortcuts { settings.pinnedShortcuts = savedShortcuts }
+        apply(savedTheme)
         print("Wrote \(scenes.count) snapshots to \(folder.path)")
         renderSettings(into: folder)
+        renderThemes(into: folder)
+    }
+
+    /// Puts a theme in the settings, where the notch reads it. Only writes what differs.
+    private static func apply(_ theme: NotchTheme) {
+        let settings = AppSettings.shared
+        guard settings.theme != theme else { return }
+        settings.notchMaterial = theme.material
+        settings.notchAccent = theme.accentChoice
+        settings.notchTopRadius = theme.topRadius
+        settings.notchBottomRadius = theme.bottomRadius
     }
 
     // MARK: Settings
@@ -238,6 +279,34 @@ enum SnapshotRenderer {
             window.close()
         }
         print("Wrote \(count) live activity previews to \(folder.path)")
+    }
+
+    /// The Appearance page with other themes, so its header's model notch shows them, glass included.
+    private static func renderThemes(into folder: URL) {
+        let savedTheme = AppSettings.shared.theme
+        let looks: [(name: String, appearance: NSAppearance.Name, theme: NotchTheme)] = [
+            ("glass-dark", .darkAqua, NotchTheme(material: .glass, accent: .pink, topRadius: 16, bottomRadius: 38)),
+            ("glass-light", .aqua, NotchTheme(material: .glass, accent: .teal, topRadius: 8, bottomRadius: 20)),
+            ("graphite-dark", .darkAqua, NotchTheme(accent: .graphite, topRadius: 20, bottomRadius: 24)),
+        ]
+        var count = 0
+        for (index, look) in looks.enumerated() {
+            apply(look.theme)
+            let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
+                                         styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
+            let navigation = SettingsNavigation()
+            navigation.page = .appearance
+            SettingsWindowController.configure(window, navigation: navigation)
+            window.appearance = NSAppearance(named: look.appearance)
+            window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -40_000))
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: .now + 1.2)
+            if save(window, to: folder.appendingPathComponent("settings-2-appearance-\(look.name).png")) { count += 1 }
+            window.orderOut(nil)
+            window.close()
+        }
+        apply(savedTheme)
+        print("Wrote \(count) theme previews to \(folder.path)")
     }
 
     /// Writes the window to a PNG, trying again if the window server hands back a blank frame.
@@ -342,6 +411,30 @@ enum SnapshotRenderer {
             FileManager.default.createFile(atPath: url.path, contents: Data())
         }
         TrayStore.shared.loadSample(urls)
+    }
+
+    /// A day with more events and reminders than the cards have room for, and a long title or two.
+    private static func loadBusySamples() {
+        let now = Date.now
+        func at(_ minutes: Double) -> Date { now.addingTimeInterval(minutes * 60) }
+        CalendarService.shared.loadSample(
+            events: [
+                .init(id: "1", title: "Design review", start: at(12), end: at(57), isAllDay: false, color: .orange,
+                      meetingURL: URL(string: "https://meet.google.com/abc-defg-hij")),
+                .init(id: "2", title: "Lunch with Sam", start: at(140), end: at(200), isAllDay: false, color: .green, meetingURL: nil),
+                .init(id: "4", title: "Quarterly planning with the whole product team", start: at(215), end: at(275),
+                      isAllDay: false, color: .blue, meetingURL: nil),
+                .init(id: "5", title: "Yoga", start: at(300), end: at(360), isAllDay: false, color: .purple, meetingURL: nil),
+            ],
+            reminders: [
+                .init(id: "a", title: "Send the invoice", dueDate: at(90), color: .orange),
+                .init(id: "d", title: "Call the landlord about the leaking kitchen tap before the weekend", dueDate: at(-1500),
+                      color: .red),
+                .init(id: "b", title: "Book flights for March", dueDate: Calendar.current.date(byAdding: .day, value: 1, to: now),
+                      color: .blue),
+                .init(id: "c", title: "Water the plants", dueDate: nil, color: .green),
+                .init(id: "e", title: "Renew the passport", dueDate: nil, color: .purple),
+            ])
     }
 
     private static let samplePairedDevices: [DeviceBatteryMonitor.PairedDevice] = [

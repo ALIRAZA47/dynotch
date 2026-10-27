@@ -1,82 +1,100 @@
 import SwiftUI
 
-/// The player on the Nook tab: artwork, track, scrubber and transport controls.
+/// The player on the Nook tab: artwork, track, scrubber and transport controls. It fills the
+/// height of the cards beside it: the artwork lines up with their tops, the controls with their bottoms.
 struct MediaPlayerView: View {
     @ObservedObject private var media = NowPlayingService.shared
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var outputs = AudioOutputs.shared
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
-        player
-            .opacity(outputs.isPickerShown ? 0 : 1)
-            .allowsHitTesting(!outputs.isPickerShown)
-            .frame(maxHeight: .infinity)
-            .overlay {
-                if outputs.isPickerShown {
-                    OutputPicker(tint: tint)
-                        .transition(.opacity.combined(with: .scale(scale: 0.97)))
-                }
+        GeometryReader { proxy in
+            player(artwork: Self.artworkSide(for: proxy.size.height))
+        }
+        .opacity(outputs.isPickerShown ? 0 : 1)
+        .allowsHitTesting(!outputs.isPickerShown)
+        .frame(maxHeight: .infinity)
+        .overlay {
+            if outputs.isPickerShown {
+                OutputPicker(tint: tint)
+                    .transition(.opacity.combined(with: .scale(scale: 0.97)))
             }
-            .onDisappear { outputs.isPickerShown = false }
+        }
+        .onDisappear { outputs.isPickerShown = false }
+    }
+
+    /// As large as the height allows once the scrubber and the controls have their room.
+    static func artworkSide(for height: CGFloat) -> CGFloat {
+        min(96, max(64, (height - 62).rounded()))
     }
 
     @ViewBuilder
-    private var player: some View {
+    private func player(artwork side: CGFloat) -> some View {
         if let track = media.track {
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(alignment: .top, spacing: 13) {
-                    ArtworkView(image: media.artwork, size: 84, cornerRadius: 14, glow: settings.artworkTint ? tint : nil)
-                        .overlay { ArtworkVolumeOverlay(cornerRadius: 14) }
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(alignment: .top, spacing: 12) {
+                    ArtworkView(image: media.artwork, size: side, cornerRadius: theme.cardRadius,
+                                glow: settings.artworkTint ? tint : nil)
+                        .overlay { ArtworkVolumeOverlay(cornerRadius: theme.cardRadius) }
                         .overlay(alignment: .bottomTrailing) { playerBadge }
                         .overlay {
                             if !outputs.isPickerShown { VolumeScrollArea() }
                         }
                         .onTapGesture { media.openPlayer() }
                         .help("Open \(media.player?.name ?? "player"). Scroll to change the volume.")
-                    VStack(alignment: .leading, spacing: 3) {
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(track.title)
-                                .font(.system(size: 15, weight: .semibold))
-                                .lineLimit(1)
-                            Spacer(minLength: 0)
-                            if let favorite = media.isFavorite {
-                                Button(action: media.toggleFavorite) {
-                                    Image(systemName: favorite ? "star.fill" : "star")
-                                        .font(.system(size: 12, weight: .semibold))
-                                        .foregroundStyle(favorite ? tint : Color.notchTertiary)
-                                        .contentTransition(.symbolEffect(.replace))
-                                }
-                                .buttonStyle(PressableButtonStyle())
-                                .help(favorite ? "Remove from favorites" : "Favorite")
-                            }
-                            OutputButton(tint: tint)
-                        }
-                        Text(track.artist.isEmpty ? " " : track.artist)
-                            .font(.system(size: 12.5))
-                            .foregroundStyle(Color.notchSecondary)
-                            .lineLimit(1)
-                        if !track.album.isEmpty {
-                            Text(track.album)
-                                .font(.system(size: 11))
-                                .foregroundStyle(Color.notchTertiary)
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 0)
-                        AudioBars(isPlaying: media.isPlaying, color: tint)
-                            .frame(width: 22, height: 14)
-                    }
-                    .frame(height: 84)
+                    details(track)
+                        .frame(height: side)
                 }
+                Spacer(minLength: 6)
                 PlaybackScrubber(tint: tint)
+                Spacer(minLength: 4)
                 transport
             }
         } else {
-            EmptyPlayerView()
+            EmptyPlayerView(artwork: side)
         }
     }
 
+    private func details(_ track: NowPlayingService.Track) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(track.title)
+                    .font(NotchFont.title)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .help(track.title)
+                if let favorite = media.isFavorite {
+                    Button(action: media.toggleFavorite) {
+                        Image(systemName: favorite ? "star.fill" : "star")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(favorite ? tint : theme.tertiary)
+                            .contentTransition(.symbolEffect(.replace))
+                    }
+                    .buttonStyle(PressableButtonStyle())
+                    .help(favorite ? "Remove from favorites" : "Favorite")
+                }
+                OutputButton(tint: tint)
+            }
+            Text(track.artist.isEmpty ? " " : track.artist)
+                .font(NotchFont.subheadline)
+                .foregroundStyle(theme.secondary)
+                .lineLimit(1)
+            if !track.album.isEmpty {
+                Text(track.album)
+                    .font(NotchFont.footnote)
+                    .foregroundStyle(theme.tertiary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            AudioBars(isPlaying: media.isPlaying, color: tint)
+                .frame(width: 22, height: 14)
+        }
+    }
+
+    /// The album art's color, or the accent while Artwork tint is off.
     private var tint: Color {
-        settings.artworkTint ? Color(nsColor: media.accent) : .white
+        settings.artworkTint ? Color(nsColor: media.accent) : theme.accent
     }
 
     @ViewBuilder
@@ -114,6 +132,7 @@ struct MediaPlayerView: View {
 struct PlaybackScrubber: View {
     var tint: Color
     @ObservedObject private var media = NowPlayingService.shared
+    @Environment(\.notchTheme) private var theme
     @ViewState private var dragFraction: Double?
     @ViewState private var hovering = false
 
@@ -127,9 +146,9 @@ struct PlaybackScrubber: View {
                     .frame(width: 34, alignment: .leading)
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Color.white.opacity(0.18))
+                        Capsule().fill(theme.track)
                         Capsule()
-                            .fill(dragFraction == nil ? Color.white : tint)
+                            .fill(dragFraction == nil ? theme.primary : tint)
                             .frame(width: max(0, proxy.size.width * min(1, fraction)))
                     }
                     .frame(height: hovering || dragFraction != nil ? 7 : 4)
@@ -151,9 +170,8 @@ struct PlaybackScrubber: View {
                 Text(duration > 0 ? "-" + Format.duration(max(0, duration - elapsed)) : "LIVE")
                     .frame(width: 40, alignment: .trailing)
             }
-            .font(.system(size: 10.5, weight: .medium, design: .rounded))
-            .monospacedDigit()
-            .foregroundStyle(Color.notchSecondary)
+            .font(NotchFont.numeric(10.5, .medium))
+            .foregroundStyle(theme.secondary)
             .animation(.easeOut(duration: 0.15), value: hovering)
         }
     }
@@ -161,22 +179,26 @@ struct PlaybackScrubber: View {
 
 /// Nothing is playing: offer to start Music or Spotify.
 private struct EmptyPlayerView: View {
+    let artwork: CGFloat
+    @Environment(\.notchTheme) private var theme
+
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: 12) {
             ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous)
                     .fill(LinearGradient(colors: [Color(white: 0.2), Color(white: 0.11)], startPoint: .top, endPoint: .bottom))
+                    .overlay(RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous).strokeBorder(theme.cardStroke))
                 Image(systemName: "music.note")
-                    .font(.system(size: 30, weight: .medium))
-                    .foregroundStyle(Color.white.opacity(0.35))
+                    .font(.system(size: artwork * 0.34, weight: .medium))
+                    .foregroundStyle(theme.tertiary)
             }
-            .frame(width: 84, height: 84)
+            .frame(width: artwork, height: artwork)
             VStack(alignment: .leading, spacing: 4) {
                 Text("Nothing playing")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(NotchFont.title)
                 Text("Play something in Music or Spotify and it shows up here.")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(Color.notchSecondary)
+                    .font(NotchFont.footnote)
+                    .foregroundStyle(theme.secondary)
                     .fixedSize(horizontal: false, vertical: true)
                 HStack(spacing: 6) {
                     ForEach(NowPlayingService.Player.allCases.filter(\.isInstalled), id: \.self) { player in
@@ -185,10 +207,10 @@ private struct EmptyPlayerView: View {
                         }
                     }
                 }
-                .padding(.top, 4)
+                .padding(.top, 6)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .overlay(alignment: .topTrailing) { OutputButton(tint: .white).padding(.top, 4) }
+        .overlay(alignment: .topTrailing) { OutputButton(tint: theme.accent).padding(.top, 4) }
     }
 }

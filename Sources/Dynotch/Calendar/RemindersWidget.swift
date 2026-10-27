@@ -5,53 +5,33 @@ struct RemindersWidget: View {
     @ObservedObject private var calendar = CalendarService.shared
     @ViewState private var draft = ""
     @ViewState private var completing: Set<String> = []
-    @Environment(\.isSnapshot) private var isSnapshot
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         WidgetCard(title: "Reminders", symbol: "checklist") {
             if calendar.hasReminderAccess && !calendar.reminders.isEmpty {
                 Text("\(calendar.reminders.count)")
-                    .font(.system(size: 9.5, weight: .bold, design: .rounded))
+                    .font(NotchFont.numeric(9.5, .bold))
             }
         } content: {
             if calendar.hasReminderAccess {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     if calendar.reminders.isEmpty {
-                        Text("All done 🎉")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.notchTertiary)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        EmptyState(symbol: "checkmark.circle", message: "All done")
                     } else {
-                        Scroller(.vertical) {
-                            VStack(alignment: .leading, spacing: 6) {
+                        Scroller(.vertical, fadesOverflow: true) {
+                            VStack(alignment: .leading, spacing: 3) {
                                 ForEach(calendar.reminders) { reminder in
                                     row(reminder)
                                 }
                             }
                         }
+                        .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
                     }
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(Color.notchTertiary)
-                        if isSnapshot {
-                            Text("New reminder")
-                                .font(.system(size: 11.5))
-                                .foregroundStyle(Color.notchTertiary)
-                        } else {
-                            TextField("New reminder", text: $draft)
-                                .textFieldStyle(.plain)
-                                .font(.system(size: 11.5))
-                                .onSubmit {
-                                    calendar.addReminder(titled: draft)
-                                    draft = ""
-                                }
-                        }
-                        Spacer(minLength: 0)
+                    CardField(placeholder: "New reminder", text: $draft) {
+                        calendar.addReminder(titled: draft)
+                        draft = ""
                     }
-                    .padding(.horizontal, 8)
-                    .frame(height: 24)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.07)))
                 }
             } else {
                 PermissionPrompt(symbol: "checklist", message: "Check off your reminders from the notch.",
@@ -62,7 +42,7 @@ struct RemindersWidget: View {
 
     private func row(_ reminder: CalendarService.Reminder) -> some View {
         let done = completing.contains(reminder.id)
-        return HStack(alignment: .top, spacing: 7) {
+        return HStack(alignment: .top, spacing: 6) {
             Button {
                 withAnimation(.spring(response: 0.25, dampingFraction: 0.7)) { _ = completing.insert(reminder.id) }
                 Task {
@@ -73,23 +53,31 @@ struct RemindersWidget: View {
             } label: {
                 Image(systemName: done ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(done ? reminder.color : Color.white.opacity(0.45))
+                    .foregroundStyle(done ? reminder.color : theme.secondary)
+                    .contentTransition(.symbolEffect(.replace))
+                    // As tall as the title's first line, so the circle sits beside it.
+                    .frame(height: 14)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(PressableButtonStyle())
+            .help("Complete")
             VStack(alignment: .leading, spacing: 0) {
                 Text(reminder.title)
-                    .font(.system(size: 11.5))
+                    .font(NotchFont.body)
                     .strikethrough(done)
-                    .foregroundStyle(done ? Color.notchTertiary : Color.white)
+                    .foregroundStyle(done ? theme.tertiary : theme.primary)
                     .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
                 if let due = reminder.dueDate {
                     Text(dueText(due))
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(due < .now ? Color.red : Color.notchTertiary)
+                        .font(NotchFont.caption)
+                        .foregroundStyle(due < .now ? Color.red : theme.tertiary)
+                        .lineLimit(1)
                 }
             }
-            Spacer(minLength: 0)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .help(reminder.title)
     }
 
     private func dueText(_ date: Date) -> String {

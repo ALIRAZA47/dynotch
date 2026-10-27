@@ -5,15 +5,17 @@ struct NotchRootView: View {
     @ObservedObject var viewModel: NotchViewModel
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var mic = MicMonitor.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let metrics = viewModel.metrics
+        let theme = settings.theme
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
                 if viewModel.isOpen {
                     OpenNotchView(viewModel: viewModel)
                         .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .scale(scale: 0.92, anchor: .top))
+                            insertion: (reduceMotion ? AnyTransition.opacity : .opacity.combined(with: .scale(scale: 0.92, anchor: .top)))
                                 .animation(.spring(response: 0.4, dampingFraction: 0.82).delay(0.04)),
                             removal: .opacity.animation(.easeOut(duration: 0.1))))
                 } else {
@@ -25,7 +27,8 @@ struct NotchRootView: View {
             }
             .frame(width: metrics.width, height: metrics.height, alignment: .top)
             .padding(.horizontal, metrics.topRadius)
-            .background(Color.black)
+            .background(NotchSurface(isGlass: viewModel.isOpen && theme.isGlass, topRadius: metrics.topRadius,
+                                     bottomRadius: metrics.bottomRadius, bandHeight: viewModel.geometry.closedSize.height))
             .clipShape(NotchShape(topRadius: metrics.topRadius, bottomRadius: metrics.bottomRadius))
             .overlay {
                 if let color = onAirColor {
@@ -35,11 +38,15 @@ struct NotchRootView: View {
                                                 removal: .opacity.animation(.easeOut(duration: 0.2))))
                 }
             }
-            .shadow(color: .black.opacity(viewModel.isOpen && settings.showOpenShadow ? 0.5 : 0), radius: 18, y: 8)
+            // Glass carries a lighter shadow: a heavy one shows through it.
+            .shadow(color: .black.opacity(viewModel.isOpen && settings.showOpenShadow ? (theme.isGlass ? 0.3 : 0.5) : 0),
+                    radius: 18, y: 8)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .environment(\.colorScheme, .dark)
+        .environment(\.notchTheme, theme)
+        .tint(theme.accent)
     }
 
     /// Green while a camera is on, orange while only the microphone is. The closed notch only.
@@ -73,6 +80,7 @@ struct ClosedNotchView: View {
     @ObservedObject private var media = NowPlayingService.shared
     @ObservedObject private var timer = PomodoroTimer.shared
     @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         let layout = viewModel.closedLayout
@@ -106,7 +114,7 @@ struct ClosedNotchView: View {
     }
 
     private var tint: Color {
-        settings.artworkTint ? Color(nsColor: media.accent) : .white
+        settings.artworkTint ? Color(nsColor: media.accent) : theme.accent
     }
 
     @ViewBuilder

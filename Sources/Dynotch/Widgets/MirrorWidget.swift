@@ -73,38 +73,44 @@ final class CameraService: ObservableObject {
 
 struct MirrorWidget: View {
     @ObservedObject private var camera = CameraService.shared
+    @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous)
         ZStack {
             if camera.isRunning {
                 CameraPreview(session: camera.session)
                     .transition(.opacity)
             } else {
-                VStack(spacing: 8) {
+                VStack(spacing: 6) {
                     Image(systemName: "person.crop.square")
-                        .font(.system(size: 26, weight: .regular))
+                        .font(.system(size: 24, weight: .regular))
+                        .foregroundStyle(hovering ? theme.primary : theme.secondary)
+                        .frame(height: 28)
                     Text("Mirror")
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(NotchFont.headline)
+                        .foregroundStyle(theme.primary.opacity(hovering ? 1 : 0.85))
                     Text("Check yourself before a call")
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.notchTertiary)
+                        .font(NotchFont.caption)
+                        .foregroundStyle(theme.tertiary)
                         .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .foregroundStyle(Color.white.opacity(hovering ? 0.95 : 0.7))
-                .padding(8)
+                .padding(12)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.notchCard)
-        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .background(CardSurface(isHighlighted: hovering && !camera.isRunning))
+        .clipShape(shape)
+        .contentShape(shape)
         .onTapGesture {
             withAnimation(.easeInOut(duration: 0.2)) {
                 camera.isRunning ? camera.stop() : camera.start()
             }
         }
         .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: hovering)
         .onDisappear { camera.stop() }
         .help(camera.isRunning ? "Turn the mirror off" : "Turn the mirror on")
     }
