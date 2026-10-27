@@ -48,6 +48,9 @@ enum SnapshotRenderer {
                 DeviceBatteryMonitor.shared.loadSample([], paired: samplePairedDevices,
                                                        connections: ["beats": .connecting, "speaker": .failed("Not in range")])
             },
+            Scene(name: "22-open-tray-selected", phase: .open, tab: .tray) {
+                TrayStore.shared.select(TrayStore.shared.items[1])
+            },
         ]
 
         let settings = AppSettings.shared

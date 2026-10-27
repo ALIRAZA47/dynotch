@@ -603,7 +603,7 @@ struct TraySettings: View {
                               symbol: "camera.viewfinder", tint: .orange, isOn: $settings.screenshotsToTray)
                 }
             }
-            SettingsSection(title: "In the tray") {
+            SettingsSection(title: "In the tray", footer: "Click an item and press Space to preview it, as in Finder. The arrow keys move between items.") {
                 HStack(spacing: 16) {
                     FileStack(urls: Array(tray.urls.prefix(4)))
                     VStack(alignment: .leading, spacing: 2) {

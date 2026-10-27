@@ -18,6 +18,8 @@ final class TrayStore: ObservableObject {
     }
 
     @Published private(set) var items: [Item] = []
+    /// The item the space bar previews in Quick Look.
+    @Published private(set) var selection: Item.ID?
 
     /// ~/Library/Application Support/Dynotch/Tray
     let folder: URL
@@ -69,6 +71,7 @@ final class TrayStore: ObservableObject {
     }
 
     func remove(_ item: Item) {
+        if selection == item.id { selection = nil }
         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { items.removeAll { $0.id == item.id } }
         if item.isOwned { try? FileManager.default.trashItem(at: item.url, resultingItemURL: nil) }
         save()
@@ -78,8 +81,22 @@ final class TrayStore: ObservableObject {
         for item in items where item.isOwned {
             try? FileManager.default.trashItem(at: item.url, resultingItemURL: nil)
         }
+        selection = nil
         withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { items.removeAll() }
         save()
+    }
+
+    func select(_ item: Item?) {
+        selection = item?.id
+    }
+
+    /// Moves the selection to a neighbor, stopping at either end. With nothing selected, picks the first item.
+    func moveSelection(by offset: Int) {
+        guard let index = items.firstIndex(where: { $0.id == selection }) else {
+            selection = items.first?.id
+            return
+        }
+        selection = items[min(max(index + offset, 0), items.count - 1)].id
     }
 
     private func isInTrayFolder(_ url: URL) -> Bool {
