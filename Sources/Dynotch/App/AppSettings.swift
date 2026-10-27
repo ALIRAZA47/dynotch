@@ -355,6 +355,13 @@ final class AppSettings: ObservableObject {
         didSet { save("timerSound", timerSound) }
     }
 
+    // MARK: Updates
+
+    /// Ask GitHub for the newest release once a day, and say in the notch when there is one.
+    @Published var checksForUpdates: Bool = AppSettings.value("checksForUpdates", true) {
+        didSet { save("checksForUpdates", checksForUpdates) }
+    }
+
     // MARK: Notification peeks
 
     @Published var liveNotifications: Bool = AppSettings.value("liveNotifications", true) {

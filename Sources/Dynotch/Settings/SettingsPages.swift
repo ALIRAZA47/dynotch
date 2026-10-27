@@ -1225,7 +1225,7 @@ struct AboutSettings: View {
                 VStack(spacing: 3) {
                     Text("Dynotch")
                         .font(.system(size: 26, weight: .bold))
-                    Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")")
+                    Text("Version \(UpdateChecker.currentVersion)")
                         .font(.system(size: 12.5, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
@@ -1242,6 +1242,10 @@ struct AboutSettings: View {
             .padding(.vertical, 30)
             .frame(maxWidth: .infinity)
             .background(CardBackground())
+
+            SettingsSection(title: "Updates") {
+                UpdateSettings()
+            }
 
             SettingsSection(title: "Keyboard") {
                 SettingsCard {

@@ -61,6 +61,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         WeatherService.shared.start()
         LiveActivityCenter.shared.start()
         NotificationMirror.shared.start()
+        // Asks GitHub for the newest release a little after launch, once a day.
+        UpdateChecker.shared.start()
         NotchManager.shared.start()
         // Last, since reading the screenshot folder can bring up macOS's folder-access prompt.
         ScreenshotWatcher.shared.start()
@@ -131,6 +133,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         menu.addItem(item("Settings…", #selector(openSettings), key: ","))
         menu.addItem(item("About Dynotch", #selector(openAbout)))
+        menu.addItem(item("Check for Updates…", #selector(checkForUpdates)))
         menu.addItem(item("Welcome Tour…", #selector(openWelcome)))
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Dynotch", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
@@ -149,6 +152,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func openSettings() { SettingsWindowController.shared.show() }
     @objc private func openAbout() { SettingsWindowController.shared.show(page: .about) }
     @objc private func openWelcome() { WelcomeWindowController.shared.show() }
+
+    /// The About page shows the check and what it finds.
+    @objc private func checkForUpdates() {
+        SettingsWindowController.shared.show(page: .about)
+        Task { await UpdateChecker.shared.check() }
+    }
 
     @objc private func startTimer() {
         PomodoroTimer.shared.start()
@@ -221,7 +230,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate: NSMenuItemValidation {
     /// Ticks Mute Microphone while the mic is muted, and shows ⌃⌥M only while that shortcut is on.
+    /// Check for Updates names the new version once a check has found one.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(checkForUpdates) {
+            if case .available(let release) = UpdateChecker.shared.status {
+                menuItem.title = "Update to Dynotch \(release.version)…"
+            } else {
+                menuItem.title = "Check for Updates…"
+            }
+            return true
+        }
         guard menuItem.action == #selector(toggleMicMute) else { return true }
         let mic = MicMonitor.shared
         menuItem.state = mic.isMuted ? .on : .off
