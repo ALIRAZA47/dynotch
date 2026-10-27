@@ -125,6 +125,8 @@ struct GeneralSettings: View {
                 }
             }
 
+            ProfilesSection()
+
             SettingsSection(title: "App") {
                 SettingsCard {
                     LaunchAtLoginRow()

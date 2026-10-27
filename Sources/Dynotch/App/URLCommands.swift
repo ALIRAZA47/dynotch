@@ -9,6 +9,7 @@ import SwiftUI
 ///     dynotch://close
 ///     dynotch://timer/start            start, pause, toggle, reset or skip
 ///     dynotch://tray/add?path=/a/file&path=/another/file&show=1
+///     dynotch://profile?name=Work      switches to a saved profile
 @MainActor
 enum URLCommands {
     static func handle(_ url: URL) {
@@ -36,6 +37,8 @@ enum URLCommands {
                 .filter { FileManager.default.fileExists(atPath: $0.path) }
             TrayStore.shared.add(urls)
             if value("show") == "1" { NotchManager.shared.open(tab: .tray) }
+        case "profile":
+            ProfileStore.shared.switchTo(named: value("name") ?? "")
         default:
             NSLog("Dynotch: ignoring %@", url.absoluteString)
         }

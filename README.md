@@ -27,6 +27,7 @@ dependencies.
 | **Stats tab** | CPU (with a sparkline), memory, disk and network; battery levels for the Mac, AirPods (each bud and the case), keyboards, mice and more, with paired devices that aren't connected listed underneath (headphones first) and a Connect button for each; right-click a connected device to disconnect it; quick toggles for Dark Mode, Keep Awake, Mute, Color Picker (copies the hex code), Screenshot and Sleep Display. |
 | **Audio and keys** | **Live equalizer** (opt-in, macOS 14.2 or later) makes the equalizer bars follow the music: a Core Audio process tap listens to Music or Spotify, only while it plays and some bars are on screen, and splits the sound into four bands. **Replace system HUD** (opt-in) takes over the volume, mute and brightness keys so only Dynotch's meter shows, in steps of a sixteenth (a sixty-fourth with ⇧⌥), even at either end of the range. Keys Dynotch can't handle, like an output without a volume control or an external display, go to macOS as usual. Swipe two fingers sideways over the notch to skip tracks (left for next, right for previous), and scroll over the artwork in the Nook to change the volume. The output button beside the player lists the Mac's outputs (speakers, headphones, displays, Bluetooth) and switches the default output; AirPlay speakers and TVs come from AVKit's AirPlay picker in the same list. |
 | **Calendar** | A five-day strip; "in 12m" and "Now" labels; a Join button for Zoom, Meet, Teams, Webex and FaceTime links. |
+| **Profiles** | Saved setups such as Work, Home and Presenting. A profile keeps what the notch shows and how it opens: tabs, widgets, live activities (and which apps' notifications peek), size and displays. Switch from the menu bar's **Profiles** menu, **Settings → General → Profiles**, or `dynotch profile Work`. The profile that's on keeps the changes you make. A profile can switch on by itself when a Focus turns on (a particular one, or any) or when an external display connects; when that Focus ends or the display goes, the notch goes back to how it was, unless you switched profiles by hand in between. Focus rules need Full Disk Access, like the Focus activity. |
 | **App** | Menu bar icon, Settings window (General, Appearance, Live Activities, Nook & Widgets, Tray, Focus Timer, Permissions, About), launch at login. Runs as an agent app with no Dock icon. |
 
 ## Build and run
@@ -68,9 +69,10 @@ ln -s /Applications/Dynotch.app/Contents/Resources/dynotch /usr/local/bin/dynotc
 | `dynotch close` | Closes the notch. |
 | `dynotch timer start` | Controls the focus timer: `start`, `pause`, `toggle`, `reset` or `skip`. |
 | `dynotch tray --show report.pdf` | Adds files to the Tray, and opens it with `--show`. |
+| `dynotch profile Work` | Switches to a saved profile by name. The notch says which, or that there's no such profile. |
 
 Other apps can open the same links, for example
-`dynotch://notify?text=Hello&tint=orange` or `dynotch://timer/start`.
+`dynotch://notify?text=Hello&tint=orange`, `dynotch://timer/start` or `dynotch://profile?name=Work`.
 
 **When a long command finishes.** Source `notify-long-commands.zsh` (it sits next to
 `dynotch` in the app) from `~/.zshrc`. Any command that runs for 30 seconds or more
@@ -150,8 +152,8 @@ above). An ad hoc build may lose them.
   asks the private TCC framework, as other audio tools do.
 - The brightness HUD reads the built-in display's brightness through the private
   DisplayServices framework. If that's unavailable it stays quiet.
-- Not included from MacNotch: AI translation, setup profiles, and Night Shift / True Tone
-  toggles (the last two have no public API).
+- Not included from MacNotch: AI translation, and Night Shift / True Tone toggles (they have
+  no public API).
 - Notification peeks read a database that Apple doesn't document. Its location and layout
   have changed between macOS versions before; if they change again, Settings says
   notifications can't be read on that Mac.
@@ -169,6 +171,7 @@ Sources/Dynotch/
   HUD/        volume (CoreAudio) and brightness monitors, media-key tap
   Notifications/  notification peeks: Notification Center reader, settings
   Activities/ microphone and camera, downloads, Focus
+  Profiles/   saved setups and the rules that switch them
   Settings/   settings window and permissions page
   Debug/      snapshot renderer
 Support/      Info.plist, app icon

@@ -168,7 +168,53 @@ enum SnapshotRenderer {
         }
         (settings.homeWidgetA, settings.homeWidgetB) = savedWidgets
         print("Wrote \(scenes.count) snapshots to \(folder.path)")
+        loadSampleProfiles()
         renderSettings(into: folder)
+        renderProfiles(into: folder)
+    }
+
+    // MARK: Profiles
+
+    private static func loadSampleProfiles() {
+        FocusMonitor.shared.loadSample(nil, all: [
+            FocusMode(id: "dnd", name: "Do Not Disturb", symbol: "moon.fill", tint: .indigo),
+            FocusMode(id: "work", name: "Work", symbol: "briefcase.fill", tint: .teal),
+        ])
+        let values = Dictionary(uniqueKeysWithValues: ProfileSetting.all.map { ($0.key, $0.read(AppSettings.shared)) })
+        func profile(_ name: String, _ rule: Profile.Rule?) -> Profile {
+            Profile(id: UUID(), name: name, rule: rule, values: values)
+        }
+        ProfileStore.shared.loadSample([
+            profile("Work", .focus(id: "work", name: "Work")),
+            profile("Home", nil),
+            profile("Desk", .externalDisplay),
+            profile("Presenting", .focus(id: nil, name: "Any Focus")),
+        ], active: 0)
+    }
+
+    /// The General page scrolled to its Profiles section, as the menu bar's Profile Settings opens it:
+    /// with sample profiles in dark mode, and before there are any in light mode.
+    private static func renderProfiles(into folder: URL) {
+        var count = 0
+        for (index, appearance) in [NSAppearance.Name.darkAqua, .aqua].enumerated() {
+            if appearance == .aqua { ProfileStore.shared.loadSample([], active: nil) }
+            ProfileStore.shared.revealRequested = true
+            let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
+                                         styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
+            let navigation = SettingsNavigation()
+            navigation.page = .general
+            SettingsWindowController.configure(window, navigation: navigation)
+            window.appearance = NSAppearance(named: appearance)
+            window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -40_000))
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: .now + 1.5)
+            let name = appearance == .aqua ? "settings-profiles-empty-light" : "settings-profiles-dark"
+            if save(window, to: folder.appendingPathComponent(name + ".png")) { count += 1 }
+            window.orderOut(nil)
+            window.close()
+        }
+        loadSampleProfiles()
+        print("Wrote \(count) profile snapshots to \(folder.path)")
     }
 
     // MARK: Settings

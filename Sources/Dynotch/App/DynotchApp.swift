@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var hotKey: HotKey?
     private var muteHotKey: HotKey?
+    private let profilesMenu = NSMenu(title: "Profiles")
     private var cancellables = Set<AnyCancellable>()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -33,6 +34,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         NSApp.mainMenu = Self.makeMainMenu()
+        // First, so a profile a rule picks is in place before the services read their settings.
+        ProfileStore.shared.start()
         TrayStore.shared.load()
         NotesStore.shared.start()
         NowPlayingService.shared.start()
@@ -113,6 +116,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(item("Open Tray", #selector(openTray)))
         menu.addItem(item("Start Focus Timer", #selector(startTimer)))
         menu.addItem(item("Mute Microphone", #selector(toggleMicMute), key: "m", modifiers: [.control, .option]))
+        let profiles = NSMenuItem(title: "Profiles", action: nil, keyEquivalent: "")
+        profilesMenu.delegate = self
+        profiles.submenu = profilesMenu
+        menu.addItem(profiles)
         menu.addItem(.separator())
         menu.addItem(item("Settings…", #selector(openSettings), key: ","))
         menu.addItem(item("About Dynotch", #selector(openAbout)))
@@ -139,6 +146,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleMicMute() {
         MicMonitor.shared.toggleMute()
+    }
+
+    @objc private func chooseProfile(_ sender: NSMenuItem) {
+        let store = ProfileStore.shared
+        guard let id = sender.representedObject as? UUID, let profile = store.profiles.first(where: { $0.id == id }) else { return }
+        store.switchTo(profile)
+    }
+
+    @objc private func openProfileSettings() {
+        ProfileStore.shared.revealRequested = true
+        SettingsWindowController.shared.show(page: .general)
     }
 
     /// A tiny screen with a notch, drawn as a template so it follows the menu bar's color.
@@ -199,5 +217,26 @@ extension AppDelegate: NSMenuItemValidation {
         menuItem.state = mic.isMuted ? .on : .off
         menuItem.keyEquivalent = AppSettings.shared.micShortcut ? "m" : ""
         return mic.hasInput
+    }
+}
+
+extension AppDelegate: NSMenuDelegate {
+    /// Builds the Profiles submenu as it opens: each profile, with a tick by the one that's on.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        guard menu === profilesMenu else { return }
+        menu.removeAllItems()
+        let store = ProfileStore.shared
+        if store.profiles.isEmpty {
+            menu.addItem(NSMenuItem(title: "No Profiles Yet", action: nil, keyEquivalent: ""))
+        }
+        for profile in store.profiles {
+            let entry = item(profile.name, #selector(chooseProfile(_:)))
+            entry.representedObject = profile.id
+            entry.state = profile.id == store.activeID ? .on : .off
+            entry.image = NSImage(systemSymbolName: profile.symbol, accessibilityDescription: nil)
+            menu.addItem(entry)
+        }
+        menu.addItem(.separator())
+        menu.addItem(item(store.profiles.isEmpty ? "Save a Profile…" : "Profile Settings…", #selector(openProfileSettings)))
     }
 }

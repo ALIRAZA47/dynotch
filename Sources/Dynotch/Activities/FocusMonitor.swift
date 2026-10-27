@@ -24,9 +24,13 @@ final class FocusMonitor: ObservableObject {
 
     @Published private(set) var mode: FocusMode?
     @Published private(set) var access: Access = .unknown
+    /// Every Focus set up on this Mac, for picking the one a profile switches on with.
+    @Published private(set) var modes: [FocusMode] = []
+    /// A profile switches on with a Focus, so keep reading even while the Focus live activity is off.
+    @Published var isNeededByProfiles = false
 
     private enum Reading {
-        case read(FocusMode?)
+        case read(FocusMode?, all: [FocusMode])
         case denied
     }
 
@@ -43,7 +47,8 @@ final class FocusMonitor: ObservableObject {
     private init() {}
 
     func start() {
-        AppSettings.shared.$liveFocus
+        Publishers.CombineLatest(AppSettings.shared.$liveFocus, $isNeededByProfiles)
+            .map { $0 || $1 }
             .removeDuplicates()
             .sink { [weak self] on in on ? self?.watch() : self?.stopWatching() }
             .store(in: &cancellables)
@@ -102,12 +107,13 @@ final class FocusMonitor: ObservableObject {
             source = nil
             mode = nil
             hasRead = false
-        case .read(let next):
+        case .read(let next, let all):
             access = .granted
             if source == nil { openSource() }
             // No notice for whatever was already on when the first look happened.
             if hasRead, next != mode { announce(from: mode, to: next) }
             if next != mode { mode = next }
+            if all != modes { modes = all }
             hasRead = true
         }
     }
@@ -149,9 +155,17 @@ final class FocusMonitor: ObservableObject {
         } catch let error as CocoaError where error.code == .fileReadNoPermission {
             return .denied
         } catch {
-            return .read(nil)
+            return .read(nil, all: [])
         }
-        return .read(activeMode(assertions: assertions, configurations: configurations, at: now))
+        return .read(activeMode(assertions: assertions, configurations: configurations, at: now),
+                     all: allModes(configurations: configurations))
+    }
+
+    /// Each Focus in the configurations, by name.
+    nonisolated static func allModes(configurations: Any?) -> [FocusMode] {
+        entries(configurations).compactMap { $0["modeConfigurations"] as? [String: Any] }
+            .flatMap { group in group.map { mode(id: $0.key, config: $0.value as? [String: Any]) } }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
     nonisolated private static func json(_ url: URL) throws -> Any? {
@@ -229,8 +243,9 @@ final class FocusMonitor: ObservableObject {
 
     // MARK: Snapshots
 
-    func loadSample(_ mode: FocusMode?) {
+    func loadSample(_ mode: FocusMode?, all: [FocusMode] = []) {
         self.mode = mode
+        modes = all
         access = .granted
     }
 }
