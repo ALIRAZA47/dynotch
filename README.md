@@ -28,7 +28,9 @@ dependencies.
 | **Stats tab** | CPU (with a sparkline), memory, disk and network; battery levels for the Mac, AirPods (each bud and the case), keyboards, mice and more, with paired devices that aren't connected listed underneath (headphones first) and a Connect button for each; right-click a connected device to disconnect it; quick toggles for Dark Mode, Keep Awake, Mute, Color Picker (copies the hex code), Screenshot and Sleep Display. |
 | **Audio and keys** | **Live equalizer** (opt-in, macOS 14.2 or later) makes the equalizer bars follow the music: a Core Audio process tap listens to Music or Spotify, only while it plays and some bars are on screen, and splits the sound into four bands. **Replace system HUD** (opt-in) takes over the volume, mute and brightness keys so only Dynotch's meter shows, in steps of a sixteenth (a sixty-fourth with ⇧⌥), even at either end of the range. Keys Dynotch can't handle, like an output without a volume control or an external display, go to macOS as usual. Swipe two fingers sideways over the notch to skip tracks (left for next, right for previous), and scroll over the artwork in the Nook to change the volume. The output button beside the player lists the Mac's outputs (speakers, headphones, displays, Bluetooth) and switches the default output; AirPlay speakers and TVs come from AVKit's AirPlay picker in the same list. |
 | **Calendar** | A five-day strip; "in 12m" and "Now" labels; a Join button for Zoom, Meet, Teams, Webex and FaceTime links. |
+| **Profiles** | Saved setups such as Work, Home and Presenting. A profile keeps what the notch shows and how it opens: tabs, widgets, live activities (and which apps' notifications peek), size and displays. Switch from the menu bar's **Profiles** menu, **Settings → General → Profiles**, or `dynotch profile Work`. The profile that's on keeps the changes you make. A profile can switch on by itself when a Focus turns on (a particular one, or any) or when an external display connects; when that Focus ends or the display goes, the notch goes back to how it was, unless you switched profiles by hand in between. Focus rules need Full Disk Access, like the Focus activity. |
 | **App** | Menu bar icon, Settings window (General, Appearance, Live Activities, Nook & Widgets, Tray, Focus Timer, Permissions, About), launch at login. Runs as an agent app with no Dock icon. |
+| **Welcome tour** | On first launch, four short steps: how to open the notch and what shows beside the camera, what's new, the permissions worth allowing (each with its status and an Allow or Open System Settings button), and where things are. **Settings → About** and **Welcome Tour…** in the menu bar menu bring it back. |
 
 ## Build and run
 
@@ -50,7 +52,8 @@ app is signed ad hoc, which looks like a new app to macOS after every build.
 
 For development, `swift build` and `.build/debug/Dynotch` also work.
 `Dynotch --snapshot <folder>` renders every notch state with sample data to PNGs,
-which is handy for reviewing UI changes.
+which is handy for reviewing UI changes. `Dynotch --energy-probe` counts how often the polls
+would run and wake the Mac in an hour, in each of the conditions under [Energy](#energy).
 
 ## Scripting
 
@@ -69,9 +72,10 @@ ln -s /Applications/Dynotch.app/Contents/Resources/dynotch /usr/local/bin/dynotc
 | `dynotch close` | Closes the notch. |
 | `dynotch timer start` | Controls the focus timer: `start`, `pause`, `toggle`, `reset` or `skip`. |
 | `dynotch tray --show report.pdf` | Adds files to the Tray, and opens it with `--show`. |
+| `dynotch profile Work` | Switches to a saved profile by name. The notch says which, or that there's no such profile. |
 
 Other apps can open the same links, for example
-`dynotch://notify?text=Hello&tint=orange` or `dynotch://timer/start`.
+`dynotch://notify?text=Hello&tint=orange`, `dynotch://timer/start` or `dynotch://profile?name=Work`.
 
 **When a long command finishes.** Source `notify-long-commands.zsh` (it sits next to
 `dynotch` in the app) from `~/.zshrc`. Any command that runs for 30 seconds or more
@@ -115,6 +119,35 @@ Notification Center** on, because that's where Dynotch reads them from.
 nothing a notification says is logged or saved. The only thing it remembers is the time of
 the newest notification it has seen, and only while it runs.
 
+## Energy
+
+Dynotch runs all day, so it keeps quiet when nobody's looking. While the displays sleep, the
+screen is locked, the screen saver runs or another user has the Mac, nothing polls, and the notch
+closes and takes its views off the screen, which stops their animations, the Stats sampling, the
+Mirror's camera and the live equalizer's audio tap. Timers still end on time, with their sound.
+When you're back, whatever came due meanwhile runs once.
+
+On battery and in Low Power Mode, the polls run less often. Everything else (music, volume,
+the microphone, notifications, files arriving) is driven by events, so it costs nothing until
+something happens.
+
+| Poll | On power | On battery | Low Power Mode |
+|---|---|---|---|
+| Stats tab, only while it's open | 1.5 s | 3 s | 5 s |
+| Focus schedules | 30 s | 1 min | 2 min |
+| Event alerts | 30 s | 45 s | 45 s |
+| Bluetooth batteries (`system_profiler`) | 2 min | 5 min | 10 min |
+| Weather | 10 min | 15 min | 20 min |
+| The Screenshot app's save folder | 1 min | 2 min | 5 min |
+| A download: moving, stalled, still for half an hour | 1 s, 10 s, 30 s | 2 s, 20 s, 1 min | 3 s, 30 s, 2 min |
+| A running timer's countdown | 0.5 s | 0.5 s | 1 s |
+
+`Dynotch --energy-probe` measures this. With Focus, events, weather, Bluetooth and screenshots on,
+the polls run 336 times an hour before these changes and about 310 on power (timers now get
+leeway, so macOS runs them alongside other wakeups), 170 on battery, 120 in Low Power Mode, and
+none while the displays sleep. The closed notch with music playing wakes the app about 240 times
+a second for the equalizer's bars, and under 2 once its views are off the screen.
+
 ## Permissions
 
 Each permission is requested the first time you use the feature that needs it.
@@ -151,8 +184,8 @@ above). An ad hoc build may lose them.
   asks the private TCC framework, as other audio tools do.
 - The brightness HUD reads the built-in display's brightness through the private
   DisplayServices framework. If that's unavailable it stays quiet.
-- Not included from MacNotch: AI translation, setup profiles, and Night Shift / True Tone
-  toggles (the last two have no public API).
+- Not included from MacNotch: AI translation, and Night Shift / True Tone toggles (they have
+  no public API).
 - Notification peeks read a database that Apple doesn't document. Its location and layout
   have changed between macOS versions before; if they change again, Settings says
   notifications can't be read on that Mac.
@@ -161,7 +194,7 @@ above). An ad hoc build may lose them.
 
 ```
 Sources/Dynotch/
-  App/        entry point, settings model, hot key, helpers
+  App/        entry point, settings model, hot key, energy coordinator, helpers
   Notch/      panel, geometry, shape, pointer handling, live activities, open/closed views
   Media/      Now Playing service (distributed notifications + AppleScript), player UI
   Calendar/   EventKit service, calendar and reminders widgets
@@ -170,8 +203,10 @@ Sources/Dynotch/
   HUD/        volume (CoreAudio) and brightness monitors, media-key tap
   Notifications/  notification peeks: Notification Center reader, settings
   Activities/ microphone and camera, downloads, Focus
+  Profiles/   saved setups and the rules that switch them
   Settings/   settings window and permissions page
-  Debug/      snapshot renderer
+  Welcome/    the first-run welcome tour
+  Debug/      snapshot renderer, energy probe
 Support/      Info.plist, app icon
 scripts/      build script, icon generator
 ```

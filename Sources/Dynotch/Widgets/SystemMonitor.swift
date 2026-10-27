@@ -16,7 +16,7 @@ final class SystemMonitor: ObservableObject {
     @Published private(set) var upload: Double = 0
 
     private var viewers = 0
-    private var timer: Timer?
+    private var poll: Poll?
     private var previousTicks: [UInt32] = []
     private var previousNetwork: (received: UInt64, sent: UInt64, date: Date)?
 
@@ -27,25 +27,21 @@ final class SystemMonitor: ObservableObject {
 
     func beginObserving() {
         viewers += 1
-        guard timer == nil else { return }
+        guard poll == nil else { return }
         // CPU load is a difference between two readings: take one now and another shortly after.
         sample()
         Task {
             try? await Task.sleep(for: .milliseconds(400))
-            if timer != nil { sample() }
+            if poll != nil { sample() }
         }
-        let timer = Timer(timeInterval: 1.5, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.sample() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
+        poll = EnergyCoordinator.shared.schedule(.systemStats) { [weak self] in self?.sample() }
     }
 
     func endObserving() {
         viewers = max(0, viewers - 1)
         guard viewers == 0 else { return }
-        timer?.invalidate()
-        timer = nil
+        poll?.cancel()
+        poll = nil
         previousNetwork = nil
     }
 

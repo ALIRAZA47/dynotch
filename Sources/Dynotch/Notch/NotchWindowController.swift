@@ -11,6 +11,9 @@ final class NotchWindowController {
     let viewModel: NotchViewModel
 
     private let panel: NotchPanel
+    private let host: NSView
+    /// The views are off the panel while nobody can see the screen.
+    private var isQuiet = false
     private var isInside = false
     /// Opened from the keyboard or menu: stays open until the pointer has been over it once.
     private var awaitingPointer = false
@@ -37,6 +40,7 @@ final class NotchWindowController {
         panel = NotchPanel(contentRect: .zero)
         let host = NotchHostingView(rootView: NotchRootView(viewModel: viewModel))
         host.sizingOptions = []
+        self.host = host
         panel.contentView = host
         layout()
         panel.orderFrontRegardless()
@@ -77,6 +81,25 @@ final class NotchWindowController {
         cancellables.removeAll()
         panel.orderOut(nil)
         panel.close()
+    }
+
+    /// While nobody can see the screen, the notch's views come off the panel. Off a window,
+    /// SwiftUI stops their clocks and animations (the equalizer's bars alone wake the app a couple
+    /// of hundred times a second) and their onDisappear stops the Stats sampling, the camera and the
+    /// equalizer's audio tap. They go back as they were.
+    func setQuiet(_ quiet: Bool) {
+        guard quiet != isQuiet else { return }
+        isQuiet = quiet
+        if quiet {
+            hoverTask?.cancel()
+            cancelClose()
+            panel.contentView = NSView()
+            panel.orderOut(nil)
+        } else {
+            panel.contentView = host
+            panel.orderFrontRegardless()
+            refreshPointer()
+        }
     }
 
     // MARK: Pointer

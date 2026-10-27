@@ -54,7 +54,7 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
     private var locationName = ""
     /// "here", or the city: when it changes, the old conditions go.
     private var source = ""
-    private var timer: Timer?
+    private var poll: Poll?
     private var refreshTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
     /// When the rain we last announced was due. Cleared once it's dry again.
@@ -73,15 +73,8 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
             .debounce(for: .milliseconds(300), scheduler: RunLoop.main)
             .sink { [weak self] in self?.refresh() }
             .store(in: &cancellables)
-        // Often enough to catch rain half an hour before it starts.
-        let timer = Timer(timeInterval: 10 * 60, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refresh() }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
-        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)
-            .sink { [weak self] _ in self?.refresh() }
-            .store(in: &cancellables)
+        // Also when someone's back after the Mac or its displays slept, if one came due meanwhile.
+        poll = EnergyCoordinator.shared.schedule(.weather) { [weak self] in self?.refresh() }
     }
 
     func refresh() {

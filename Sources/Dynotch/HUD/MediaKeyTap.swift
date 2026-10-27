@@ -16,7 +16,7 @@ final class MediaKeyTap: ObservableObject {
 
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
-    private var accessTimer: Timer?
+    private var accessPoll: Poll?
     private var cancellables = Set<AnyCancellable>()
 
     // From IOKit's ev_keymap.h.
@@ -73,23 +73,16 @@ final class MediaKeyTap: ObservableObject {
 
     /// Access is granted in System Settings, which doesn't tell the app; check every couple of seconds for a while.
     private func waitForAccess() {
-        accessTimer?.invalidate()
+        accessPoll?.cancel()
         let deadline = Date.now.addingTimeInterval(600)
-        let timer = Timer(timeInterval: 2, repeats: true) { [weak self] timer in
-            MainActor.assumeIsolated {
-                guard let self, Date.now < deadline else {
-                    timer.invalidate()
-                    return
-                }
-                self.refreshAccess()
-                if self.hasAccess {
-                    timer.invalidate()
-                    self.accessTimer = nil
-                }
+        accessPoll = EnergyCoordinator.shared.schedule(.accessibilityCheck) { [weak self] in
+            guard let self else { return }
+            if Date.now < deadline { self.refreshAccess() }
+            if self.hasAccess || Date.now >= deadline {
+                self.accessPoll?.cancel()
+                self.accessPoll = nil
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
-        accessTimer = timer
     }
 
     private func refreshAccess() {
@@ -117,8 +110,8 @@ final class MediaKeyTap: ObservableObject {
     }
 
     private func disable() {
-        accessTimer?.invalidate()
-        accessTimer = nil
+        accessPoll?.cancel()
+        accessPoll = nil
         guard let tap else { return }
         CGEvent.tapEnable(tap: tap, enable: false)
         if let source { CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes) }

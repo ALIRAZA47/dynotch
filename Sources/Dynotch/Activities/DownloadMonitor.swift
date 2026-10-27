@@ -68,8 +68,7 @@ final class DownloadMonitor: ObservableObject {
     private var isScanning = false
     private var needsScan = false
     private var source: DispatchSourceFileSystemObject?
-    private var poll: Timer?
-    private var pollInterval: TimeInterval = 0
+    private var poll: Poll?
     private var cancellables = Set<AnyCancellable>()
 
     private init() {}
@@ -181,10 +180,10 @@ final class DownloadMonitor: ObservableObject {
         if moving != downloads { downloads = moving }
 
         if source == nil { openSource() }
-        // A growing file doesn't change the folder, so look often while one is moving and now and
-        // then while a stalled one sits there.
-        let recent = next.values.contains { now.timeIntervalSince($0.lastGrowth) < 120 }
-        setPolling(next.isEmpty ? nil : recent ? 1 : 10)
+        // A growing file doesn't change the folder, so look often while one is moving, now and
+        // then while a stalled one sits there, and seldom once it's been still for half an hour.
+        let still = next.values.map { now.timeIntervalSince($0.lastGrowth) }.min()
+        setPolling(still.map { $0 < 120 ? .downloadMoving : $0 < 30 * 60 ? .downloadStalled : .downloadDormant })
     }
 
     /// The file a partial download turned into: its name without the partial extension, or for
@@ -219,17 +218,17 @@ final class DownloadMonitor: ObservableObject {
         self.source = source
     }
 
-    private func setPolling(_ interval: TimeInterval?) {
-        guard interval != (poll == nil ? nil : pollInterval) else { return }
-        poll?.invalidate()
-        poll = nil
-        guard let interval else { return }
-        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.scan() }
+    private func setPolling(_ cadence: Cadence?) {
+        guard let cadence else {
+            poll?.cancel()
+            poll = nil
+            return
         }
-        RunLoop.main.add(timer, forMode: .common)
-        poll = timer
-        pollInterval = interval
+        if let poll {
+            poll.change(to: cadence)
+        } else {
+            poll = EnergyCoordinator.shared.schedule(cadence) { [weak self] in self?.scan() }
+        }
     }
 
     // MARK: Reading the folder

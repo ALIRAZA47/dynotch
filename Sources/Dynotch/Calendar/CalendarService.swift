@@ -36,7 +36,7 @@ final class CalendarService: ObservableObject {
 
     private var announced: Set<String> = []
     private var loadedDay = Calendar.current.startOfDay(for: .now)
-    private var timer: Timer?
+    private var poll: Poll?
     private var observer: NSObjectProtocol?
 
     private init() {}
@@ -49,9 +49,7 @@ final class CalendarService: ObservableObject {
             MainActor.assumeIsolated { self?.reload() }
         }
         reload()
-        timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.tick() }
-        }
+        poll = EnergyCoordinator.shared.schedule(.eventAlerts) { [weak self] in self?.tick() }
     }
 
     func requestEventAccess() {
