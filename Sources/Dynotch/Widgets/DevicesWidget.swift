@@ -13,10 +13,12 @@ struct DevicesWidget: View {
     var body: some View {
         WidgetCard(title: "Batteries", symbol: "battery.75percent") {
             if monitor.isAuthorized {
-                // As many paired devices as fit, down to none.
-                ViewThatFits(in: .vertical) {
-                    ForEach(Array((0...min(monitor.paired.count, 3)).reversed()), id: \.self) { count in
-                        rows(paired: count)
+                GeometryReader { proxy in
+                    // As many paired devices as fit, down to none.
+                    ViewThatFits(in: .vertical) {
+                        ForEach(Array((0...min(monitor.paired.count, 3)).reversed()), id: \.self) { count in
+                            rows(paired: count, compact: proxy.size.width < 160)
+                        }
                     }
                 }
             } else {
@@ -32,7 +34,7 @@ struct DevicesWidget: View {
         .onAppear { Task { await monitor.refresh() } }
     }
 
-    private func rows(paired count: Int) -> some View {
+    private func rows(paired count: Int, compact: Bool) -> some View {
         let connected = monitor.devices.filter { $0.lowest != nil || $0.batteryCase != nil }
         return VStack(alignment: .leading, spacing: 8) {
             macRow
@@ -45,7 +47,7 @@ struct DevicesWidget: View {
                     .foregroundStyle(Color.notchTertiary)
             }
             ForEach(monitor.paired.prefix(count)) { device in
-                PairedRow(device: device, connection: monitor.connections[device.id], isSnapshot: isSnapshot) {
+                PairedRow(device: device, connection: monitor.connections[device.id], compact: compact, isSnapshot: isSnapshot) {
                     monitor.connect(device)
                 }
             }
@@ -142,10 +144,12 @@ private struct DeviceRow: View {
     }
 }
 
-/// A paired device that isn't connected, with a button to connect it.
+/// A paired device that isn't connected, with a button to connect it. In a narrow widget the
+/// button is just a symbol.
 private struct PairedRow: View {
     let device: DeviceBatteryMonitor.PairedDevice
     let connection: DeviceBatteryMonitor.Connection?
+    let compact: Bool
     let isSnapshot: Bool
     let connect: () -> Void
 
@@ -157,23 +161,26 @@ private struct PairedRow: View {
                 .frame(width: 20)
                 .foregroundStyle(Color.notchTertiary)
             VStack(alignment: .leading, spacing: 2) {
-                Text(device.name)
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Color.notchSecondary)
-                    .lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(device.name)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.notchSecondary)
+                        .lineLimit(1)
+                    Spacer(minLength: 0)
+                    if connection == .connecting {
+                        spinner
+                            .frame(width: 16, height: 16)
+                    } else {
+                        ConnectButton(title: status == nil ? "Connect" : "Retry",
+                                      symbol: status == nil ? "link" : "arrow.clockwise", compact: compact, action: connect)
+                    }
+                }
                 if let status {
                     Text(status.text)
                         .font(.system(size: 9.5, weight: .medium))
                         .foregroundStyle(status.tint)
                         .lineLimit(1)
                 }
-            }
-            Spacer(minLength: 4)
-            if connection == .connecting {
-                spinner
-                    .frame(width: 16)
-            } else {
-                ConnectButton(title: status == nil ? "Connect" : "Retry", action: connect)
             }
         }
         .contextMenu {
@@ -196,20 +203,33 @@ private struct PairedRow: View {
 
 private struct ConnectButton: View {
     let title: String
+    let symbol: String
+    let compact: Bool
     let action: () -> Void
     @ViewState private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .font(.system(size: 9.5, weight: .semibold))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 7)
-                .frame(height: 17)
-                .background(Capsule().fill(Color.white.opacity(hovering ? 0.24 : 0.14)))
-                .contentShape(Capsule())
+            Group {
+                if compact {
+                    Image(systemName: symbol)
+                        .font(.system(size: 8.5, weight: .bold))
+                        .frame(width: 20)
+                } else {
+                    Text(title)
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .padding(.horizontal, 7)
+                }
+            }
+            .foregroundStyle(.white)
+            .frame(height: 17)
+            .background(Capsule().fill(Color.white.opacity(hovering ? 0.24 : 0.14)))
+            .contentShape(Capsule())
+            .fixedSize()
         }
         .buttonStyle(PressableButtonStyle())
         .onHover { hovering = $0 }
+        .help(title)
+        .accessibilityLabel(title)
     }
 }

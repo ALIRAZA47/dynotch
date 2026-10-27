@@ -9,6 +9,13 @@ struct NotesWidget: View {
     @Environment(\.isSnapshot) private var isSnapshot
 
     var body: some View {
+        // Beside the player there's no room for "1/2" as well as the title.
+        GeometryReader { proxy in
+            card(isNarrow: proxy.size.width < 170)
+        }
+    }
+
+    private func card(isNarrow: Bool) -> some View {
         WidgetCard(title: "Notes", symbol: "note.text") {
             HStack(spacing: 0) {
                 if store.saveFailed {
@@ -18,7 +25,7 @@ struct NotesWidget: View {
                         .help("Couldn't save. Check the notes folder in Settings → Nook & Widgets.")
                 }
                 smallButton("checklist", help: "Checklist") { editor.toggleChecklist() }
-                notesMenu
+                notesMenu(showsCount: !isNarrow)
                 smallButton("square.and.pencil", help: "New note") { store.newNote() }
             }
         } content: {
@@ -39,14 +46,15 @@ struct NotesWidget: View {
     }
 
     /// Which note this is, and a menu to switch notes or act on this one.
-    private var notesMenu: some View {
+    private func notesMenu(showsCount: Bool) -> some View {
         let index = store.notes.firstIndex { $0.id == store.currentID }
         return MenuButton(help: "Notes") {
             HStack(spacing: 2) {
-                if store.notes.count > 1, let index {
+                if showsCount, store.notes.count > 1, let index {
                     Text("\(index + 1)/\(store.notes.count)")
                         .font(.system(size: 9.5, weight: .bold, design: .rounded))
                         .monospacedDigit()
+                        .fixedSize()
                 }
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .bold))
