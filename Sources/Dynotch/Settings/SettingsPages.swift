@@ -88,7 +88,7 @@ struct GeneralSettings: View {
     private let openers = [
         SwitchOption(title: "Hover", detail: "Open when the pointer rests on the notch", symbol: "cursorarrow.rays",
                      setting: \.openOnHover),
-        SwitchOption(title: "Swipe", detail: "Swipe down on the trackpad to open, up to close",
+        SwitchOption(title: "Swipe", detail: "Swipe down on the trackpad to open, up to close, sideways to skip a track",
                      symbol: "rectangle.and.hand.point.up.left.fill",
                      setting: \.swipeGestures),
         SwitchOption(title: "Keyboard shortcut", detail: "Toggle the notch with ⌃⌥N", symbol: "command",

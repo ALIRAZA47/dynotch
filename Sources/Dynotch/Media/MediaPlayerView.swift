@@ -10,9 +10,11 @@ struct MediaPlayerView: View {
             VStack(alignment: .leading, spacing: 9) {
                 HStack(alignment: .top, spacing: 13) {
                     ArtworkView(image: media.artwork, size: 84, cornerRadius: 14, glow: settings.artworkTint ? tint : nil)
+                        .overlay { ArtworkVolumeOverlay(cornerRadius: 14) }
                         .overlay(alignment: .bottomTrailing) { playerBadge }
+                        .overlay { VolumeScrollArea() }
                         .onTapGesture { media.openPlayer() }
-                        .help("Open \(media.player?.name ?? "player")")
+                        .help("Open \(media.player?.name ?? "player"). Scroll to change the volume.")
                     VStack(alignment: .leading, spacing: 3) {
                         HStack(alignment: .firstTextBaseline, spacing: 6) {
                             Text(track.title)

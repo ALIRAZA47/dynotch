@@ -17,6 +17,12 @@ final class NotchWindowController {
     private var hoverTask: Task<Void, Never>?
     private var closeTask: Task<Void, Never>?
     private var scrollTotal: CGFloat = 0
+    /// Sideways travel of the current swipe, positive to the right.
+    private var swipeAcross: CGFloat = 0
+    /// Up and down or sideways, settled once the fingers have moved a little.
+    private var swipeAxis: Axis?
+    private var hasSkipped = false
+    private var lastScroll = Date.distantPast
     private var cancellables = Set<AnyCancellable>()
 
     /// Room around the open notch for its shadow.
@@ -132,26 +138,55 @@ final class NotchWindowController {
     }
 
     func scrolled(_ event: NSEvent, at point: CGPoint) {
-        guard AppSettings.shared.swipeGestures, event.momentumPhase.isEmpty else { return }
-        guard hitRect().contains(point) else {
-            scrollTotal = 0
+        guard event.momentumPhase.isEmpty else { return }
+        // Over the open player's artwork, scrolling changes the volume instead.
+        if viewModel.isOpen, VolumeScrollView.covers(point, in: panel) {
+            resetSwipe()
             return
         }
-        if event.phase == .began || event.phase == .mayBegin { scrollTotal = 0 }
-        // Positive when the fingers move down, whatever the natural-scrolling setting.
-        let fingersDown = event.isDirectionInvertedFromDevice ? event.scrollingDeltaY : -event.scrollingDeltaY
-        scrollTotal += event.hasPreciseScrollingDeltas ? fingersDown : fingersDown * 8
-
-        if !viewModel.isOpen, scrollTotal > 14 {
-            scrollTotal = 0
-            hoverTask?.cancel()
-            Haptics.tap()
-            viewModel.open()
-        } else if viewModel.isOpen, scrollTotal < -40, swipeClosesNotch(at: point) {
-            scrollTotal = 0
-            dismiss()
+        guard AppSettings.shared.swipeGestures else { return }
+        guard hitRect().contains(point) else {
+            resetSwipe()
+            return
         }
-        if event.phase == .ended || event.phase == .cancelled { scrollTotal = 0 }
+        // A mouse wheel has no phases, so a pause starts a new gesture.
+        if event.phase == .began || event.phase == .mayBegin
+            || (event.phase.isEmpty && Date.now.timeIntervalSince(lastScroll) > 0.4) {
+            resetSwipe()
+        }
+        lastScroll = .now
+        // Positive when the fingers move down or right, whatever the natural-scrolling setting.
+        let scale: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 8
+        let inverted = event.isDirectionInvertedFromDevice
+        scrollTotal += (inverted ? event.scrollingDeltaY : -event.scrollingDeltaY) * scale
+        swipeAcross += (inverted ? event.scrollingDeltaX : -event.scrollingDeltaX) * scale
+        if swipeAxis == nil, max(abs(scrollTotal), abs(swipeAcross)) > 6 {
+            swipeAxis = abs(swipeAcross) > abs(scrollTotal) ? .horizontal : .vertical
+            // Skipping a track shouldn't open the notch on the way.
+            if swipeAxis == .horizontal { hoverTask?.cancel() }
+        }
+
+        switch swipeAxis {
+        case .vertical:
+            if !viewModel.isOpen, scrollTotal > 14 {
+                scrollTotal = 0
+                hoverTask?.cancel()
+                Haptics.tap()
+                viewModel.open()
+            } else if viewModel.isOpen, scrollTotal < -40, swipeClosesNotch(at: point) {
+                scrollTotal = 0
+                dismiss()
+            }
+        case .horizontal:
+            // Hovering opens the notch quickly, so its header row, where the closed notch was, counts too.
+            if !hasSkipped, abs(swipeAcross) > 40, !viewModel.isOpen || isOverHeader(point) {
+                hasSkipped = true
+                skipTrack(forward: swipeAcross < 0)
+            }
+        case nil:
+            break
+        }
+        if event.phase == .ended || event.phase == .cancelled { resetSwipe() }
     }
 
     func dismiss() {
@@ -234,7 +269,27 @@ final class NotchWindowController {
     /// The Focus tab has scrolling lists, so there only a swipe over the header closes the notch.
     private func swipeClosesNotch(at point: CGPoint) -> Bool {
         guard viewModel.visibleTab == .focus else { return true }
+        return isOverHeader(point)
+    }
+
+    /// The open notch's top row, beside the camera.
+    private func isOverHeader(_ point: CGPoint) -> Bool {
         let geometry = viewModel.geometry
         return point.y >= geometry.screenFrame.maxY - geometry.closedSize.height - 8
+    }
+
+    private func resetSwipe() {
+        scrollTotal = 0
+        swipeAcross = 0
+        swipeAxis = nil
+        hasSkipped = false
+    }
+
+    /// Two fingers sideways over the notch: to the left for the next track, to the right for the previous one.
+    private func skipTrack(forward: Bool) {
+        let media = NowPlayingService.shared
+        guard media.player != nil else { return }
+        Haptics.tap()
+        if forward { media.next() } else { media.previous() }
     }
 }
