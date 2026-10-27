@@ -47,11 +47,15 @@ enum EnergyProbe {
         }
     }
 
-    static func run() {
+    static func run(notchOnly: Bool = false) {
         // Agent apps with no window on screen get App Nap, which would bunch the timers up.
         let activity = ProcessInfo.processInfo.beginActivity(options: .userInitiated, reason: "Energy probe")
         defer { ProcessInfo.processInfo.endActivity(activity) }
         installWakeupCounter()
+        if notchOnly {
+            measureClosedNotch()
+            return
+        }
 
         let idle = [Entry(cadence: .focusSchedules), Entry(cadence: .eventAlerts), Entry(cadence: .weather),
                     Entry(cadence: .bluetoothBatteries), Entry(cadence: .screenshotFolder)]

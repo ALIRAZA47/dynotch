@@ -443,6 +443,8 @@ struct AudioBars: View {
     var color: Color
     var barCount = 4
     @ObservedObject private var levels = AudioLevels.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.isSnapshot) private var isSnapshot
 
     var body: some View {
         content
@@ -459,14 +461,15 @@ struct AudioBars: View {
                 return 0.18 + 0.82 * CGFloat(band)
             }
             .animation(.easeOut(duration: 0.12), value: bands)
-        } else if isPlaying {
-            TimelineView(.periodic(from: .now, by: 0.15)) { context in
-                let tick = Int(context.date.timeIntervalSinceReferenceDate / 0.15)
-                bars(tick: tick)
-                    .animation(.spring(response: 0.2, dampingFraction: 0.7), value: tick)
-            }
+        } else if isPlaying && !isSnapshot {
+            // Animated from SwiftUI, the bars woke the app on every frame of the display, about
+            // 120 times a second. Core Animation runs the same bounce in the window server.
+            BouncingBars(color: color, heights: (0..<barCount).map { index in
+                (0..<16).map { level(index: index, tick: $0) }
+            }, step: reduceMotion ? 0.45 : 0.15)
         } else {
-            bars(tick: nil)
+            // Snapshots catch the bars mid-bounce.
+            bars(tick: isPlaying ? 1 : nil)
         }
     }
 
@@ -497,6 +500,91 @@ struct AudioBars: View {
         value ^= value >> 15
         let base: [CGFloat] = [0.55, 0.85, 0.7, 0.95, 0.6]
         return 0.25 + CGFloat(value % 1000) / 1000 * base[index % base.count] * 0.75
+    }
+}
+
+/// `AudioBars`' decorative bounce as Core Animation layers. The window server runs a layer's
+/// animation by itself, so the app doesn't wake for each frame.
+private struct BouncingBars: NSViewRepresentable {
+    let color: Color
+    /// Each bar's heights in turn, from 0 to 1. The bounce loops through them.
+    let heights: [[CGFloat]]
+    /// Seconds from one height to the next.
+    let step: TimeInterval
+
+    func makeNSView(context: Context) -> BarsView { BarsView() }
+
+    func updateNSView(_ view: BarsView, context: Context) {
+        view.update(color: NSColor(color).cgColor, heights: heights, step: step)
+    }
+
+    final class BarsView: NSView {
+        private var bars: [CALayer] = []
+        private var heights: [[CGFloat]] = []
+        private var step: TimeInterval = 0
+        /// The size the running animations were made for.
+        private var animatedSize = CGSize.zero
+
+        override init(frame: NSRect) {
+            super.init(frame: frame)
+            wantsLayer = true
+        }
+
+        required init?(coder: NSCoder) { nil }
+
+        func update(color: CGColor, heights: [[CGFloat]], step: TimeInterval) {
+            if heights.count != bars.count {
+                bars.forEach { $0.removeFromSuperlayer() }
+                bars = heights.map { _ in CALayer() }
+                bars.forEach { layer?.addSublayer($0) }
+            }
+            // Implicitly animated, so a new artwork color fades in.
+            bars.forEach { $0.backgroundColor = color }
+            if heights != self.heights || step != self.step {
+                self.heights = heights
+                self.step = step
+                restart()
+            }
+        }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if window != nil { restart() }
+        }
+
+        override func layout() {
+            super.layout()
+            guard bounds.size != animatedSize, !bars.isEmpty, bounds.height > 0 else { return }
+            animatedSize = bounds.size
+            let count = CGFloat(bars.count)
+            let spacing = bounds.width * 0.12
+            let width = (bounds.width - spacing * (count - 1)) / count
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            for (index, bar) in bars.enumerated() {
+                let levels = heights[index]
+                bar.bounds = CGRect(x: 0, y: 0, width: width, height: max(3, bounds.height * (levels.first ?? 0.22)))
+                bar.position = CGPoint(x: CGFloat(index) * (width + spacing) + width / 2, y: bounds.midY)
+                bar.cornerRadius = width / 2
+                bar.add(bounce(through: levels), forKey: "bounce")
+            }
+            CATransaction.commit()
+        }
+
+        private func restart() {
+            animatedSize = .zero
+            needsLayout = true
+        }
+
+        private func bounce(through levels: [CGFloat]) -> CAKeyframeAnimation {
+            let animation = CAKeyframeAnimation(keyPath: "bounds.size.height")
+            // Back to the first height at the end, so the loop doesn't jump.
+            animation.values = (levels + levels.prefix(1)).map { max(3, bounds.height * $0) }
+            animation.duration = step * Double(levels.count)
+            animation.calculationMode = .cubic
+            animation.repeatCount = .infinity
+            return animation
+        }
     }
 }
 

@@ -32,8 +32,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
-        if arguments.contains("--energy-probe") {
-            EnergyProbe.run()
+        if let index = arguments.firstIndex(of: "--energy-probe") {
+            // `--energy-probe notch` measures only the closed notch: seconds rather than minutes.
+            EnergyProbe.run(notchOnly: arguments.dropFirst(index + 1).first == "notch")
             NSApp.terminate(nil)
             return
         }

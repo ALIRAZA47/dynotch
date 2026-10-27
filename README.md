@@ -145,8 +145,10 @@ something happens.
 `Dynotch --energy-probe` measures this. With Focus, events, weather, Bluetooth and screenshots on,
 the polls run 336 times an hour before these changes and about 310 on power (timers now get
 leeway, so macOS runs them alongside other wakeups), 170 on battery, 120 in Low Power Mode, and
-none while the displays sleep. The closed notch with music playing wakes the app about 240 times
-a second for the equalizer's bars, and under 2 once its views are off the screen.
+none while the displays sleep. The equalizer's bars bounce in Core Animation, which the window
+server runs without waking the app, so the closed notch with music playing wakes it about once
+every three seconds, the same as with nothing playing. Animated from SwiftUI, they woke it on
+every frame of the display, 120 times a second. `Dynotch --energy-probe notch` measures just this.
 
 ## Permissions
 
