@@ -43,6 +43,9 @@ enum SnapshotRenderer {
             Scene(name: "15-open-stats", phase: .open, tab: .stats),
             Scene(name: "30-open-nook-volume", phase: .open, tab: .home,
                   setUp: { VolumeMonitor.shared.loadSample(volume: 0.62, changing: true) }),
+            Scene(name: "31-open-nook-outputs", phase: .open, tab: .home, setUp: { loadOutputs(pickerShown: true) }),
+            Scene(name: "32-open-nook-empty-outputs", phase: .open, tab: .home, hasTrack: false,
+                  setUp: { loadOutputs(pickerShown: true) }),
         ]
 
         let settings = AppSettings.shared
@@ -156,6 +159,11 @@ enum SnapshotRenderer {
     /// The volume, output and equalizer state every scene starts from.
     private static func resetAudioSamples() {
         VolumeMonitor.shared.loadSample(volume: 0.62, changing: false)
+        loadOutputs(pickerShown: false)
+    }
+
+    private static func loadOutputs(pickerShown: Bool) {
+        AudioOutputs.shared.loadSample(pickerShown: pickerShown)
     }
 
     private static func loadTrack() {

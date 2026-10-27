@@ -54,6 +54,11 @@ final class NotchWindowController {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.closeIfAbandoned() }
             .store(in: &cancellables)
+        AudioOutputs.shared.$isPresentingRoutes
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.closeIfAbandoned() }
+            .store(in: &cancellables)
     }
 
     func layout() {
@@ -87,7 +92,7 @@ final class NotchWindowController {
         if inside != isInside {
             isInside = inside
             inside ? pointerEntered() : pointerExited()
-        } else if !inside, viewModel.isOpen, !awaitingPointer, closeTask == nil, !viewModel.shouldStayOpen {
+        } else if !inside, viewModel.isOpen, !awaitingPointer, closeTask == nil, !isHeldOpen {
             // Whatever held the notch open (a drag, a menu) has ended while the pointer was away.
             scheduleClose()
         }
@@ -104,7 +109,7 @@ final class NotchWindowController {
         if inside, !viewModel.isOpen {
             hoverTask?.cancel()
             viewModel.open()
-        } else if !inside, viewModel.isOpen, !viewModel.isMenuOpen {
+        } else if !inside, viewModel.isOpen, !viewModel.isMenuOpen, !AudioOutputs.shared.isPresentingRoutes {
             dismiss()
         }
     }
@@ -249,7 +254,7 @@ final class NotchWindowController {
             try? await Task.sleep(for: .seconds(delay))
             guard let self, !Task.isCancelled else { return }
             self.closeTask = nil
-            guard !self.isInside, !self.viewModel.shouldStayOpen else { return }
+            guard !self.isInside, !self.isHeldOpen else { return }
             self.viewModel.close()
         }
     }
@@ -259,9 +264,14 @@ final class NotchWindowController {
         closeTask = nil
     }
 
+    /// A menu, a drag or AirPlay's device list hangs off the open notch, so it stays open.
+    private var isHeldOpen: Bool {
+        viewModel.shouldStayOpen || AudioOutputs.shared.isPresentingRoutes
+    }
+
     /// Something that held the notch open went away while the pointer was elsewhere.
     private func closeIfAbandoned() {
-        guard viewModel.isOpen, !viewModel.shouldStayOpen else { return }
+        guard viewModel.isOpen, !isHeldOpen else { return }
         isInside = hitRect().contains(NSEvent.mouseLocation)
         if !isInside { scheduleClose(after: 0.4) }
     }
