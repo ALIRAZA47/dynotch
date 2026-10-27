@@ -60,7 +60,7 @@ final class PermissionStatus: ObservableObject {
             Item(title: "Camera", purpose: "The Mirror widget", symbol: "camera.fill", tint: .teal,
                  state: state(camera.status == .authorized, undetermined: camera.status == .notDetermined),
                  action: camera.requestAccess),
-            Item(title: "Bluetooth", purpose: "Battery levels of AirPods, keyboards and mice", symbol: "airpodspro",
+            Item(title: "Bluetooth", purpose: "Battery levels of AirPods, keyboards and mice, and connecting them", symbol: "airpodspro",
                  tint: .blue, state: devices.isAuthorized ? .granted : .notDetermined, action: devices.requestAccess),
         ] + (AppSettings.shared.screenshotsToTray ? [screenshotsItem] : [])
             + (AppSettings.shared.weatherUsesLocation ? [locationItem] : [])
