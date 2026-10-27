@@ -44,6 +44,43 @@ For development, `swift build` and `.build/debug/Dynotch` also work.
 `Dynotch --snapshot <folder>` renders every notch state with sample data to PNGs,
 which is handy for reviewing UI changes.
 
+## Scripting
+
+Dynotch answers `dynotch://` links, and `scripts/dynotch` wraps them for the shell.
+The app carries a copy in `Dynotch.app/Contents/Resources/dynotch`; link it onto your
+`PATH` to use it anywhere:
+
+```bash
+ln -s /Applications/Dynotch.app/Contents/Resources/dynotch /usr/local/bin/dynotch
+```
+
+| Command | What it does |
+|---|---|
+| `dynotch notify "Deploy done" --detail "api · 2m 14s" --symbol checkmark.circle.fill --tint green` | Shows a notice in the closed notch. Long text moves to the row underneath. `--seconds` sets how long it stays (4 by default). |
+| `dynotch open tray` | Opens the notch on a tab: `home`, `tray`, `focus` or `stats`. |
+| `dynotch close` | Closes the notch. |
+| `dynotch timer start` | Controls the focus timer: `start`, `pause`, `toggle`, `reset` or `skip`. |
+| `dynotch tray --show report.pdf` | Adds files to the Tray, and opens it with `--show`. |
+
+Other apps can open the same links, for example
+`dynotch://notify?text=Hello&tint=orange` or `dynotch://timer/start`.
+
+**When a long command finishes.** Source `notify-long-commands.zsh` (it sits next to
+`dynotch` in the app) from `~/.zshrc`. Any command that runs for 30 seconds or more
+then ends with a "Done" or "Failed" notice. `DYNOTCH_LONG_COMMAND` changes the threshold.
+
+**When Claude Code needs you.** Claude Code hooks can call the same command. Add this
+to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Notification": [{ "hooks": [{ "type": "command", "command": "dynotch notify 'Claude needs you' --symbol bubble.left.fill --tint orange" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "dynotch notify 'Claude is done' --symbol checkmark.circle.fill --tint green" }] }]
+  }
+}
+```
+
 ## Permissions
 
 Each permission is requested the first time you use the feature that needs it.

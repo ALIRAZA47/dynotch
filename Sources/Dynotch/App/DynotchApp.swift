@@ -67,6 +67,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    /// dynotch:// links from `scripts/dynotch`, shell hooks and other apps.
+    func application(_ application: NSApplication, open urls: [URL]) {
+        urls.forEach(URLCommands.handle)
+    }
+
     // MARK: Menu bar
 
     private func setStatusItemVisible(_ visible: Bool) {

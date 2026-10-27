@@ -58,6 +58,10 @@ final class NotchManager {
         activeController()?.present(tab: tab)
     }
 
+    func close() {
+        controllers.forEach { $0.dismiss() }
+    }
+
     // MARK: Private
 
     private func activeController() -> NotchWindowController? {

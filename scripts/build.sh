@@ -21,6 +21,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN_DIR/Dynotch" "$APP/Contents/MacOS/Dynotch"
 cp "$ROOT/Support/Info.plist" "$APP/Contents/Info.plist"
 cp "$ROOT/Support/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
+# The command-line tool travels with the app, so it can be linked onto PATH from wherever the app lives.
+cp "$ROOT/scripts/dynotch" "$ROOT/scripts/notify-long-commands.zsh" "$APP/Contents/Resources/"
 
 # macOS ties privacy permissions to the signature, and an ad hoc one changes with every
 # build. Sign with the local identity from scripts/make-signing-identity.sh when it's there.
