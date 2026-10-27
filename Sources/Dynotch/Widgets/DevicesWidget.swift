@@ -3,6 +3,8 @@ import SwiftUI
 /// The Mac's battery plus every connected Bluetooth device that reports one. Paired devices that
 /// aren't connected fill any room left, headphones first, each with a Connect button.
 struct DevicesWidget: View {
+    /// CPU, memory and network at the foot of the card, as on the Control tab.
+    var showsSystem = false
     @ObservedObject private var power = PowerMonitor.shared
     @ObservedObject private var monitor = DeviceBatteryMonitor.shared
     @Environment(\.isSnapshot) private var isSnapshot
@@ -13,22 +15,27 @@ struct DevicesWidget: View {
 
     var body: some View {
         WidgetCard(title: "Batteries", symbol: "battery.75percent") {
-            // Beside the player the card is narrow, and each name gets a line of its own.
-            GeometryReader { proxy in
-                let compact = proxy.size.width < 150
-                if monitor.isAuthorized {
-                    // As many paired devices as fit, down to none.
-                    ViewThatFits(in: .vertical) {
-                        ForEach(Array((0...min(monitor.paired.count, 3)).reversed()), id: \.self) { count in
-                            rows(paired: count, compact: compact)
+            VStack(spacing: 8) {
+                // In a narrow card each name gets a line of its own.
+                GeometryReader { proxy in
+                    let compact = proxy.size.width < 150
+                    if monitor.isAuthorized {
+                        // As many paired devices as fit, down to none.
+                        ViewThatFits(in: .vertical) {
+                            ForEach(Array((0...min(monitor.paired.count, 3)).reversed()), id: \.self) { count in
+                                rows(paired: count, compact: compact)
+                            }
+                        }
+                    } else {
+                        VStack(alignment: .leading, spacing: 8) {
+                            macRow(compact: compact)
+                            PermissionPrompt(symbol: "dot.radiowaves.right", message: "See your AirPods, keyboard and more.",
+                                             buttonTitle: "Allow Bluetooth", action: monitor.requestAccess)
                         }
                     }
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        macRow(compact: compact)
-                        PermissionPrompt(symbol: "dot.radiowaves.right", message: "See your AirPods, keyboard and more.",
-                                         buttonTitle: "Allow Bluetooth", action: monitor.requestAccess)
-                    }
+                }
+                if showsSystem {
+                    SystemFooter()
                 }
             }
         }
@@ -37,7 +44,7 @@ struct DevicesWidget: View {
 
     private func rows(paired count: Int, compact: Bool) -> some View {
         let connected = monitor.devices.filter { $0.lowest != nil || $0.batteryCase != nil }
-        return VStack(alignment: .leading, spacing: 8) {
+        return VStack(alignment: .leading, spacing: 6) {
             macRow(compact: compact)
             ForEach(connected.prefix(3)) { device in
                 connectedRow(device, compact: compact)
@@ -99,8 +106,8 @@ private struct Status {
     }
 }
 
-/// A device's symbol, name and level, with a meter or a line about it underneath. A compact row
-/// gives the name the whole first line and puts the level underneath.
+/// A device's symbol in a ring that shows its level, its name with a line about it, and the level.
+/// A compact row leaves the level to the ring and the line underneath.
 private struct DeviceRow: View {
     let symbol: String
     let name: String
@@ -114,47 +121,47 @@ private struct DeviceRow: View {
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
-        HStack(spacing: 6) {
-            Image(systemName: symbol)
-                .font(.system(size: 12))
-                .frame(width: 18)
-                .foregroundStyle(theme.secondary)
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 4) {
-                    Text(name)
-                        .font(NotchFont.body)
+        HStack(spacing: 9) {
+            ZStack {
+                ProgressRing(progress: Double(level) / 100, color: color, lineWidth: 2.6)
+                Image(systemName: symbol)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(theme.secondary)
+            }
+            .frame(width: 26, height: 26)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(name)
+                    .font(NotchFont.body)
+                    .lineLimit(1)
+                    .help(name)
+                if let detail {
+                    Text(detail)
+                        .font(NotchFont.caption)
+                        .foregroundStyle(detailTint ?? theme.tertiary)
                         .lineLimit(1)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .help(name)
-                    if charging {
-                        Image(systemName: "bolt.fill")
-                            .font(.system(size: 8))
-                            .foregroundStyle(.green)
-                    }
-                    if !compact { percentage }
-                }
-                HStack(spacing: 6) {
-                    if let detail {
-                        Text(detail)
-                            .font(NotchFont.caption)
-                            .foregroundStyle(detailTint ?? theme.tertiary)
-                            .lineLimit(1)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    } else {
-                        LevelBar(level: Double(level) / 100, color: color)
-                            .frame(height: 3)
-                    }
-                    if compact, !detailListsLevels { percentage }
+                } else if compact {
+                    percentage
                 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if !compact || (detail != nil && !detailListsLevels) {
+                percentage
+            }
         }
+        .accessibilityElement(children: .combine)
     }
 
     private var percentage: some View {
-        Text("\(level)%")
-            .font(NotchFont.numeric(compact ? 10.5 : 11))
-            .foregroundStyle(color)
-            .layoutPriority(1)
+        HStack(spacing: 2) {
+            if charging {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 8))
+            }
+            Text("\(level)%")
+                .font(NotchFont.numeric(compact ? 10.5 : 11.5))
+        }
+        .foregroundStyle(color)
+        .layoutPriority(1)
     }
 
     private var color: Color {

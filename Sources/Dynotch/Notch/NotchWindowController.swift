@@ -59,6 +59,16 @@ final class NotchWindowController {
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.closeIfAbandoned() }
             .store(in: &cancellables)
+        // The command field takes the keyboard, without bringing the app forward. Closing the notch gives it back.
+        viewModel.$isCommandMode
+            .removeDuplicates()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] active in
+                // Leaving the field hands the keyboard straight back, so typing goes where it was going.
+                if active { self?.panel.makeKey() } else { self?.panel.giveUpKeyFocus() }
+                self?.refreshPointer()
+            }
+            .store(in: &cancellables)
         AudioOutputs.shared.$isPresentingRoutes
             .removeDuplicates()
             .receive(on: RunLoop.main)
@@ -71,7 +81,8 @@ final class NotchWindowController {
         viewModel.update(geometry: NotchGeometry.make(for: screen, virtualWidth: settings.virtualNotchWidth,
                                                       virtualStyle: settings.virtualNotchStyle))
         let width = settings.openWidth + NotchTheme.maxTopRadius * 2 + Self.shadowInset * 2
-        let height = settings.openHeight + Self.shadowInset
+        // The command field can make the open notch taller than its setting.
+        let height = NotchViewModel.tallestOpenHeight(closedHeight: viewModel.geometry.closedSize.height) + Self.shadowInset
         let frame = screen.frame
         panel.setFrame(CGRect(x: (frame.midX - width / 2).rounded(), y: frame.maxY - height, width: width, height: height),
                        display: true)
@@ -117,7 +128,7 @@ final class NotchWindowController {
         if inside != isInside {
             isInside = inside
             inside ? pointerEntered() : pointerExited()
-        } else if !inside, viewModel.isOpen, !awaitingPointer, closeTask == nil, !isHeldOpen {
+        } else if !inside, viewModel.isOpen || viewModel.isGlancing, !awaitingPointer, closeTask == nil, !isHeldOpen {
             // Whatever held the notch open (a drag, a menu) has ended while the pointer was away.
             scheduleClose()
         }
@@ -129,12 +140,21 @@ final class NotchWindowController {
         viewModel.open(tab: tab)
     }
 
+    /// Opens straight into the command field, from ⌃⌥K.
+    func presentCommand() {
+        awaitingPointer = true
+        viewModel.open()
+        withAnimation(.notchTab) { viewModel.beginCommand() }
+    }
+
     func mouseDown(at point: CGPoint) {
         let inside = hitRect().contains(point)
-        if inside, !viewModel.isOpen {
+        // A glance's own buttons take its clicks; a click anywhere else on it opens the notch from SwiftUI.
+        if inside, viewModel.phase == .closed || viewModel.phase == .hovering {
             hoverTask?.cancel()
             viewModel.open()
-        } else if !inside, viewModel.isOpen, !viewModel.isMenuOpen, !AudioOutputs.shared.isPresentingRoutes {
+        } else if !inside, viewModel.isOpen || viewModel.isGlancing, !viewModel.isMenuOpen,
+                  !AudioOutputs.shared.isPresentingRoutes {
             dismiss()
         }
     }
@@ -203,6 +223,9 @@ final class NotchWindowController {
                 hoverTask?.cancel()
                 Haptics.tap()
                 viewModel.open()
+            } else if viewModel.isGlancing, scrollTotal < -30 {
+                scrollTotal = 0
+                dismiss()
             } else if viewModel.isOpen, scrollTotal < -40, swipeClosesNotch(at: point) {
                 scrollTotal = 0
                 dismiss()
@@ -248,7 +271,7 @@ final class NotchWindowController {
     /// The notch plus a little slack, and up past the top edge so the very top pixel counts.
     private func hitRect() -> CGRect {
         // The line is only a few points tall, so it gets more room underneath.
-        let slack: CGFloat = viewModel.isOpen ? 6 : viewModel.isLine ? 8 : 4
+        let slack: CGFloat = viewModel.isOpen || viewModel.isGlancing ? 6 : viewModel.isLine ? 8 : 4
         let rect = notchRect
         return CGRect(x: rect.minX - slack, y: rect.minY - slack, width: rect.width + slack * 2, height: rect.height + slack + 4)
     }
@@ -260,7 +283,7 @@ final class NotchWindowController {
     private func pointerEntered() {
         cancelClose()
         awaitingPointer = false
-        guard !viewModel.isOpen else { return }
+        guard !viewModel.isOpen, !viewModel.isGlancing else { return }
         viewModel.setHovering(true)
         Haptics.tap()
         guard AppSettings.shared.openOnHover else { return }
@@ -269,14 +292,19 @@ final class NotchWindowController {
         hoverTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard let self, !Task.isCancelled, self.isInside else { return }
-            self.viewModel.open()
+            // A glance first, if that's the setting; a click or a swipe down opens the rest.
+            if AppSettings.shared.hoverShows == .glance {
+                self.viewModel.glance()
+            } else {
+                self.viewModel.open()
+            }
         }
     }
 
     private func pointerExited() {
         hoverTask?.cancel()
         viewModel.setHovering(false)
-        if viewModel.isOpen { scheduleClose() }
+        if viewModel.isOpen || viewModel.isGlancing { scheduleClose() }
     }
 
     private func scheduleClose(after delay: TimeInterval = 0.15) {
@@ -327,8 +355,9 @@ final class NotchWindowController {
     }
 
     /// Two fingers sideways over the open notch: to the left for the next tab, to the right for the one before.
+    /// The command field covers the tabs, so a swipe over it changes nothing.
     private func changeTab(forward: Bool) {
-        guard !viewModel.isDraggingFiles else { return }
+        guard !viewModel.isDraggingFiles, !viewModel.isCommandMode else { return }
         let tabs = AppSettings.shared.enabledTabs
         guard let index = tabs.firstIndex(of: viewModel.visibleTab) else { return }
         let next = index + (forward ? 1 : -1)

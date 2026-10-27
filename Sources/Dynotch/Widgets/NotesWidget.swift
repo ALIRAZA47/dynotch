@@ -2,48 +2,66 @@ import AppKit
 import SwiftUI
 
 /// Notes that are always one hover away: several of them, with Markdown checklists, kept as files
-/// in a folder that can sync. Saved as you type.
+/// in a folder that can sync. Saved as you type. This is the card for the stack beside the player;
+/// the Focus tab shows the same note in its second card.
 struct NotesWidget: View {
-    @ObservedObject private var store = NotesStore.shared
     @ViewState private var editor = NoteEditorHandle()
+
+    var body: some View {
+        // In a narrow card there's no room for "1/2" as well as the title.
+        GeometryReader { proxy in
+            WidgetCard(title: "Notes", symbol: "note.text") {
+                NotesActions(editor: editor, showsCount: proxy.size.width >= 170)
+            } content: {
+                NoteBody(editor: editor)
+            }
+        }
+    }
+}
+
+/// The note being edited, or a hint while it's empty.
+struct NoteBody: View {
+    let editor: NoteEditorHandle
+    @ObservedObject private var store = NotesStore.shared
     @Environment(\.isSnapshot) private var isSnapshot
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
-        // Beside the player there's no room for "1/2" as well as the title.
-        GeometryReader { proxy in
-            card(isNarrow: proxy.size.width < 170)
+        ZStack(alignment: .topLeading) {
+            if isSnapshot {
+                NotePreview(text: store.current?.text ?? "")
+            } else if let note = store.current {
+                NoteEditor(noteID: note.id, text: note.text, handle: editor) { store.update(note.id, text: $0) }
+            }
+            if store.current?.isBlank ?? true {
+                Text("Jot something down…")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(theme.tertiary)
+                    .allowsHitTesting(false)
+            }
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
+}
 
-    private func card(isNarrow: Bool) -> some View {
-        WidgetCard(title: "Notes", symbol: "note.text") {
-            HStack(spacing: 0) {
-                if store.saveFailed {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 9.5))
-                        .foregroundStyle(.orange)
-                        .padding(.trailing, 2)
-                        .help("Couldn't save. Check the notes folder in Settings → Nook & Widgets.")
-                }
-                CardButton(symbol: "checklist", help: "Checklist") { editor.toggleChecklist() }
-                notesMenu(showsCount: !isNarrow)
-                CardButton(symbol: "square.and.pencil", help: "New note") { store.newNote() }
+/// The buttons in a notes card's title row: a checklist, the notes menu and a new note.
+struct NotesActions: View {
+    let editor: NoteEditorHandle
+    var showsCount = true
+    @ObservedObject private var store = NotesStore.shared
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if store.saveFailed {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 9.5))
+                    .foregroundStyle(.orange)
+                    .padding(.trailing, 2)
+                    .help("Couldn't save. Check the notes folder in Settings → Nook & Widgets.")
             }
-        } content: {
-            ZStack(alignment: .topLeading) {
-                if isSnapshot {
-                    NotePreview(text: store.current?.text ?? "")
-                } else if let note = store.current {
-                    NoteEditor(noteID: note.id, text: note.text, handle: editor) { store.update(note.id, text: $0) }
-                }
-                if store.current?.isBlank ?? true {
-                    Text("Jot something down…")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(theme.tertiary)
-                        .allowsHitTesting(false)
-                }
-            }
+            CardButton(symbol: "checklist", help: "Checklist") { editor.toggleChecklist() }
+            notesMenu(showsCount: showsCount)
+            CardButton(symbol: "square.and.pencil", help: "New note") { store.newNote() }
         }
     }
 

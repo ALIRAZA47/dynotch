@@ -1,42 +1,35 @@
 import SwiftUI
 
-/// Open reminders: tick them off or add a new one.
-struct RemindersWidget: View {
+/// Open reminders: tick them off or add a new one. One of the two lists in the Focus tab's second card.
+struct RemindersList: View {
     @ObservedObject private var calendar = CalendarService.shared
     @ViewState private var draft = ""
     @ViewState private var completing: Set<String> = []
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
-        WidgetCard(title: "Reminders", symbol: "checklist") {
-            if calendar.hasReminderAccess && !calendar.reminders.isEmpty {
-                Text("\(calendar.reminders.count)")
-                    .font(NotchFont.numeric(9.5, .bold))
-            }
-        } content: {
-            if calendar.hasReminderAccess {
-                VStack(alignment: .leading, spacing: 4) {
-                    if calendar.reminders.isEmpty {
-                        EmptyState(symbol: "checkmark.circle", message: "All done")
-                    } else {
-                        Scroller(.vertical, fadesOverflow: true) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                ForEach(calendar.reminders) { reminder in
-                                    row(reminder)
-                                }
+        if calendar.hasReminderAccess {
+            VStack(alignment: .leading, spacing: 4) {
+                if calendar.reminders.isEmpty {
+                    EmptyState(symbol: "checkmark.circle", message: "All done")
+                } else {
+                    Scroller(.vertical, fadesOverflow: true) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            ForEach(calendar.reminders) { reminder in
+                                row(reminder)
                             }
                         }
-                        .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
                     }
-                    CardField(placeholder: "New reminder", text: $draft) {
-                        calendar.addReminder(titled: draft)
-                        draft = ""
-                    }
+                    .frame(minHeight: 0, maxHeight: .infinity, alignment: .top)
                 }
-            } else {
-                PermissionPrompt(symbol: "checklist", message: "Check off your reminders from the notch.",
-                                 buttonTitle: "Allow Reminders", action: calendar.requestReminderAccess)
+                CardField(placeholder: "New reminder", text: $draft) {
+                    calendar.addReminder(titled: draft)
+                    draft = ""
+                }
             }
+        } else {
+            PermissionPrompt(symbol: "checklist", message: "Check off your reminders from the notch.",
+                             buttonTitle: "Allow Reminders", action: calendar.requestReminderAccess)
         }
     }
 
@@ -68,14 +61,15 @@ struct RemindersWidget: View {
                     .foregroundStyle(done ? theme.tertiary : theme.primary)
                     .lineLimit(2)
                     .fixedSize(horizontal: false, vertical: true)
-                if let due = reminder.dueDate {
-                    Text(dueText(due))
-                        .font(NotchFont.caption)
-                        .foregroundStyle(due < .now ? Color.red : theme.tertiary)
-                        .lineLimit(1)
-                }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            if let due = reminder.dueDate {
+                Text(dueText(due))
+                    .font(NotchFont.caption)
+                    .foregroundStyle(due < .now ? Color.red : Calendar.current.isDateInToday(due) ? Color.orange : theme.tertiary)
+                    .lineLimit(1)
+                    .fixedSize()
+            }
         }
         .help(reminder.title)
     }

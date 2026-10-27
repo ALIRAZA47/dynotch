@@ -86,7 +86,7 @@ private struct ConditionsView: View {
 }
 
 /// A WMO weather code as an SF Symbol and a few words.
-private struct Sky {
+struct Sky {
     let symbol: String
     let description: String
 
