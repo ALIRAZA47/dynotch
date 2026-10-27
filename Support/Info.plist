@@ -58,13 +58,17 @@
 	<key>NSCameraUsageDescription</key>
 	<string>Dynotch uses the camera for the Mirror widget so you can check yourself before a call.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Dynotch shows the battery level of your connected Bluetooth devices.</string>
+	<string>Dynotch shows the battery level of your connected Bluetooth devices, and connects or disconnects paired ones when you ask.</string>
 	<key>NSDesktopFolderUsageDescription</key>
 	<string>Dynotch puts new screenshots saved to your Desktop in the Tray, and keeps your notes there if you choose a folder on the Desktop.</string>
 	<key>NSDocumentsFolderUsageDescription</key>
 	<string>Dynotch puts new screenshots saved to your Documents folder in the Tray, and keeps your notes there if you choose a folder in Documents.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
 	<string>Dynotch puts new screenshots saved to your Downloads folder in the Tray, and keeps your notes there if you choose a folder in Downloads.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>Dynotch shows the weather where you are, if you turn on Use My Location in its Weather settings.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Dynotch shows the weather where you are, if you turn on Use My Location in its Weather settings.</string>
 	<key>NSFileProviderDomainUsageDescription</key>
 	<string>Dynotch keeps your notes in the iCloud Drive folder you choose, so they sync to your other Macs.</string>
 </dict>

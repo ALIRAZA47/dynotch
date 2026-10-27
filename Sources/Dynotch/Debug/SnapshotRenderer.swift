@@ -51,6 +51,18 @@ enum SnapshotRenderer {
             Scene(name: "22-open-tray-selected", phase: .open, tab: .tray) {
                 TrayStore.shared.select(TrayStore.shared.items[1])
             },
+            Scene(name: "23-open-nook-weather-notes", phase: .open, tab: .home) {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.weather, .notes)
+                WeatherService.shared.loadSample(place: "Lisbon", conditions: .init(
+                    temperature: 18.4, high: 21.2, low: 12.6, code: 2, isDay: true, isRaining: false,
+                    rainStart: .now.addingTimeInterval(20 * 60), isHeavyRain: false))
+            },
+            Scene(name: "24-open-nook-weather-setup", phase: .open, tab: .home) {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.weather, .devices)
+                WeatherService.shared.loadSample(place: "", conditions: nil)
+            },
+            Scene(name: "25-closed-rain", phase: .closed, activity: .notice(LiveNotice(
+                key: "rain", symbol: "cloud.rain.fill", tint: .cyan, text: "in 15m", detail: "Rain starting soon"))),
         ]
 
         let settings = AppSettings.shared

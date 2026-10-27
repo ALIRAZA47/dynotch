@@ -14,8 +14,9 @@ dependencies.
 | | |
 |---|---|
 | **Notch shell** | Hover, click, trackpad swipe or ⌃⌥N to open; swipe up, Esc or move away to close. Spring animations, haptics, hover grow. A virtual notch on Macs and displays without one. Choose the built-in display, the main display or all displays. |
-| **Live activities** (closed notch) | Album art and an equalizer while music plays; the song title when the track changes; focus-timer countdown; volume and brightness HUD; charging; low battery (Mac and Bluetooth devices); upcoming events five minutes ahead; Bluetooth devices connecting; Shortcuts finishing. |
-| **Nook tab** | Media player for Apple Music and Spotify: artwork, scrubber, play/pause, next/previous, shuffle, repeat, favorite. Its accent color comes from the album art. Two configurable widgets beside it: Calendar, Mirror, Shortcuts, Focus timer, Batteries, Quick toggles or Notes. |
+| **Live activities** (closed notch) | Album art and an equalizer while music plays; the song title when the track changes; focus-timer countdown; volume and brightness HUD; charging; low battery (Mac and Bluetooth devices); upcoming events five minutes ahead; Bluetooth devices connecting; Shortcuts finishing; a screenshot landing in the Tray; rain about to start. |
+| **Nook tab** | Media player for Apple Music and Spotify: artwork, scrubber, play/pause, next/previous, shuffle, repeat, favorite. Its accent color comes from the album art. Two configurable widgets beside it: Calendar, Mirror, Shortcuts, Focus timer, Batteries, Quick toggles, Notes or Weather. |
+| **Weather** | Current conditions and today's high and low from [Open-Meteo](https://open-meteo.com) (no account or key), for a city you search for in Settings or, if you allow it, where your Mac is. Temperatures follow the system's unit unless you pick Celsius or Fahrenheit. When rain is about to start, a heads-up appears in the closed notch, from Open-Meteo's 15-minute forecast where there is one. |
 | **Tray tab** | Drag files toward the notch and it opens with drop zones: **Keep in Tray**, **AirDrop**, **Compress** and **Copy to…**. Tray items have Quick Look thumbnails, drag back out to any app, and survive relaunches. Click one and press Space to preview it in Quick Look, as in Finder; the arrow keys move between items. The right-click menu offers Quick Look, Open, Open With, Show in Finder, Copy, AirDrop, Share, Compress, Extract, Convert Image (PNG/JPEG/HEIC), Make Smaller, Copy to…, Move to… and Remove. Dropped images, links and text become files. New screenshots and screen recordings land in the Tray as macOS saves them, from whichever folder the Screenshot app uses. |
 | **Focus tab** | Pomodoro timer (focus, short and long breaks, sound, auto-start), Reminders (check off, add new) and Notes: several notes with Markdown checklists (click a box to tick it; Return continues the list), saved as `.md` files named after their first line. Pick a folder in iCloud Drive in Settings and they sync to your other Macs; changes made on disk show up right away. |
 | **Stats tab** | CPU (with a sparkline), memory, disk and network; battery levels for the Mac, AirPods (each bud and the case), keyboards, mice and more, with paired devices that aren't connected listed underneath (headphones first) and a Connect button for each; right-click a connected device to disconnect it; quick toggles for Dark Mode, Keep Awake, Mute, Color Picker (copies the hex code), Screenshot and Sleep Display. |
@@ -93,6 +94,7 @@ Each permission is requested the first time you use the feature that needs it.
 | Calendar, Reminders | The Calendar and Reminders widgets |
 | Camera | The Mirror widget (it's only on while you're looking at it) |
 | Bluetooth | Battery levels of connected devices, and connecting or disconnecting paired ones |
+| Location (optional) | Weather where your Mac is, if you turn on Use My Location instead of picking a city |
 | Desktop, Documents or Downloads folder | Adding new screenshots to the Tray (macOS asks for the folder screenshots are saved to), and notes kept in a folder you chose there |
 
 Grants survive rebuilds as long as the app is signed with the local identity (see
@@ -121,8 +123,8 @@ Sources/Dynotch/
   Notch/      panel, geometry, shape, pointer handling, live activities, open/closed views
   Media/      Now Playing service (distributed notifications + AppleScript), player UI
   Calendar/   EventKit service, calendar and reminders widgets
-  Tray/       tray store, file actions, tray UI and drop zones
-  Widgets/    mirror, focus timer, notes, system stats, batteries, quick toggles, shortcuts
+  Tray/       tray store, file actions, tray UI and drop zones, screenshot watcher, Quick Look
+  Widgets/    mirror, focus timer, notes, system stats, batteries, quick toggles, shortcuts, weather
   HUD/        volume (CoreAudio) and brightness monitors
   Settings/   settings window and permissions page
   Debug/      snapshot renderer

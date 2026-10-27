@@ -40,7 +40,7 @@ enum NotchTab: String, CaseIterable, Identifiable {
 
 /// Widgets that can sit next to the media player on the Nook tab.
 enum HomeWidget: String, CaseIterable, Identifiable {
-    case calendar, mirror, shortcuts, timer, devices, toggles, notes, none
+    case calendar, mirror, shortcuts, timer, devices, toggles, notes, weather, none
 
     var id: String { rawValue }
 
@@ -53,6 +53,7 @@ enum HomeWidget: String, CaseIterable, Identifiable {
         case .devices: "Batteries"
         case .toggles: "Quick toggles"
         case .notes: "Notes"
+        case .weather: "Weather"
         case .none: "Nothing"
         }
     }
@@ -66,7 +67,23 @@ enum HomeWidget: String, CaseIterable, Identifiable {
         case .devices: "battery.75percent"
         case .toggles: "switch.2"
         case .notes: "note.text"
+        case .weather: "cloud.sun.fill"
         case .none: "minus.circle"
+        }
+    }
+}
+
+/// How the Weather widget shows temperatures.
+enum TemperatureUnits: String, CaseIterable, Identifiable {
+    case system, celsius, fahrenheit
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system: "System"
+        case .celsius: "Celsius"
+        case .fahrenheit: "Fahrenheit"
         }
     }
 }
@@ -184,6 +201,29 @@ final class AppSettings: ObservableObject {
     /// Where notes are kept as Markdown files. Empty for Dynotch's own folder.
     @Published var notesFolderPath: String = AppSettings.value("notesFolderPath", "") {
         didSet { save("notesFolderPath", notesFolderPath) }
+    }
+
+    // MARK: Weather
+
+    /// The city picked in Settings, as shown: "Lisbon, Portugal". Empty until one is picked.
+    @Published var weatherPlace: String = AppSettings.value("weatherPlace", "") {
+        didSet { save("weatherPlace", weatherPlace) }
+    }
+    @Published var weatherLatitude: Double = AppSettings.value("weatherLatitude", 0.0) {
+        didSet { save("weatherLatitude", weatherLatitude) }
+    }
+    @Published var weatherLongitude: Double = AppSettings.value("weatherLongitude", 0.0) {
+        didSet { save("weatherLongitude", weatherLongitude) }
+    }
+    /// Use where the Mac is, from Location Services, instead of the city.
+    @Published var weatherUsesLocation: Bool = AppSettings.value("weatherUsesLocation", false) {
+        didSet { save("weatherUsesLocation", weatherUsesLocation) }
+    }
+    @Published var weatherUnits: TemperatureUnits = AppSettings.value("weatherUnits", TemperatureUnits.system) {
+        didSet { save("weatherUnits", weatherUnits.rawValue) }
+    }
+    @Published var rainAlerts: Bool = AppSettings.value("rainAlerts", true) {
+        didSet { save("rainAlerts", rainAlerts) }
     }
 
     // MARK: Tray

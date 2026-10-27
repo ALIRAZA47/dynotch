@@ -461,6 +461,10 @@ struct NookSettings: View {
                             footer: "Each note is a Markdown file named after its first line. Keep them in iCloud Drive to have them on all your Macs. Leaving Dynotch's own folder takes your notes along.") {
                 NotesFolderCard()
             }
+            SettingsSection(title: "Weather",
+                            footer: "Forecasts come from Open-Meteo. Rain alerts use its 15-minute forecast where there is one, and the hourly forecast elsewhere.") {
+                WeatherSettings()
+            }
             SettingsSection(title: "Pinned shortcuts", trailing: "\(settings.pinnedShortcuts.count) of 4",
                             footer: "Pin up to four. They show in the Shortcuts widget.") {
                 ShortcutPins()
@@ -523,6 +527,195 @@ private struct NotesFolderCard: View {
             return rest.isEmpty ? "iCloud Drive" : "iCloud Drive › " + rest
         }
         return (folder.path as NSString).abbreviatingWithTildeInPath
+    }
+}
+
+/// Where the Weather widget looks, which units it uses, and rain alerts.
+private struct WeatherSettings: View {
+    @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var weather = WeatherService.shared
+    @ViewState private var query = ""
+    @ViewState private var results: [WeatherService.Place] = []
+    @ViewState private var isSearching = false
+    @ViewState private var searchTask: Task<Void, Never>?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SettingsCard {
+                SwitchRow(title: "Use my location", detail: locationDetail, symbol: "location.fill", tint: .blue,
+                          isOn: Binding(get: { settings.weatherUsesLocation }, set: { isOn in
+                    settings.weatherUsesLocation = isOn
+                    if isOn { weather.requestLocationAccess() }
+                }))
+                if !settings.weatherUsesLocation {
+                    CardDivider()
+                    cityRow
+                    ForEach(results) { place in
+                        CardDivider()
+                        PlaceRow(place: place) {
+                            weather.choose(place)
+                            searchTask?.cancel()
+                            query = ""
+                            results = []
+                        }
+                    }
+                    if !isSearching, results.isEmpty, query.trimmingCharacters(in: .whitespaces).count >= 2 {
+                        CardDivider()
+                        Text("No places found")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 10)
+                    }
+                }
+            }
+            unitsCard
+            SettingsCard {
+                SwitchRow(title: "Rain alerts", detail: "A heads-up in the closed notch when rain is about to start",
+                          symbol: "cloud.rain.fill", tint: .cyan, isOn: $settings.rainAlerts)
+            }
+        }
+        .onChange(of: query) { search() }
+    }
+
+    private var locationDetail: String {
+        guard settings.weatherUsesLocation else { return "Instead of a city, use where this Mac is" }
+        switch weather.locationAccess {
+        case .notDetermined: return "Waiting for Location Services"
+        case .denied, .restricted: return "Location Services is off for Dynotch. Allow it in System Settings."
+        default: return weather.placeName.isEmpty ? "Finding where you are…" : "Now in \(weather.placeName)"
+        }
+    }
+
+    private var cityRow: some View {
+        HStack(spacing: 12) {
+            SymbolBadge(symbol: "building.2.fill", tint: .indigo, size: 26)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("City")
+                    .font(.system(size: 13, weight: .medium))
+                Text(settings.weatherPlace.isEmpty ? "None yet" : settings.weatherPlace)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 12)
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                TextField("Search for a city", text: $query)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12.5))
+                if isSearching {
+                    ProgressView().controlSize(.small)
+                }
+            }
+            .padding(.horizontal, 10)
+            .frame(width: 240, height: 28)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.wash))
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+    }
+
+    private var unitsCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Temperature")
+                .font(.system(size: 13, weight: .semibold))
+                .padding(.leading, 2)
+                .accessibilityHidden(true)
+            HStack(spacing: 6) {
+                ForEach(TemperatureUnits.allCases) { units in
+                    ChoiceChip(title: title(for: units), symbol: symbol(for: units), isSelected: settings.weatherUnits == units) {
+                        settings.weatherUnits = units
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CardBackground())
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Temperature")
+    }
+
+    private func title(for units: TemperatureUnits) -> String {
+        switch units {
+        case .system: WeatherService.systemUsesFahrenheit ? "Like the system (°F)" : "Like the system (°C)"
+        case .celsius: "Celsius"
+        case .fahrenheit: "Fahrenheit"
+        }
+    }
+
+    private func symbol(for units: TemperatureUnits) -> String {
+        switch units {
+        case .system: "gearshape"
+        case .celsius: "degreesign.celsius"
+        case .fahrenheit: "degreesign.fahrenheit"
+        }
+    }
+
+    /// Searches as you type, once you pause.
+    private func search() {
+        searchTask?.cancel()
+        let text = query.trimmingCharacters(in: .whitespaces)
+        guard text.count >= 2 else {
+            results = []
+            isSearching = false
+            return
+        }
+        isSearching = true
+        searchTask = Task {
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            let found = await WeatherService.search(text)
+            guard !Task.isCancelled else { return }
+            results = found
+            isSearching = false
+        }
+    }
+}
+
+/// A city found by the weather search.
+private struct PlaceRow: View {
+    let place: WeatherService.Place
+    let action: () -> Void
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: "mappin.circle.fill")
+                    .font(.system(size: 17))
+                    .foregroundStyle(Palette.accent)
+                    .frame(width: 26)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(place.name)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.primary)
+                    if !place.region.isEmpty {
+                        Text(place.region)
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer(minLength: 12)
+                Text("Use")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Palette.accent)
+                    .opacity(hovering ? 1 : 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Palette.wash.opacity(hovering ? 1 : 0))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .accessibilityLabel(place.region.isEmpty ? place.name : "\(place.name), \(place.region)")
+        .accessibilityHint("Shows the weather for this place")
     }
 }
 

@@ -41,7 +41,7 @@ final class PermissionStatus: ObservableObject {
                           DeviceBatteryMonitor.shared.objectWillChange)
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
-        ScreenshotWatcher.shared.objectWillChange
+        Publishers.Merge(ScreenshotWatcher.shared.objectWillChange, WeatherService.shared.objectWillChange)
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
     }
@@ -63,6 +63,16 @@ final class PermissionStatus: ObservableObject {
             Item(title: "Bluetooth", purpose: "Battery levels of AirPods, keyboards and mice", symbol: "airpodspro",
                  tint: .blue, state: devices.isAuthorized ? .granted : .notDetermined, action: devices.requestAccess),
         ] + (AppSettings.shared.screenshotsToTray ? [screenshotsItem] : [])
+            + (AppSettings.shared.weatherUsesLocation ? [locationItem] : [])
+    }
+
+    /// Only asked for when the Weather widget is set to use where the Mac is.
+    private var locationItem: Item {
+        let weather = WeatherService.shared
+        let state: State = weather.isLocationAllowed ? .granted
+            : weather.locationAccess == .notDetermined ? .notDetermined : .denied
+        return Item(title: "Location", purpose: "Weather where you are", symbol: "location.fill", tint: .blue,
+                    state: state, action: weather.requestLocationAccess)
     }
 
     /// Reading the folder screenshots are saved to. macOS asks for the Desktop, Documents and Downloads.

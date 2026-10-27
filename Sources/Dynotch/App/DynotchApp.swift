@@ -40,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         VolumeMonitor.shared.start()
         BrightnessMonitor.shared.start()
         DeviceBatteryMonitor.shared.start()
+        WeatherService.shared.start()
         LiveActivityCenter.shared.start()
         NotchManager.shared.start()
         // Last, since reading the screenshot folder can bring up macOS's folder-access prompt.
