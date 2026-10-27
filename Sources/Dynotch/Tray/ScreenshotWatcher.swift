@@ -31,6 +31,13 @@ final class ScreenshotWatcher: ObservableObject {
     private var watches: [Watch] = []
     private var locationPoll: Poll?
     private var cancellable: AnyCancellable?
+    private let queue = DispatchQueue(label: "app.dynotch.screenshots", qos: .utility)
+    /// Goes up whenever watching stops, so a first look that comes back after that is dropped.
+    private var generation = 0
+
+    private enum Listing {
+        case names([String]), denied, unreadable
+    }
 
     private init() {}
 
@@ -65,21 +72,20 @@ final class ScreenshotWatcher: ObservableObject {
 
     private func watch() {
         stop()
-        for folder in Self.folders() {
-            guard let names = listing(of: folder) else { continue }
-            let descriptor = open(folder.path, O_EVTONLY)
-            guard descriptor >= 0 else { continue }
-            let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: descriptor, eventMask: .write, queue: .main)
-            let watch = Watch(folder: folder, source: source, seen: Set(names))
-            source.setEventHandler { [weak self, weak watch] in
+        let folders = Self.folders()
+        let started = generation
+        // Off the main thread: macOS holds the first look at a folder until its prompt is answered,
+        // and the notch would freeze meanwhile.
+        queue.async {
+            let listings = folders.map { ($0, Self.list($0)) }
+            DispatchQueue.main.async {
                 MainActor.assumeIsolated {
-                    guard let self, let watch else { return }
-                    self.scan(watch)
+                    guard started == self.generation else { return }
+                    for (folder, listing) in listings {
+                        if let names = self.files(in: listing) { self.startWatching(folder, seen: names) }
+                    }
                 }
             }
-            source.setCancelHandler { close(descriptor) }
-            source.resume()
-            watches.append(watch)
         }
 
         // The save location can change in the Screenshot app's Options menu, and nothing announces it.
@@ -90,7 +96,24 @@ final class ScreenshotWatcher: ObservableObject {
         }
     }
 
+    private func startWatching(_ folder: URL, seen names: [String]) {
+        let descriptor = open(folder.path, O_EVTONLY)
+        guard descriptor >= 0 else { return }
+        let source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: descriptor, eventMask: .write, queue: .main)
+        let watch = Watch(folder: folder, source: source, seen: Set(names))
+        source.setEventHandler { [weak self, weak watch] in
+            MainActor.assumeIsolated {
+                guard let self, let watch else { return }
+                self.scan(watch)
+            }
+        }
+        source.setCancelHandler { close(descriptor) }
+        source.resume()
+        watches.append(watch)
+    }
+
     private func stop() {
+        generation += 1
         watches.forEach { $0.source.cancel() }
         watches.removeAll()
         locationPoll?.cancel()
@@ -98,7 +121,7 @@ final class ScreenshotWatcher: ObservableObject {
     }
 
     private func scan(_ watch: Watch) {
-        guard let names = listing(of: watch.folder) else { return }
+        guard let names = files(in: Self.list(watch.folder)) else { return }
         var fresh: [URL] = []
         var waiting = false
         for name in names where !watch.seen.contains(name) {
@@ -133,16 +156,27 @@ final class ScreenshotWatcher: ObservableObject {
                                                   tint: .white, detail: detail), for: 2.6)
     }
 
-    /// The visible files in a folder, or nil if it can't be read.
-    private func listing(of folder: URL) -> [String]? {
+    /// The visible files in a folder.
+    nonisolated private static func list(_ folder: URL) -> Listing {
         do {
-            let names = try FileManager.default.contentsOfDirectory(atPath: folder.path)
-            access = .granted
-            return names.filter { !$0.hasPrefix(".") }
+            return .names(try FileManager.default.contentsOfDirectory(atPath: folder.path).filter { !$0.hasPrefix(".") })
         } catch CocoaError.fileReadNoPermission {
+            return .denied
+        } catch {
+            return .unreadable
+        }
+    }
+
+    /// A listing's files, or nil if the folder couldn't be read. Notes whether it could.
+    private func files(in listing: Listing) -> [String]? {
+        switch listing {
+        case .names(let names):
+            access = .granted
+            return names
+        case .denied:
             access = .denied
             return nil
-        } catch {
+        case .unreadable:
             return nil
         }
     }
