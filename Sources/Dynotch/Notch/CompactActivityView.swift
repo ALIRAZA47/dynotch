@@ -18,20 +18,6 @@ struct CompactActivityView: View {
     }
 }
 
-/// The symbol of the Focus that's on, in its color.
-struct FocusGlyph: View {
-    let mode: FocusMode
-    var size: CGFloat = ClosedLayout.glyphSize
-
-    var body: some View {
-        Image(systemName: mode.symbol)
-            .font(.system(size: size * 0.78, weight: .semibold))
-            .foregroundStyle(mode.tint)
-            .frame(width: size, height: size)
-            .accessibilityLabel("\(mode.name) is on")
-    }
-}
-
 /// The focus timer's ring.
 private struct TimerGlyph: View {
     @ObservedObject private var timer = PomodoroTimer.shared
@@ -62,5 +48,19 @@ struct MuteBadge: View {
             .frame(width: size, height: size)
             .background(Circle().fill(Color.red))
             .accessibilityLabel("Microphone muted")
+    }
+}
+
+/// The symbol of the Focus that's on, in its color.
+struct FocusGlyph: View {
+    let mode: FocusMode
+    var size: CGFloat = ClosedLayout.glyphSize
+
+    var body: some View {
+        Image(systemName: mode.symbol)
+            .font(.system(size: size * 0.78, weight: .semibold))
+            .foregroundStyle(mode.tint)
+            .frame(width: size, height: size)
+            .accessibilityLabel("\(mode.name) is on")
     }
 }

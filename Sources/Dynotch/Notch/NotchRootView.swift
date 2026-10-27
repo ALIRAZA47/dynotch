@@ -29,8 +29,10 @@ struct NotchRootView: View {
             .clipShape(NotchShape(topRadius: metrics.topRadius, bottomRadius: metrics.bottomRadius))
             .overlay {
                 if let color = onAirColor {
+                    // A beat before it shows, so the Mirror's camera winding down as the notch closes doesn't flash it.
                     OnAirRing(color: color, metrics: metrics)
-                        .transition(.opacity.animation(.easeInOut(duration: 0.3)))
+                        .transition(.asymmetric(insertion: .opacity.animation(.easeIn(duration: 0.3).delay(0.6)),
+                                                removal: .opacity.animation(.easeOut(duration: 0.2))))
                 }
             }
             .shadow(color: .black.opacity(viewModel.isOpen && settings.showOpenShadow ? 0.5 : 0), radius: 18, y: 8)
