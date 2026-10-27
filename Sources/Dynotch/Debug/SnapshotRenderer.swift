@@ -20,6 +20,7 @@ enum SnapshotRenderer {
         var micInUse = false
         var cameraInUse = false
         var hasTimers = true
+        var downloadKnowsSize = true
     }
 
     static func render(into folder: URL) {
@@ -41,6 +42,8 @@ enum SnapshotRenderer {
                                  detail: "Running ten minutes late, start the review without me")
         let longMessage = LiveNotice(key: "notification", symbol: "message.fill", tint: .green, text: "Anna",
                                      detail: "Are we still on for lunch tomorrow? I booked the place by the river for half past twelve")
+        let downloaded = LiveNotice(key: "download", symbol: "arrow.down.circle.fill", tint: DownloadMonitor.tint,
+                                    text: "Downloaded", detail: "Keynote Themes.zip")
         let scenes = [
             Scene(name: "01-closed-idle", phase: .closed),
             Scene(name: "02-closed-hover", phase: .hovering),
@@ -79,6 +82,11 @@ enum SnapshotRenderer {
             Scene(name: "50-closed-message", phase: .closed, activity: .notice(message)),
             Scene(name: "51-closed-long-message", phase: .closed, activity: .notice(longMessage)),
             Scene(name: "52-closed-message-and-timer", phase: .closed, activity: .notice(message), secondary: .timer),
+            Scene(name: "60-closed-download", phase: .closed, activity: .download),
+            Scene(name: "61-closed-download-size", phase: .closed, activity: .download, downloadKnowsSize: false),
+            Scene(name: "62-closed-download-and-music", phase: .closed, activity: .download, secondary: .music),
+            Scene(name: "63-closed-timer-and-download", phase: .closed, activity: .timer, secondary: .download),
+            Scene(name: "64-closed-downloaded", phase: .closed, activity: .notice(downloaded)),
         ]
 
         let settings = AppSettings.shared
@@ -87,6 +95,7 @@ enum SnapshotRenderer {
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
             MicMonitor.shared.loadSample(muted: scene.micMuted, micInUse: scene.micInUse, cameraInUse: scene.cameraInUse)
             if scene.hasTimers { TimerStore.shared.loadSample(at: sampleTime) } else { TimerStore.shared.clearSample() }
+            DownloadMonitor.shared.loadSample(knowsSize: scene.downloadKnowsSize)
             let viewModel = NotchViewModel(geometry: geometry)
             viewModel.stage(phase: scene.phase, activity: scene.activity, secondary: scene.secondary, tab: scene.tab,
                             draggingFiles: scene.draggingFiles)

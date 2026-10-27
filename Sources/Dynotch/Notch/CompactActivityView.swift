@@ -12,6 +12,7 @@ struct CompactActivityView: View {
         case .micMuted: MuteBadge()
         case .countdown(let countdown): CountdownGlyph(countdown: countdown)
         case .stopwatch: StopwatchGlyph()
+        case .download: DownloadGlyph()
         }
     }
 }

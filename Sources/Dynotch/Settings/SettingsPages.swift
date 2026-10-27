@@ -270,7 +270,7 @@ private struct VirtualNotchSketch: View {
 /// The live activities that can be turned off, and a sample of each for the preview.
 enum LiveActivityKind: String, CaseIterable, Identifiable {
     case music, trackPeek, timer, levels, charging, lowBattery, events, devices
-    case micMuted, countdowns
+    case micMuted, countdowns, downloads
 
     var id: String { rawValue }
 
@@ -286,6 +286,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .devices: "Bluetooth devices"
         case .micMuted: "Muted microphone"
         case .countdowns: "Timers"
+        case .downloads: "Downloads"
         }
     }
 
@@ -301,6 +302,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .devices: "When one connects, with its battery"
         case .micMuted: "A red badge while the mic is muted"
         case .countdowns: "Named timers and the stopwatch from the Focus tab"
+        case .downloads: "Progress as a file downloads, and a notice when it's done"
         }
     }
 
@@ -316,6 +318,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .devices: "airpodspro"
         case .micMuted: "mic.slash.fill"
         case .countdowns: "hourglass"
+        case .downloads: "arrow.down.circle.fill"
         }
     }
 
@@ -331,6 +334,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .devices: .teal
         case .micMuted: .red
         case .countdowns: TimerStore.tint
+        case .downloads: DownloadMonitor.tint
         }
     }
 
@@ -347,6 +351,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .devices: \.liveDevices
         case .micMuted: \.liveMicMuted
         case .countdowns: \.liveCountdowns
+        case .downloads: \.liveDownloads
         }
     }
 
@@ -371,6 +376,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
             .notice(LiveNotice(key: "device", symbol: "airpodspro", tint: .white, text: "80%", detail: "AirPods Pro connected"))
         case .micMuted: .idle
         case .countdowns: .countdown(Self.sampleCountdown)
+        case .downloads: .download
         }
     }
 
@@ -396,6 +402,8 @@ struct ActivitySettings: View {
                      symbol: "record.circle", tint: .green, setting: \.onAirRing),
         SwitchOption(title: "Mute shortcut", detail: "⌃⌥M mutes and unmutes the mic in every app",
                      symbol: "mic.fill", tint: .orange, setting: \.micShortcut),
+        SwitchOption(title: "Downloads to the Tray", detail: "Put each finished download in the Tray",
+                     symbol: "tray.and.arrow.down.fill", tint: .teal, setting: \.downloadsToTray),
     ]
 
     /// The activities, then a tile that shows a sample in the real notch.
@@ -429,7 +437,7 @@ struct ActivitySettings: View {
                 }
             }
             SettingsSection(title: "Options",
-                            footer: "With two at once, the mute badge, a timer or the music you're playing keeps a small glyph while something else takes the notch. The ring is green for a camera and orange for the mic.") {
+                            footer: "With two at once, the mute badge, a timer, a download or the music you're playing keeps a small glyph while something else takes the notch. The ring is green for a camera and orange for the mic.") {
                 SwitchGrid(options: options)
             }
         }

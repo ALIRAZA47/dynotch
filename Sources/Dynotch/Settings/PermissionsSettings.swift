@@ -41,6 +41,9 @@ final class PermissionStatus: ObservableObject {
                           DeviceBatteryMonitor.shared.objectWillChange)
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        DownloadMonitor.shared.$access
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
     }
 
     var privacy: [Item] {
@@ -59,7 +62,19 @@ final class PermissionStatus: ObservableObject {
                  action: camera.requestAccess),
             Item(title: "Bluetooth", purpose: "Battery levels of AirPods, keyboards and mice", symbol: "airpodspro",
                  tint: .blue, state: devices.isAuthorized ? .granted : .notDetermined, action: devices.requestAccess),
+            downloadsItem,
         ]
+    }
+
+    private var downloadsItem: Item {
+        let downloads = DownloadMonitor.shared
+        let state: State = switch downloads.access {
+        case .granted: .granted
+        case .denied: .denied
+        case .unknown: .notDetermined
+        }
+        return Item(title: "Downloads folder", purpose: "Download progress in the notch, and finished files in the Tray",
+                    symbol: "arrow.down.circle.fill", tint: .blue, state: state, action: downloads.requestAccess)
     }
 
     var automationItems: [Item] {

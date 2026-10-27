@@ -82,6 +82,10 @@ struct ClosedLayout: Equatable {
         case .stopwatch:
             earWidth = 72
             rowHeight = 0
+        case .download:
+            // Room for a size like "482.3 MB" on the right.
+            earWidth = 78
+            rowHeight = 0
         case .notice(let notice):
             switch notice.kind {
             case .meter:

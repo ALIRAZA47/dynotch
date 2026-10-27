@@ -297,6 +297,9 @@ private struct ClosedPreview: View {
             Image(systemName: "stopwatch.fill")
                 .font(.system(size: 13 * scale, weight: .semibold))
                 .foregroundStyle(TimerStore.stopwatchTint)
+        case .download:
+            DownloadRing(fraction: 0.45, lineWidth: 2.6 * scale, arrowSize: 7 * scale)
+                .frame(width: 17 * scale, height: 17 * scale)
         }
     }
 
@@ -335,6 +338,11 @@ private struct ClosedPreview: View {
                 .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(TimerStore.stopwatchTint)
+        case .download:
+            Text("45%")
+                .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .foregroundStyle(DownloadMonitor.tint)
         }
     }
 
@@ -367,6 +375,9 @@ private struct ClosedPreview: View {
                 .padding(1.5 * scale)
         case .stopwatch:
             ProgressRing(progress: 0.55, color: TimerStore.stopwatchTint, lineWidth: 2.4 * scale)
+                .padding(1.5 * scale)
+        case .download:
+            DownloadRing(fraction: 0.45, lineWidth: 2.4 * scale, arrowSize: 6 * scale)
                 .padding(1.5 * scale)
         }
     }

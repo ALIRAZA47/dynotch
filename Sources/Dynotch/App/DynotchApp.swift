@@ -41,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         BrightnessMonitor.shared.start()
         DeviceBatteryMonitor.shared.start()
         MicMonitor.shared.start()
+        DownloadMonitor.shared.start()
         LiveActivityCenter.shared.start()
         NotchManager.shared.start()
 

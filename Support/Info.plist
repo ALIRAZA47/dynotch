@@ -59,5 +59,7 @@
 	<string>Dynotch uses the camera for the Mirror widget so you can check yourself before a call.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>Dynotch shows the battery level of your connected Bluetooth devices.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Dynotch shows the progress of files you download in the notch, and can put finished downloads in the Tray.</string>
 </dict>
 </plist>

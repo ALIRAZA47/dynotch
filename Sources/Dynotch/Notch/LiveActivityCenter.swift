@@ -29,6 +29,8 @@ enum ClosedActivity: Equatable {
     /// A named timer from the Focus tab.
     case countdown(Countdown)
     case stopwatch
+    /// Files arriving in ~/Downloads.
+    case download
 }
 
 /// A second activity, drawn as a small glyph at the end of the right ear while the main
@@ -40,11 +42,12 @@ enum CompactActivity: Equatable {
     case micMuted
     case countdown(Countdown)
     case stopwatch
+    case download
 
     /// The main activity already shows this one.
     func isShown(by activity: ClosedActivity) -> Bool {
         switch (self, activity) {
-        case (.timer, .timer), (.music, .music), (.music, .trackPeek), (.stopwatch, .stopwatch): true
+        case (.timer, .timer), (.music, .music), (.music, .trackPeek), (.stopwatch, .stopwatch), (.download, .download): true
         case (.micMuted, .notice(let notice)): notice.key == "mic"
         case (.countdown(let compact), .countdown(let main)): compact.id == main.id
         default: false
@@ -63,8 +66,8 @@ struct ClosedContent: Equatable {
 
 /// Decides what the closed notch shows. The main activity goes by priority: notices, a new
 /// track, a running timer (the focus timer or a named one, whichever ends soonest, then the
-/// stopwatch), then music that's playing. The most important of the others that has a
-/// compact form shows beside it, the mute badge first.
+/// stopwatch), a download, then music that's playing. The most important of the others that
+/// has a compact form shows beside it, the mute badge first.
 @MainActor
 final class LiveActivityCenter: ObservableObject {
     static let shared = LiveActivityCenter()
@@ -92,6 +95,7 @@ final class LiveActivityCenter: ObservableObject {
             MicMonitor.shared.$isMuted.map { _ in () }.eraseToAnyPublisher(),
             TimerStore.shared.$countdowns.map { _ in () }.eraseToAnyPublisher(),
             TimerStore.shared.$stopwatch.map { _ in () }.eraseToAnyPublisher(),
+            DownloadMonitor.shared.$downloads.map(\.isEmpty).removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
             AppSettings.shared.objectWillChange.map { _ in () }.eraseToAnyPublisher()
         )
         // @Published fires before the value changes; read it on the next turn.
@@ -135,6 +139,7 @@ final class LiveActivityCenter: ObservableObject {
         let media = NowPlayingService.shared
         let store = TimerStore.shared
         let musicPlaying = settings.liveMusic && media.isPlaying && media.track != nil
+        let downloading = settings.liveDownloads && !DownloadMonitor.shared.downloads.isEmpty
 
         // Running timers, the one that ends soonest first, then the stopwatch.
         var timers: [(end: Date, activity: ClosedActivity, compact: CompactActivity)] = []
@@ -156,6 +161,8 @@ final class LiveActivityCenter: ObservableObject {
             activity = .trackPeek
         } else if let timer = timers.first {
             activity = timer.activity
+        } else if downloading {
+            activity = .download
         } else if musicPlaying {
             activity = .music
         } else {
@@ -166,6 +173,7 @@ final class LiveActivityCenter: ObservableObject {
         var compact: [CompactActivity] = []
         if settings.liveMicMuted, MicMonitor.shared.isMuted { compact.append(.micMuted) }
         compact += timers.map(\.compact)
+        if downloading { compact.append(.download) }
         if musicPlaying { compact.append(.music) }
         var secondary = compact.first { !$0.isShown(by: activity) }
         // Without "Two at once", only a status like the mute badge shows, and only when nothing else does.

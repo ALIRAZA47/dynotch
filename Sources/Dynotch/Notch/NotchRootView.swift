@@ -129,6 +129,8 @@ struct ClosedNotchView: View {
             Image(systemName: "stopwatch.fill")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(TimerStore.stopwatchTint)
+        case .download:
+            DownloadLabel()
         }
     }
 
@@ -161,6 +163,8 @@ struct ClosedNotchView: View {
             CountdownTime(countdown: countdown)
         case .stopwatch:
             StopwatchTime()
+        case .download:
+            DownloadAmount()
         }
     }
 

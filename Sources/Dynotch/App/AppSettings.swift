@@ -177,6 +177,14 @@ final class AppSettings: ObservableObject {
     @Published var liveCountdowns: Bool = AppSettings.value("liveCountdowns", true) {
         didSet { save("liveCountdowns", liveCountdowns) }
     }
+    /// Progress while files arrive in ~/Downloads, and a notice when one is done.
+    @Published var liveDownloads: Bool = AppSettings.value("liveDownloads", true) {
+        didSet { save("liveDownloads", liveDownloads) }
+    }
+    /// Finished downloads go into the Tray.
+    @Published var downloadsToTray: Bool = AppSettings.value("downloadsToTray", false) {
+        didSet { save("downloadsToTray", downloadsToTray) }
+    }
 
     // MARK: Nook
 
