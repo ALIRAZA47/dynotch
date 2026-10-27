@@ -146,6 +146,7 @@ struct HomeWidgetView: View {
         case .devices: DevicesWidget()
         case .toggles: QuickTogglesWidget(compact: true)
         case .notes: NotesWidget()
+        case .weather: WeatherWidget()
         case .none: EmptyView()
         }
     }

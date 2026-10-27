@@ -60,8 +60,18 @@
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>With Live equalizer on, Dynotch listens to Music or Spotify while they play so the equalizer bars follow the music. Nothing is recorded or saved.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Dynotch shows the battery level of your connected Bluetooth devices.</string>
+	<string>Dynotch shows the battery level of your connected Bluetooth devices, and connects or disconnects paired ones when you ask.</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Dynotch puts new screenshots saved to your Desktop in the Tray, and keeps your notes there if you choose a folder on the Desktop.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Dynotch puts new screenshots saved to your Documents folder in the Tray, and keeps your notes there if you choose a folder in Documents.</string>
 	<key>NSDownloadsFolderUsageDescription</key>
-	<string>Dynotch shows the progress of files you download in the notch, and can put finished downloads in the Tray.</string>
+	<string>Dynotch shows the progress of files you download in the notch and can put finished downloads in the Tray. It also picks up screenshots saved to Downloads, and keeps your notes there if you choose a folder in Downloads.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>Dynotch shows the weather where you are, if you turn on Use My Location in its Weather settings.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Dynotch shows the weather where you are, if you turn on Use My Location in its Weather settings.</string>
+	<key>NSFileProviderDomainUsageDescription</key>
+	<string>Dynotch keeps your notes in the iCloud Drive folder you choose, so they sync to your other Macs.</string>
 </dict>
 </plist>

@@ -51,6 +51,9 @@ final class PermissionStatus: ObservableObject {
         FocusMonitor.shared.$access
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        Publishers.Merge(ScreenshotWatcher.shared.objectWillChange, WeatherService.shared.objectWillChange)
+            .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &cancellables)
     }
 
     var privacy: [Item] {
@@ -73,11 +76,40 @@ final class PermissionStatus: ObservableObject {
                  action: MediaKeyTap.shared.requestAccess),
             Item(title: "System audio recording", purpose: "The live equalizer, which listens to Music and Spotify",
                  symbol: "waveform", tint: .pink, state: audioCaptureState, action: AudioLevels.shared.requestPermission),
-            Item(title: "Bluetooth", purpose: "Battery levels of AirPods, keyboards and mice", symbol: "airpodspro",
+            Item(title: "Bluetooth", purpose: "Battery levels of AirPods, keyboards and mice, and connecting them", symbol: "airpodspro",
                  tint: .blue, state: devices.isAuthorized ? .granted : .notDetermined, action: devices.requestAccess),
             downloadsItem,
             fullDiskAccessItem,
-        ]
+        ] + (AppSettings.shared.screenshotsToTray ? [screenshotsItem] : [])
+            + (AppSettings.shared.weatherUsesLocation ? [locationItem] : [])
+    }
+
+    /// Only asked for when the Weather widget is set to use where the Mac is.
+    private var locationItem: Item {
+        let weather = WeatherService.shared
+        let state: State = weather.isLocationAllowed ? .granted
+            : weather.locationAccess == .notDetermined ? .notDetermined : .denied
+        return Item(title: "Location", purpose: "Weather where you are", symbol: "location.fill", tint: .blue,
+                    state: state, action: weather.requestLocationAccess)
+    }
+
+    /// Reading the folder screenshots are saved to. macOS asks for the Desktop, Documents and Downloads.
+    private var screenshotsItem: Item {
+        let watcher = ScreenshotWatcher.shared
+        let state: State
+        switch watcher.access {
+        case .granted: state = .granted
+        case .denied: state = .denied
+        case .unknown: state = .notDetermined
+        }
+        return Item(title: "Screenshots folder", purpose: "New screenshots in the Tray (\(ScreenshotWatcher.folderNames))",
+                    symbol: "camera.viewfinder", tint: .orange, state: state) {
+            if watcher.access == .denied {
+                CalendarService.openPrivacySettings("Privacy_FilesAndFolders")
+            } else {
+                watcher.restart()
+            }
+        }
     }
 
     /// There's no prompt for Full Disk Access; the button opens its pane in System Settings.

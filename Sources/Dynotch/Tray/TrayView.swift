@@ -21,6 +21,7 @@ private struct TrayContentView: View {
     @ObservedObject private var tray = TrayStore.shared
     @ViewState private var isTargeted = false
     @ViewState private var isWorking = false
+    @Environment(\.isSnapshot) private var isSnapshot
 
     var body: some View {
         HStack(spacing: 12) {
@@ -32,7 +33,7 @@ private struct TrayContentView: View {
                     Scroller(.horizontal) {
                         HStack(spacing: 4) {
                             ForEach(tray.items) { item in
-                                TrayItemView(item: item, viewModel: viewModel)
+                                TrayItemView(item: item, isSelected: tray.selection == item.id, viewModel: viewModel)
                                     .transition(.scale(scale: 0.6).combined(with: .opacity))
                             }
                         }
@@ -52,6 +53,9 @@ private struct TrayContentView: View {
 
             AirDropTile()
                 .frame(width: 96)
+        }
+        .background {
+            if !isSnapshot { QuickLookAnchor(viewModel: viewModel) }
         }
     }
 
@@ -97,6 +101,8 @@ private struct TrayContentView: View {
 
 private struct TrayItemView: View {
     let item: TrayStore.Item
+    /// Selected like a file in Finder: the space bar previews it.
+    let isSelected: Bool
     let viewModel: NotchViewModel
     @ObservedObject private var thumbnails = ThumbnailCache.shared
     @ViewState private var hovering = false
@@ -108,16 +114,23 @@ private struct TrayItemView: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 46, height: 46)
                 .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
+                .padding(3)
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color.white.opacity(isSelected ? 0.16 : 0)))
             Text(item.url.lastPathComponent)
                 .font(.system(size: 10, weight: .medium))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .truncationMode(.middle)
-                .frame(width: 70, height: 26, alignment: .top)
+                .padding(.horizontal, 4)
+                .background(RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(isSelected ? Color.accentColor : .clear))
+                .frame(width: 78, height: 26, alignment: .top)
         }
-        .padding(.top, 7)
+        .padding(.top, 4)
         .frame(width: 80)
-        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(hovering ? 0.1 : 0)))
+        .background(RoundedRectangle(cornerRadius: 11, style: .continuous)
+            .fill(Color.white.opacity(hovering && !isSelected ? 0.1 : 0)))
         .overlay(alignment: .topTrailing) {
             if hovering {
                 Button { TrayStore.shared.remove(item) } label: {
@@ -133,6 +146,10 @@ private struct TrayItemView: View {
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
         .onTapGesture(count: 2) { FileActions.open(item.url) }
+        .simultaneousGesture(TapGesture().onEnded {
+            TrayStore.shared.select(item)
+            TrayQuickLook.shared.takeKeyboard()
+        })
         .onDrag {
             viewModel.isDraggingOut = true
             return NSItemProvider(contentsOf: item.url) ?? NSItemProvider()
@@ -146,6 +163,10 @@ private struct TrayItemMenu: View {
     let item: TrayStore.Item
 
     var body: some View {
+        Button("Quick Look") {
+            TrayStore.shared.select(item)
+            TrayQuickLook.shared.open()
+        }
         Button("Open") { FileActions.open(item.url) }
         Menu("Open With") {
             ForEach(FileActions.applications(for: item.url).prefix(15), id: \.self) { app in

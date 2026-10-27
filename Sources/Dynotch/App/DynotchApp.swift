@@ -34,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.mainMenu = Self.makeMainMenu()
         TrayStore.shared.load()
+        NotesStore.shared.start()
         NowPlayingService.shared.start()
         PowerMonitor.shared.start()
         CalendarService.shared.start()
@@ -46,9 +47,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         MicMonitor.shared.start()
         DownloadMonitor.shared.start()
         FocusMonitor.shared.start()
+        WeatherService.shared.start()
         LiveActivityCenter.shared.start()
         NotificationMirror.shared.start()
         NotchManager.shared.start()
+        // Last, since reading the screenshot folder can bring up macOS's folder-access prompt.
+        ScreenshotWatcher.shared.start()
 
         let settings = AppSettings.shared
         settings.$showMenuBarIcon

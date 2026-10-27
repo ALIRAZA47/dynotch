@@ -24,6 +24,8 @@ enum SnapshotRenderer {
         var focus: FocusMode?
         /// More sample state for this scene; `resetAudioSamples` undoes it before the next one.
         var setUp: (@MainActor () -> Void)?
+        /// Sample state for this scene. Scenes after it keep it.
+        var prepare: (@MainActor () -> Void)?
     }
 
     static func render(into folder: URL) {
@@ -112,11 +114,35 @@ enum SnapshotRenderer {
                   setUp: { AudioLevels.shared.loadSample([0.95, 0.45, 0.7, 0.25]) }),
             Scene(name: "84-open-nook-live-levels", phase: .open, tab: .home,
                   setUp: { AudioLevels.shared.loadSample([0.3, 0.9, 0.55, 0.8]) }),
+            // Widgets and the Tray
+            Scene(name: "90-closed-screenshot", phase: .closed, activity: .notice(LiveNotice(
+                key: "screenshot", symbol: "camera.viewfinder", tint: .white, detail: "Screenshot added to the Tray"))),
+            Scene(name: "91-open-stats-bluetooth", phase: .open, tab: .stats) {
+                DeviceBatteryMonitor.shared.loadSample([], paired: samplePairedDevices,
+                                                       connections: ["beats": .connecting, "speaker": .failed("Not in range")])
+            },
+            Scene(name: "92-open-tray-selected", phase: .open, tab: .tray) {
+                TrayStore.shared.select(TrayStore.shared.items[1])
+            },
+            Scene(name: "93-open-nook-weather-notes", phase: .open, tab: .home) {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.weather, .notes)
+                WeatherService.shared.loadSample(place: "Lisbon", conditions: .init(
+                    temperature: 18.4, high: 21.2, low: 12.6, code: 2, isDay: true, isRaining: false,
+                    rainStart: .now.addingTimeInterval(20 * 60), isHeavyRain: false))
+            },
+            Scene(name: "94-open-nook-weather-setup", phase: .open, tab: .home) {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.weather, .devices)
+                WeatherService.shared.loadSample(place: "", conditions: nil)
+            },
+            Scene(name: "95-closed-rain", phase: .closed, activity: .notice(LiveNotice(
+                key: "rain", symbol: "cloud.rain.fill", tint: .cyan, text: "in 15m", detail: "Rain starting soon"))),
         ]
 
         let settings = AppSettings.shared
         let size = CGSize(width: settings.openWidth + NotchMetrics.openTopRadius * 2 + 80, height: settings.openHeight + 40)
+        let savedWidgets = (settings.homeWidgetA, settings.homeWidgetB)
         for scene in scenes {
+            scene.prepare?()
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
             resetAudioSamples()
             MicMonitor.shared.loadSample(muted: scene.micMuted, micInUse: scene.micInUse, cameraInUse: scene.cameraInUse)
@@ -140,6 +166,7 @@ enum SnapshotRenderer {
                   let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else { continue }
             try? png.write(to: folder.appendingPathComponent(scene.name + ".png"))
         }
+        (settings.homeWidgetA, settings.homeWidgetB) = savedWidgets
         print("Wrote \(scenes.count) snapshots to \(folder.path)")
         renderSettings(into: folder)
     }
@@ -147,8 +174,8 @@ enum SnapshotRenderer {
     // MARK: Settings
 
     /// Renders every settings page, light and dark, in a real window parked off screen. A page
-    /// that scrolls gets a second image scrolled to the end. ImageRenderer can't draw the
-    /// AppKit-backed views a settings page is made of.
+    /// that scrolls gets a second image scrolled to the end, and one for each screenful in between
+    /// ("-2", "-3"...). ImageRenderer can't draw the AppKit-backed views a settings page is made of.
     private static func renderSettings(into folder: URL) {
         var count = 0
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
@@ -167,7 +194,18 @@ enum SnapshotRenderer {
                 let name = String(format: "settings-%d-%@-%@", page.number, page.rawValue, suffix)
                 if save(window, to: folder.appendingPathComponent(name + ".png")) { count += 1 }
                 if let scrollView = window.contentView.flatMap(overflowingScrollView), let document = scrollView.documentView {
-                    let end = document.isFlipped ? document.frame.height - scrollView.contentView.bounds.height : 0
+                    let viewport = scrollView.contentView.bounds.height
+                    let end = document.isFlipped ? document.frame.height - viewport : 0
+                    var offset = viewport - 60
+                    var part = 2
+                    while document.isFlipped, offset < end - 60 {
+                        scrollView.contentView.scroll(to: NSPoint(x: 0, y: offset))
+                        scrollView.reflectScrolledClipView(scrollView.contentView)
+                        RunLoop.main.run(until: .now + 0.8)
+                        if save(window, to: folder.appendingPathComponent("\(name)-\(part).png")) { count += 1 }
+                        offset += viewport - 60
+                        part += 1
+                    }
                     scrollView.contentView.scroll(to: NSPoint(x: 0, y: end))
                     scrollView.reflectScrolledClipView(scrollView.contentView)
                     RunLoop.main.run(until: .now + 0.8)
@@ -289,9 +327,12 @@ enum SnapshotRenderer {
         DeviceBatteryMonitor.shared.loadSample([
             .init(id: "airpods", name: "AirPods Pro", kind: .earbuds, left: 80, right: 78, batteryCase: 27),
             .init(id: "keyboard", name: "Magic Keyboard", kind: .keyboard, main: 64),
+        ], paired: samplePairedDevices)
+        // In memory only, so a snapshot run never touches real notes.
+        NotesStore.shared.loadSample([
+            "Weekend\n- [x] Book the campsite\n- [ ] Pack the tent\n- [ ] Call Sam about the car\nBring the good coffee",
+            "Ideas\n- Notch widget for the weather",
         ])
-        // Registered, not saved, so a snapshot run never touches real notes.
-        UserDefaults.standard.register(defaults: ["notes.text": "Call the bank about the card\nIdeas: notch widgets for weather"])
 
         let files = ["Q3 Report.pdf", "Hero shot.png", "Brand assets.zip", "Keynote draft.key", "notes.txt"]
         let samples = folder.appendingPathComponent("tray-samples", isDirectory: true)
@@ -302,6 +343,12 @@ enum SnapshotRenderer {
         }
         TrayStore.shared.loadSample(urls)
     }
+
+    private static let samplePairedDevices: [DeviceBatteryMonitor.PairedDevice] = [
+        .init(id: "beats", name: "Beats Studio Pro", kind: .headphones),
+        .init(id: "speaker", name: "Kitchen Speaker", kind: .speaker),
+        .init(id: "mouse", name: "Magic Mouse", kind: .mouse),
+    ]
 
     /// A stand-in album cover.
     private static func sampleArtwork() -> NSImage {
