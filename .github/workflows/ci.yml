@@ -17,12 +17,18 @@ permissions:
 jobs:
   build:
     name: Build (macOS)
-    runs-on: macos-15
+    # Needs the macOS 26 SDK: the Glass theme calls glassEffect, gated at runtime with
+    # #available(macOS 26) but still has to compile against an SDK that has it.
+    runs-on: macos-26
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
 
-      - name: Swift version
-        run: swift --version
+      - name: Swift and SDK version
+        run: |
+          swift --version
+          xcodebuild -version
+          xcrun --show-sdk-version
 
       - name: Build (debug)
         run: swift build
