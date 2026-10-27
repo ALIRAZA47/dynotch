@@ -208,9 +208,14 @@ final class NotchWindowController {
                 dismiss()
             }
         case .horizontal:
-            // Hovering opens the notch quickly, so its header row, where the closed notch was, counts too.
-            if !hasSkipped, abs(swipeAcross) > 40, !viewModel.isOpen || isOverHeader(point) {
-                hasSkipped = true
+            guard !hasSkipped, abs(swipeAcross) > 40 else { break }
+            hasSkipped = true
+            if viewModel.isOpen, !isOverHeader(point) {
+                // Over the open notch's content the swipe moves between tabs, unless what's under the
+                // pointer scrolls sideways itself, like the Tray's strip of files once it runs over.
+                if !scrollsSideways(at: point) { changeTab(forward: swipeAcross < 0) }
+            } else {
+                // Hovering opens the notch quickly, so its header row, where the closed notch was, counts too.
                 skipTrack(forward: swipeAcross < 0)
             }
         case nil:
@@ -319,6 +324,31 @@ final class NotchWindowController {
         swipeAcross = 0
         swipeAxis = nil
         hasSkipped = false
+    }
+
+    /// Two fingers sideways over the open notch: to the left for the next tab, to the right for the one before.
+    private func changeTab(forward: Bool) {
+        guard !viewModel.isDraggingFiles else { return }
+        let tabs = AppSettings.shared.enabledTabs
+        guard let index = tabs.firstIndex(of: viewModel.visibleTab) else { return }
+        let next = index + (forward ? 1 : -1)
+        guard tabs.indices.contains(next) else { return }
+        Haptics.tap()
+        withAnimation(.notchTab) { viewModel.tab = tabs[next] }
+    }
+
+    /// Whether what's under `point` scrolls sideways on its own, so a sideways swipe there is its to keep.
+    private func scrollsSideways(at point: CGPoint) -> Bool {
+        guard let content = panel.contentView else { return false }
+        var view = content.hitTest(panel.convertPoint(fromScreen: point))
+        while let current = view {
+            if let scrollView = current as? NSScrollView, let document = scrollView.documentView,
+               document.frame.width > scrollView.contentView.bounds.width + 1 {
+                return true
+            }
+            view = current.superview
+        }
+        return false
     }
 
     /// Two fingers sideways over the notch: to the left for the next track, to the right for the previous one.

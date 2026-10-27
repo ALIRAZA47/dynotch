@@ -292,7 +292,7 @@ private struct NotchStep: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 26) {
-            SettingsSection(title: "Opening it", footer: "Swipe two fingers sideways over the notch to skip a track. Esc or moving away closes it.") {
+            SettingsSection(title: "Opening it", footer: "Swipe two fingers sideways over the notch to skip a track, or over the open notch to change tabs. Esc or moving away closes it.") {
                 TileGrid(items: ways, columns: 4) { InfoTileView(tile: $0) }
             }
             SettingsSection(title: "Beside the camera",
