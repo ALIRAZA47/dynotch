@@ -6,7 +6,10 @@ import SQLite3
 /// `~/Library/Group Containers/group.com.apple.usernoted/db2/db`, which needs Full Disk Access.
 /// Each notification is a row in `record`: `data` is a property list with the app's bundle ID under
 /// `app` and the text under `req` (`titl`, `subt`, `body`), and `delivered_date` is set once it's
-/// delivered, in seconds since 2001.
+/// delivered, in seconds since 2001. That's still so on macOS 27.
+///
+/// `usernoted` writes a notification about five seconds after delivering it, and waits again while
+/// the same app keeps sending, so that's when the reader sees it.
 ///
 /// The database is opened read-only, and its write-ahead log watched for writes. Nothing read is
 /// kept: the reader remembers only the delivery time of the newest notification it handed over.
@@ -62,7 +65,8 @@ final class NotificationReader: @unchecked Sendable {
             close(descriptor)
             return nil
         }
-        // Without Full Disk Access every path in the container fails with EPERM, missing or not.
+        // Without Full Disk Access the database fails with EPERM, but a path that isn't there still
+        // fails with ENOENT, so a moved database shows up before access is given.
         return errno == ENOENT ? .unsupported : .noAccess
     }
 

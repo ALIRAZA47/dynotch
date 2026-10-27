@@ -42,6 +42,11 @@ enum SnapshotRenderer {
         let event = LiveNotice(key: "event", symbol: "calendar", tint: .orange, text: "in 5m", detail: "Design review")
         let message = NotificationPeek.sample()
         let privateMessage = NotificationPeek.sample(hideText: true)
+        // What `osascript -e 'display notification …'` looks like: Script Editor has no symbol of its own.
+        let otherAppMessage = NotificationPeek.notice(
+            for: NotificationReader.Entry(bundleID: "com.apple.ScriptEditor2", title: "Dynotch test", subtitle: "",
+                                          body: "Hello from display notification"),
+            appName: "Script Editor", hideText: false)
         let muted = LiveNotice(key: "mic", symbol: "mic.slash.fill", tint: .red, text: "Muted")
         let tea = TimerStore.shared.countdowns[0], laundry = TimerStore.shared.countdowns[1]
         let roast = Countdown(id: UUID(), name: "Slow roast pork", duration: 4 * 3600,
@@ -68,6 +73,7 @@ enum SnapshotRenderer {
             Scene(name: "08-closed-event", phase: .closed, activity: .notice(event)),
             Scene(name: "09-closed-notification", phase: .closed, activity: .notice(message)),
             Scene(name: "09-closed-notification-private", phase: .closed, activity: .notice(privateMessage)),
+            Scene(name: "09-closed-notification-other-app", phase: .closed, activity: .notice(otherAppMessage)),
             Scene(name: "10-open-nook", phase: .open, tab: .home),
             Scene(name: "11-open-nook-empty", phase: .open, tab: .home, hasTrack: false),
             Scene(name: "12-open-tray", phase: .open, tab: .tray),

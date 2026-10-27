@@ -8,7 +8,7 @@ struct NotificationSettingsSection: View {
 
     var body: some View {
         SettingsSection(title: "Notifications", trailing: mirror.hasAccess ? nil : "Needs Full Disk Access",
-                        footer: "macOS still shows its own banners. To see only the notch, set an app's alert style to None in System Settings → Notifications, and keep Show in Notification Center on.") {
+                        footer: "A peek comes about five seconds after its notification, when macOS saves it. macOS still shows its own banners. To see only the notch, set an app's alert style to None in System Settings → Notifications, and keep Show in Notification Center on.") {
             if !mirror.hasAccess || mirror.isUnsupported {
                 AccessCard(isUnsupported: mirror.isUnsupported)
                     .transition(.opacity)

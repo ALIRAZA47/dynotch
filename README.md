@@ -115,6 +115,13 @@ own banner for each one. To see only the peek for an app, open System Settings â
 Notifications, choose the app and set its alert style to **None**. Leave **Show in
 Notification Center** on, because that's where Dynotch reads them from.
 
+**A few seconds behind.** macOS saves a notification to that database about five seconds after
+it arrives, and holds off longer while the same app keeps sending, so a peek comes that much
+after the system banner. Dynotch picks it up about 50 ms after macOS saves it.
+
+**Trying it.** `osascript -e 'display notification "Hello" with title "Test"'` posts a
+notification as Script Editor, which peeks with a bell while **Other apps** is on.
+
 **Privacy.** The database is opened read-only. Dynotch shows a notification and forgets it:
 nothing a notification says is logged or saved. The only thing it remembers is the time of
 the newest notification it has seen, and only while it runs.
@@ -190,7 +197,7 @@ above). An ad hoc build may lose them.
   no public API).
 - Notification peeks read a database that Apple doesn't document. Its location and layout
   have changed between macOS versions before; if they change again, Settings says
-  notifications can't be read on that Mac.
+  notifications can't be read on that Mac. They were last checked on macOS 27.0.1.
 
 ## Layout
 
