@@ -229,6 +229,15 @@ final class ProfileStore: ObservableObject {
             .debounce(for: .seconds(1), scheduler: RunLoop.main)
             .sink { [weak self] _ in self?.evaluateRules() }
             .store(in: &cancellables)
+        // Monitors can drop off while the displays sleep. Judge again once someone's back and
+        // they've had a few seconds to return.
+        EnergyCoordinator.shared.$conditions
+            .map(\.isQuiet)
+            .removeDuplicates()
+            .filter { !$0 }
+            .debounce(for: .seconds(5), scheduler: RunLoop.main)
+            .sink { [weak self] _ in self?.evaluateRules() }
+            .store(in: &cancellables)
         evaluateRules()
     }
 
@@ -315,7 +324,8 @@ final class ProfileStore: ObservableObject {
     /// beats one for any Focus, and Focus rules beat the external display. `afterEditing` means a rule
     /// was changed or a profile deleted: then nothing is put back, the profile that's on just stays.
     private func evaluateRules(afterEditing: Bool = false) {
-        guard isStarted else { return }
+        // Nobody would see it, and displays come and go as they sleep.
+        guard isStarted, !EnergyCoordinator.shared.isQuiet else { return }
         let focus = FocusMonitor.shared
         // Until the Focus database has been read, Focus rules can't be judged either way.
         if profiles.contains(where: \.isFocusRule), focus.access == .unknown { return }
