@@ -37,6 +37,10 @@ enum SnapshotRenderer {
         let roast = Countdown(id: UUID(), name: "Slow roast pork", duration: 4 * 3600,
                               endDate: TimerStore.shared.now.addingTimeInterval(2 * 3600 + 750))
         let timerDone = LiveNotice(key: "countdown", symbol: "bell.fill", tint: TimerStore.tint, text: "Done", detail: "Tea · 4 min")
+        let message = LiveNotice(key: "notification", symbol: "message.fill", tint: .green, text: "Anna",
+                                 detail: "Running ten minutes late, start the review without me")
+        let longMessage = LiveNotice(key: "notification", symbol: "message.fill", tint: .green, text: "Anna",
+                                     detail: "Are we still on for lunch tomorrow? I booked the place by the river for half past twelve")
         let scenes = [
             Scene(name: "01-closed-idle", phase: .closed),
             Scene(name: "02-closed-hover", phase: .hovering),
@@ -72,6 +76,9 @@ enum SnapshotRenderer {
             Scene(name: "44-closed-stopwatch-and-music", phase: .closed, activity: .stopwatch, secondary: .music),
             Scene(name: "45-closed-timer-done", phase: .closed, activity: .notice(timerDone)),
             Scene(name: "46-open-focus-no-timers", phase: .open, tab: .focus, hasTimers: false),
+            Scene(name: "50-closed-message", phase: .closed, activity: .notice(message)),
+            Scene(name: "51-closed-long-message", phase: .closed, activity: .notice(longMessage)),
+            Scene(name: "52-closed-message-and-timer", phase: .closed, activity: .notice(message), secondary: .timer),
         ]
 
         let settings = AppSettings.shared

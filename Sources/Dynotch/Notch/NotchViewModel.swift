@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import SwiftUI
 
@@ -17,6 +18,7 @@ struct NotchMetrics: Equatable {
 /// The closed notch: the hardware cutout in the middle, with matching "ears"
 /// either side for live activities and an optional row underneath. A second
 /// activity's glyph goes at the end of the right ear, and both ears grow to fit it.
+/// A notice's row underneath can widen the notch too, up to `maxRowWidth`.
 struct ClosedLayout: Equatable {
     var notchWidth: CGFloat
     var notchHeight: CGFloat
@@ -26,17 +28,36 @@ struct ClosedLayout: Equatable {
     /// The second activity's glyph, and the gap before it.
     static let glyphSize: CGFloat = 16
     static let glyphSpacing: CGFloat = 8
+    /// The widest a notice's second row makes the notch; longer text is cut off.
+    static let maxRowWidth: CGFloat = 420
 
     var totalWidth: CGFloat { notchWidth + earWidth * 2 }
     var totalHeight: CGFloat { notchHeight + rowHeight }
 
     init(activity: ClosedActivity, secondary: CompactActivity?, notch: CGSize) {
-        self.init(activity: activity, notch: notch)
-        guard secondary != nil else { return }
-        earWidth = activity == .idle ? notch.height + 6 : earWidth + Self.glyphSize + Self.glyphSpacing
+        self.init(besideCamera: activity, notch: notch)
+        if secondary != nil {
+            earWidth = activity == .idle ? notch.height + 6 : earWidth + Self.glyphSize + Self.glyphSpacing
+        }
+        earWidth = max(earWidth, Self.rowEarWidth(for: activity, notch: notch))
     }
 
     init(activity: ClosedActivity, notch: CGSize) {
+        self.init(activity: activity, secondary: nil, notch: notch)
+    }
+
+    /// How wide each ear must be for a notice's second row to fit, measured in the row's font.
+    private static func rowEarWidth(for activity: ClosedActivity, notch: CGSize) -> CGFloat {
+        guard case .notice(let notice) = activity, case .info = notice.kind, let detail = notice.detail else { return 0 }
+        let font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        let text = (detail as NSString).size(withAttributes: [.font: font]).width
+        // The row's padding either side, and a little slack so the text never truncates early.
+        let row = min(text.rounded(.up) + 36, maxRowWidth)
+        return max(0, (row - notch.width) / 2)
+    }
+
+    /// The ears for what sits beside the camera.
+    private init(besideCamera activity: ClosedActivity, notch: CGSize) {
         notchWidth = notch.width
         notchHeight = notch.height
         switch activity {
