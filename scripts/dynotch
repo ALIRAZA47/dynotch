@@ -1,0 +1,70 @@
+#!/bin/bash
+# Sends commands to Dynotch through its dynotch:// URL scheme.
+#
+#   dynotch notify TEXT [--detail TEXT] [--symbol SF_SYMBOL] [--tint COLOR] [--seconds N]
+#   dynotch open [home|tray|focus|stats]
+#   dynotch close
+#   dynotch timer [start|pause|toggle|reset|skip]
+#   dynotch tray [--show] FILE...
+#
+# COLOR is red, orange, yellow, green, mint, teal, cyan, blue, indigo, purple,
+# pink, white or gray, or a hex value such as #FF6B5C.
+set -euo pipefail
+
+usage() {
+    sed -n '4,11p' "$0" | sed 's/^# \{0,1\}//'
+    exit "${1:-0}"
+}
+
+# Percent-encodes every byte, which any URL parser decodes.
+encode() { printf '%s' "$1" | od -An -tx1 -v | tr -d ' \n' | sed 's/../%&/g'; }
+
+# -g keeps whatever app you're in at the front.
+send() { open -g "dynotch://$1"; }
+
+[ $# -gt 0 ] || usage 1
+command="$1"
+shift
+case "$command" in
+    notify)
+        [ $# -gt 0 ] || usage 1
+        query="text=$(encode "$1")"
+        shift
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --detail|--symbol|--tint|--seconds)
+                    [ $# -gt 1 ] || usage 1
+                    query+="&${1#--}=$(encode "$2")"
+                    shift 2 ;;
+                *) usage 1 ;;
+            esac
+        done
+        send "notify?$query" ;;
+    open)
+        send "open?tab=$(encode "${1:-home}")" ;;
+    close)
+        send "close" ;;
+    timer)
+        case "${1:-toggle}" in
+            start|pause|toggle|reset|skip) send "timer/${1:-toggle}" ;;
+            *) usage 1 ;;
+        esac ;;
+    tray)
+        query=""
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                --show) query+="&show=1" ;;
+                *)
+                    [ -e "$1" ] || { echo "dynotch: no such file: $1" >&2; exit 1; }
+                    path="$(cd "$(dirname "$1")" && pwd)/$(basename "$1")"
+                    query+="&path=$(encode "$path")" ;;
+            esac
+            shift
+        done
+        [ -n "$query" ] || usage 1
+        send "tray/add?${query#&}" ;;
+    -h|--help|help)
+        usage ;;
+    *)
+        usage 1 ;;
+esac

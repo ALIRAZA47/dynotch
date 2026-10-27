@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleDisplayName</key>
+	<string>Dynotch</string>
+	<key>CFBundleExecutable</key>
+	<string>Dynotch</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>app.dynotch.Dynotch</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>Dynotch</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSPrincipalClass</key>
+	<string>NSApplication</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Dynotch. Inspired by NotchNook and MacNotch.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Dynotch controls Music and Spotify, reads the current track for the notch, and switches Dark Mode from the quick toggles.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Dynotch shows your upcoming events in the notch.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Dynotch shows your upcoming events in the notch.</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Dynotch shows your reminders in the notch and lets you check them off.</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Dynotch shows your reminders in the notch and lets you check them off.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Dynotch uses the camera for the Mirror widget so you can check yourself before a call.</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Dynotch shows the battery level of your connected Bluetooth devices.</string>
+</dict>
+</plist>

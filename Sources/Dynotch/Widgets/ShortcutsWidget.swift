@@ -1,0 +1,81 @@
+import SwiftUI
+
+/// Runs the user's Shortcuts through the `shortcuts` command-line tool.
+@MainActor
+final class ShortcutsService: ObservableObject {
+    static let shared = ShortcutsService()
+
+    @Published private(set) var all: [String] = []
+    @Published private(set) var running: Set<String> = []
+
+    private init() {}
+
+    func reload() async {
+        let result = await Shell.run("/usr/bin/shortcuts", ["list"])
+        all = result.output.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
+            .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+    }
+
+    func run(_ name: String) {
+        guard running.insert(name).inserted else { return }
+        Task {
+            let result = await Shell.run("/usr/bin/shortcuts", ["run", name])
+            running.remove(name)
+            let succeeded = result.status == 0
+            LiveActivityCenter.shared.post(LiveNotice(key: "shortcut",
+                                                      symbol: succeeded ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+                                                      tint: succeeded ? .green : .orange,
+                                                      detail: succeeded ? "\(name) finished" : "\(name) didn't finish"), for: 2.5)
+        }
+    }
+}
+
+struct ShortcutsWidget: View {
+    @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var shortcuts = ShortcutsService.shared
+
+    var body: some View {
+        WidgetCard(title: "Shortcuts", symbol: "square.stack.3d.up.fill") {
+            if settings.pinnedShortcuts.isEmpty {
+                PermissionPrompt(symbol: "square.stack.3d.up", message: "Pin shortcuts to run them from here.",
+                                 buttonTitle: "Choose…") { SettingsWindowController.shared.show(page: .nook) }
+            } else {
+                VStack(spacing: 5) {
+                    ForEach(settings.pinnedShortcuts.prefix(4), id: \.self) { name in
+                        ShortcutButton(name: name, isRunning: shortcuts.running.contains(name)) { shortcuts.run(name) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct ShortcutButton: View {
+    let name: String
+    let isRunning: Bool
+    let action: () -> Void
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if isRunning {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    Image(systemName: "play.fill").font(.system(size: 8, weight: .bold))
+                }
+                Text(name)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 24)
+            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(hovering ? 0.16 : 0.08)))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableButtonStyle())
+        .onHover { hovering = $0 }
+        .disabled(isRunning)
+    }
+}
