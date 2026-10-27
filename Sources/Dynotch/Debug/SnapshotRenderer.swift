@@ -2,11 +2,35 @@ import AppKit
 import SwiftUI
 
 /// `Dynotch --snapshot <folder>` renders the notch in each state with sample data,
-/// so the UI can be reviewed without driving the real thing.
+/// so the UI can be reviewed without driving the real thing. Settings come from a scratch
+/// domain with sample values (`useScratchDefaults`), so the images look the same on every Mac
+/// and show nothing of the real settings.
 @MainActor
 enum SnapshotRenderer {
     /// The moment sample timers count from, so every snapshot shows the same times.
     private static let sampleTime = Date.now
+
+    // MARK: Scratch defaults
+
+    private static let scratchDomain = "app.dynotch.snapshot"
+
+    /// Points every setting at a scratch domain holding sample values. Called before anything
+    /// reads a setting; `discardScratchDefaults` clears it again when the run is done.
+    static func useScratchDefaults() {
+        guard let defaults = UserDefaults(suiteName: scratchDomain) else { return }
+        defaults.removePersistentDomain(forName: scratchDomain)
+        let samples: [String: Any] = [
+            "hasLaunchedBefore": true,
+            "weatherPlace": "Lisbon, Portugal", "weatherLatitude": 38.72, "weatherLongitude": -9.14,
+            "pinnedShortcuts": ["Morning routine", "Log a glass of water", "Focus playlist"],
+        ]
+        for (key, value) in samples { defaults.set(value, forKey: key) }
+        UserDefaults.dynotch = defaults
+    }
+
+    static func discardScratchDefaults() {
+        UserDefaults.dynotch.removePersistentDomain(forName: scratchDomain)
+    }
 
     private struct Scene {
         let name: String
@@ -65,6 +89,9 @@ enum SnapshotRenderer {
                                      detail: "Are we still on for lunch tomorrow? I booked the place by the river for half past twelve")
         let downloaded = LiveNotice(key: "download", symbol: "arrow.down.circle.fill", tint: DownloadMonitor.tint,
                                     text: "Downloaded", detail: "Keynote Themes.zip")
+        // What `dynotch notify` shows: a script's own symbol and color, with the terminal badge.
+        let scriptNotice = LiveNotice(key: "command", symbol: "checkmark.circle.fill", tint: .green, text: "Done",
+                                      detail: "make test · 2m 14s", fromScript: true)
         let doNotDisturb = FocusMode(id: "dnd", name: "Do Not Disturb", symbol: "moon.fill", tint: .indigo)
         let work = FocusMode(id: "work", name: "Work", symbol: "briefcase.fill", tint: .teal)
         let focusOn = LiveNotice(key: "focus", symbol: "moon.fill", tint: .indigo, text: "On", detail: "Do Not Disturb")
@@ -129,6 +156,7 @@ enum SnapshotRenderer {
             Scene(name: "62-closed-download-and-music", phase: .closed, activity: .download, secondary: .music),
             Scene(name: "63-closed-timer-and-download", phase: .closed, activity: .timer, secondary: .download),
             Scene(name: "64-closed-downloaded", phase: .closed, activity: .notice(downloaded)),
+            Scene(name: "65-closed-script-notice", phase: .closed, activity: .notice(scriptNotice)),
             Scene(name: "70-closed-focus", phase: .closed, secondary: .focus(doNotDisturb), focus: doNotDisturb),
             Scene(name: "71-closed-music-and-focus", phase: .closed, activity: .music, secondary: .focus(work), focus: work),
             Scene(name: "72-closed-focus-on", phase: .closed, activity: .notice(focusOn), focus: doNotDisturb),
@@ -184,8 +212,6 @@ enum SnapshotRenderer {
 
         let settings = AppSettings.shared
         let size = CGSize(width: settings.openWidth + NotchTheme.standard.topRadius * 2 + 80, height: settings.openHeight + 40)
-        let savedWidgets = (settings.homeWidgetA, settings.homeWidgetB)
-        let savedShortcuts = settings.pinnedShortcuts
         let savedTheme = settings.theme
         for scene in scenes {
             apply(scene.theme ?? savedTheme)
@@ -214,8 +240,6 @@ enum SnapshotRenderer {
                   let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else { continue }
             try? png.write(to: folder.appendingPathComponent(scene.name + ".png"))
         }
-        (settings.homeWidgetA, settings.homeWidgetB) = savedWidgets
-        if settings.pinnedShortcuts != savedShortcuts { settings.pinnedShortcuts = savedShortcuts }
         apply(savedTheme)
         print("Wrote \(scenes.count) snapshots to \(folder.path)")
         loadSampleProfiles()

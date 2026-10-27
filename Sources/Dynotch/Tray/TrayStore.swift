@@ -38,7 +38,13 @@ final class TrayStore: ObservableObject {
     func load() {
         guard let data = try? Data(contentsOf: indexURL),
               let saved = try? JSONDecoder().decode([Item].self, from: data) else { return }
-        items = saved.filter { FileManager.default.fileExists(atPath: $0.url.path) }
+        // Anything can edit the index, so what the tray owns (and may trash) comes from the path, not the file.
+        items = saved.filter { $0.url.isFileURL && FileManager.default.fileExists(atPath: $0.url.path) }
+            .map { item in
+                var item = item
+                item.isOwned = isInTrayFolder(item.url)
+                return item
+            }
     }
 
     func add(_ urls: [URL]) {
@@ -54,6 +60,25 @@ final class TrayStore: ObservableObject {
         guard !added.isEmpty else { return }
         withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { items.append(contentsOf: added) }
         save()
+    }
+
+    /// Adds files a `dynotch://tray/add` link names. Anything on the Mac can send one, so they're only
+    /// pointed at, never copied, nothing under ~/Library (where other apps' data lives behind
+    /// macOS's permissions) is taken, and the notch says what arrived.
+    func addFromScript(_ urls: [URL]) {
+        let library = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library", isDirectory: true)
+            .standardizedFileURL.path + "/"
+        let allowed = urls.prefix(20).map { $0.resolvingSymlinksInPath().standardizedFileURL }
+            .filter { FileManager.default.fileExists(atPath: $0.path) && !$0.path.hasPrefix(library) }
+        let fresh = allowed.filter { url in !items.contains { $0.url == url } }
+        guard !fresh.isEmpty else { return }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+            items.append(contentsOf: fresh.map { Item(id: UUID(), url: $0, isOwned: isInTrayFolder($0), addedAt: .now) })
+        }
+        save()
+        let detail = fresh.count == 1 ? "A script added \(fresh[0].lastPathComponent)" : "A script added \(fresh.count) files"
+        LiveActivityCenter.shared.post(LiveNotice(key: "tray", symbol: "tray.and.arrow.down.fill", tint: .teal, text: "Tray",
+                                                  detail: detail, fromScript: true), for: 4)
     }
 
     /// Saves dropped data (an image from a browser, some text) as a file in the tray.

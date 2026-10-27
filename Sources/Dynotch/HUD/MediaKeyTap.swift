@@ -55,8 +55,8 @@ final class MediaKeyTap: ObservableObject {
     /// Shows the system's Accessibility prompt, or System Settings if Dynotch has asked before,
     /// then starts the tap as soon as access is granted.
     func requestAccess() {
-        let askedBefore = UserDefaults.standard.bool(forKey: "askedForAccessibility")
-        UserDefaults.standard.set(true, forKey: "askedForAccessibility")
+        let askedBefore = UserDefaults.dynotch.bool(forKey: "askedForAccessibility")
+        UserDefaults.dynotch.set(true, forKey: "askedForAccessibility")
         let prompt = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         if !AXIsProcessTrustedWithOptions([prompt: true] as CFDictionary), askedBefore {
             CalendarService.openPrivacySettings("Privacy_Accessibility")

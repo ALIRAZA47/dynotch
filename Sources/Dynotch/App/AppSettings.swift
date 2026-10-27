@@ -1,5 +1,11 @@
 import SwiftUI
 
+/// Where Dynotch keeps what it saves between launches: its own defaults, or a scratch domain
+/// with sample values while `--snapshot` renders, so a snapshot run never reads or writes the real ones.
+extension UserDefaults {
+    nonisolated(unsafe) static var dynotch: UserDefaults = .standard
+}
+
 enum DisplayMode: String, CaseIterable, Identifiable {
     case notched, main, all
 
@@ -398,14 +404,14 @@ final class AppSettings: ObservableObject {
     private init() {}
 
     private func save(_ key: String, _ value: Any) {
-        UserDefaults.standard.set(value, forKey: key)
+        UserDefaults.dynotch.set(value, forKey: key)
     }
 
     nonisolated private static func value<T>(_ key: String, _ fallback: T) -> T {
-        UserDefaults.standard.object(forKey: key) as? T ?? fallback
+        UserDefaults.dynotch.object(forKey: key) as? T ?? fallback
     }
 
     nonisolated private static func value<T: RawRepresentable>(_ key: String, _ fallback: T) -> T where T.RawValue == String {
-        UserDefaults.standard.string(forKey: key).flatMap(T.init(rawValue:)) ?? fallback
+        UserDefaults.dynotch.string(forKey: key).flatMap(T.init(rawValue:)) ?? fallback
     }
 }

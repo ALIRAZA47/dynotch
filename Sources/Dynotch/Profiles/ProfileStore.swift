@@ -425,7 +425,7 @@ final class ProfileStore: ObservableObject {
     // MARK: Storage
 
     private func load() {
-        let defaults = UserDefaults.standard
+        let defaults = UserDefaults.dynotch
         let decoder = JSONDecoder()
         profiles = defaults.data(forKey: Key.profiles).flatMap { try? decoder.decode([Profile].self, from: $0) } ?? []
         activeID = defaults.string(forKey: Key.active).flatMap(UUID.init(uuidString:))
@@ -436,12 +436,12 @@ final class ProfileStore: ObservableObject {
 
     private func persistProfiles() {
         guard isStarted, let data = try? JSONEncoder().encode(profiles) else { return }
-        UserDefaults.standard.set(data, forKey: Key.profiles)
+        UserDefaults.dynotch.set(data, forKey: Key.profiles)
     }
 
     private func persistState() {
         guard isStarted else { return }
-        let defaults = UserDefaults.standard
+        let defaults = UserDefaults.dynotch
         defaults.set(activeID?.uuidString, forKey: Key.active)
         defaults.set(restore.flatMap { try? JSONEncoder().encode($0) }, forKey: Key.restore)
         defaults.set(ruleTarget?.uuidString, forKey: Key.ruleTarget)

@@ -4,7 +4,8 @@ import SwiftUI
 
 /// Shows other apps' notifications in the closed notch as they arrive: the app's symbol, the sender
 /// and a line of text. Reads them through `NotificationReader`, which needs Full Disk Access.
-/// Nothing a notification says is logged or stored.
+/// Nothing a notification says is logged or stored. Like macOS's own banners, peeks stay hidden
+/// while a Focus is on and while a display is mirrored.
 @MainActor
 final class NotificationMirror: ObservableObject {
     static let shared = NotificationMirror()
@@ -80,6 +81,7 @@ final class NotificationMirror: ObservableObject {
         let shouldWatch = isStarted && enabled && hasAccess && !isUnsupported
         guard shouldWatch != isWatching else { return }
         isWatching = shouldWatch
+        FocusMonitor.shared.isNeededByNotifications = shouldWatch
         if shouldWatch {
             reader.start { entries in
                 Task { @MainActor in NotificationMirror.shared.show(entries) }
@@ -91,6 +93,14 @@ final class NotificationMirror: ObservableObject {
         }
     }
 
+    /// Whether a display is mirrored to another, over a cable or AirPlay.
+    private static var isAnyDisplayMirrored: Bool {
+        var displays = [CGDirectDisplayID](repeating: 0, count: 16)
+        var count: UInt32 = 0
+        guard CGGetOnlineDisplayList(16, &displays, &count) == .success else { return false }
+        return displays.prefix(Int(count)).contains { CGDisplayIsInMirrorSet($0) != 0 }
+    }
+
     private func readerStopped(_ problem: NotificationReader.Problem) {
         isWatching = false
         hasAccess = problem != .noAccess
@@ -100,7 +110,9 @@ final class NotificationMirror: ObservableObject {
     /// The newest notification wins; the ones before it already had their moment.
     private func show(_ entries: [NotificationReader.Entry]) {
         let settings = AppSettings.shared
-        guard settings.liveNotifications,
+        // What macOS holds its own banners back for: a Focus, and a display that's mirrored or
+        // shared. Mirroring can be seen from here; sharing can't, which is what Hide message text is for.
+        guard settings.liveNotifications, FocusMonitor.shared.mode == nil, !Self.isAnyDisplayMirrored,
               let entry = entries.last(where: { $0.bundleID != Bundle.main.bundleIdentifier && isShown($0.bundleID) })
         else { return }
         let notice = NotificationPeek.notice(for: entry, appName: appName(for: entry.bundleID),
