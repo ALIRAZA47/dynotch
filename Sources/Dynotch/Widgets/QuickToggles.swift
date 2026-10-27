@@ -106,6 +106,7 @@ private struct ToggleTile: View {
     let isOn: Bool
     let tint: Color
     let action: () -> Void
+    @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
 
     var body: some View {
@@ -113,20 +114,23 @@ private struct ToggleTile: View {
             VStack(spacing: 4) {
                 Image(systemName: symbol)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(isOn ? Color.black : Color.white.opacity(0.9))
+                    .foregroundStyle(isOn ? Color.black : theme.primary.opacity(0.9))
                     .frame(width: 34, height: 34)
-                    .background(Circle().fill(isOn ? tint : Color.white.opacity(hovering ? 0.18 : 0.1)))
+                    .background(Circle().fill(isOn ? AnyShapeStyle(tint) : AnyShapeStyle(hovering ? theme.controlHover : theme.control)))
+                    .overlay(Circle().strokeBorder(theme.primary.opacity(isOn ? 0 : 0.06)))
                     .contentTransition(.symbolEffect(.replace))
                 Text(title)
-                    .font(.system(size: 9, weight: .medium))
-                    .foregroundStyle(Color.notchSecondary)
+                    .font(.system(size: 9.5, weight: .medium))
+                    .foregroundStyle(hovering || isOn ? theme.primary.opacity(0.85) : theme.secondary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableButtonStyle())
         .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: hovering)
         .animation(.easeOut(duration: 0.15), value: isOn)
     }
 }

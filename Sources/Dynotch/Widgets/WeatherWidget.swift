@@ -30,10 +30,8 @@ struct WeatherWidget: View {
                 PermissionPrompt(symbol: "wifi.exclamationmark", message: "Couldn't load the weather.",
                                  buttonTitle: "Try Again", action: weather.refresh)
             } else {
-                Text(weather.status == .locating ? "Finding where you are…" : "Loading…")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.notchTertiary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                EmptyState(symbol: weather.status == .locating ? "location" : "cloud",
+                           message: weather.status == .locating ? "Finding where you are…" : "Loading…")
             }
         }
     }
@@ -42,6 +40,7 @@ struct WeatherWidget: View {
 private struct ConditionsView: View {
     let conditions: WeatherService.Conditions
     let units: TemperatureUnits
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         let sky = Sky(code: conditions.code, isDay: conditions.isDay)
@@ -52,19 +51,17 @@ private struct ConditionsView: View {
                     .font(.system(size: 26))
                     .frame(width: 34)
                 Text(WeatherService.format(conditions.temperature, units: units))
-                    .font(.system(size: 30, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
+                    .font(NotchFont.numeric(30))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
             Text(sky.description)
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(Color.notchSecondary)
+                .font(NotchFont.body)
+                .foregroundStyle(theme.secondary)
                 .lineLimit(1)
             Text("H \(WeatherService.format(conditions.high, units: units))  L \(WeatherService.format(conditions.low, units: units))")
-                .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(Color.notchTertiary)
+                .font(NotchFont.numeric(10.5))
+                .foregroundStyle(theme.tertiary)
             Spacer(minLength: 0)
             rain
         }

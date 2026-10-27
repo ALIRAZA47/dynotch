@@ -22,13 +22,14 @@ private struct TrayContentView: View {
     @ViewState private var isTargeted = false
     @ViewState private var isWorking = false
     @Environment(\.isSnapshot) private var isSnapshot
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: NotchTheme.gap) {
+            VStack(alignment: .leading, spacing: NotchTheme.titleGap) {
                 header
                 if tray.items.isEmpty {
-                    emptyState
+                    EmptyState(symbol: "tray.and.arrow.down", message: "Drop files here to keep them handy")
                 } else {
                     Scroller(.horizontal) {
                         HStack(spacing: 4) {
@@ -37,15 +38,17 @@ private struct TrayContentView: View {
                                     .transition(.scale(scale: 0.6).combined(with: .opacity))
                             }
                         }
+                        // Centered in the room under the title.
+                        .frame(maxHeight: .infinity)
                     }
                 }
             }
-            .padding(10)
+            .padding(NotchTheme.cardPadding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .fill(isTargeted ? Color.white.opacity(0.12) : Color.notchCard))
-            .overlay(RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .strokeBorder(Color.white.opacity(isTargeted ? 0.55 : 0), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
+            .background(CardSurface(isHighlighted: isTargeted))
+            .overlay(RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous)
+                .strokeBorder(theme.primary.opacity(isTargeted ? 0.55 : 0), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
+            .animation(.notchHighlight, value: isTargeted)
             .trayDropTarget(isTargeted: $isTargeted) { providers in
                 Task { TrayStore.shared.add(await TrayDrop.urls(from: providers)) }
                 return true
@@ -60,42 +63,28 @@ private struct TrayContentView: View {
     }
 
     private var header: some View {
-        HStack(spacing: 6) {
-            Text("Tray")
-                .font(.system(size: 13, weight: .bold))
-            if !tray.items.isEmpty {
-                Text(tray.items.count == 1 ? "1 item" : "\(tray.items.count) items")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.notchTertiary)
-            }
-            if isWorking {
-                ProgressView().controlSize(.mini)
-            }
-            Spacer(minLength: 0)
-            if !tray.items.isEmpty {
-                IconButton(symbol: "doc.zipper", size: 11, help: "Compress everything") {
-                    isWorking = true
-                    Task {
-                        if let archive = await FileActions.compress(tray.urls) { tray.add([archive]) }
-                        isWorking = false
-                    }
+        CardTitle(title: "Tray", symbol: "tray.full.fill") {
+            HStack(spacing: 2) {
+                if isWorking {
+                    ProgressView().controlSize(.mini)
+                        .padding(.trailing, 4)
                 }
-                IconButton(symbol: "folder", size: 11, help: "Show in Finder") { FileActions.reveal(tray.urls) }
-                IconButton(symbol: "trash", size: 11, help: "Clear the tray") { tray.clear() }
+                if !tray.items.isEmpty {
+                    Text(tray.items.count == 1 ? "1 item" : "\(tray.items.count) items")
+                        .font(NotchFont.caption)
+                        .padding(.trailing, 6)
+                    CardButton(symbol: "doc.zipper", help: "Compress everything") {
+                        isWorking = true
+                        Task {
+                            if let archive = await FileActions.compress(tray.urls) { tray.add([archive]) }
+                            isWorking = false
+                        }
+                    }
+                    CardButton(symbol: "folder", help: "Show in Finder") { FileActions.reveal(tray.urls) }
+                    CardButton(symbol: "trash", help: "Clear the tray") { tray.clear() }
+                }
             }
         }
-        .frame(height: 22)
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 6) {
-            Image(systemName: "tray.and.arrow.down")
-                .font(.system(size: 24, weight: .medium))
-            Text("Drop files here to keep them handy")
-                .font(.system(size: 11.5, weight: .medium))
-        }
-        .foregroundStyle(Color.notchTertiary)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -105,6 +94,7 @@ private struct TrayItemView: View {
     let isSelected: Bool
     let viewModel: NotchViewModel
     @ObservedObject private var thumbnails = ThumbnailCache.shared
+    @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
 
     var body: some View {
@@ -114,23 +104,25 @@ private struct TrayItemView: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: 46, height: 46)
                 .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
-                .padding(3)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color.white.opacity(isSelected ? 0.16 : 0)))
+                .padding(4)
+                .background(RoundedRectangle(cornerRadius: theme.controlRadius, style: .continuous)
+                    .fill(isSelected ? theme.controlHover : .clear))
             Text(item.url.lastPathComponent)
-                .font(.system(size: 10, weight: .medium))
+                .font(NotchFont.caption)
+                .foregroundStyle(isSelected ? Color.white : theme.primary.opacity(0.9))
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .truncationMode(.middle)
                 .padding(.horizontal, 4)
+                .padding(.vertical, 1)
                 .background(RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(isSelected ? Color.accentColor : .clear))
-                .frame(width: 78, height: 26, alignment: .top)
+                    .fill(isSelected ? theme.accent.opacity(0.55) : .clear))
+                .frame(width: 78, height: 28, alignment: .top)
         }
         .padding(.top, 4)
         .frame(width: 80)
-        .background(RoundedRectangle(cornerRadius: 11, style: .continuous)
-            .fill(Color.white.opacity(hovering && !isSelected ? 0.1 : 0)))
+        .background(RoundedRectangle(cornerRadius: theme.controlRadius + 3, style: .continuous)
+            .fill(hovering && !isSelected ? theme.control : .clear))
         .overlay(alignment: .topTrailing) {
             if hovering {
                 Button { TrayStore.shared.remove(item) } label: {
@@ -139,12 +131,14 @@ private struct TrayItemView: View {
                         .symbolRenderingMode(.palette)
                         .foregroundStyle(Color.black, Color.white.opacity(0.85))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(PressableButtonStyle())
                 .help("Remove from tray")
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
         }
         .contentShape(Rectangle())
         .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: hovering)
         .onTapGesture(count: 2) { FileActions.open(item.url) }
         .simultaneousGesture(TapGesture().onEnded {
             TrayStore.shared.select(item)
@@ -224,28 +218,36 @@ private struct TrayItemMenu: View {
 /// Drop files to AirDrop them; click to AirDrop everything in the tray.
 private struct AirDropTile: View {
     @ObservedObject private var tray = TrayStore.shared
+    @Environment(\.notchTheme) private var theme
     @ViewState private var isTargeted = false
     @ViewState private var hovering = false
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous)
         Button {
             if !tray.items.isEmpty { FileActions.airDrop(tray.urls) }
         } label: {
             VStack(spacing: 8) {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(isTargeted ? Color.blue : Color.white.opacity(0.8))
+                    .foregroundStyle(isTargeted ? Color.blue : hovering ? theme.primary : theme.primary.opacity(0.8))
                     .symbolEffect(.bounce, value: isTargeted)
                 Text("AirDrop")
-                    .font(.system(size: 11.5, weight: .semibold))
+                    .font(NotchFont.bodyStrong)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(RoundedRectangle(cornerRadius: 15, style: .continuous)
-                .fill(isTargeted ? Color.blue.opacity(0.25) : hovering ? Color.notchCardHover : Color.notchCard))
-            .contentShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+            .background {
+                if isTargeted {
+                    shape.fill(Color.blue.opacity(0.25))
+                } else {
+                    CardSurface(isHighlighted: hovering)
+                }
+            }
+            .contentShape(shape)
         }
-        .buttonStyle(PressableButtonStyle())
+        .buttonStyle(PressableButtonStyle(scale: 0.97))
         .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: hovering)
         .help(tray.items.isEmpty ? "Drop files here to AirDrop them" : "AirDrop everything in the tray")
         .trayDropTarget(isTargeted: $isTargeted) { providers in
             Task {
@@ -262,7 +264,7 @@ private struct TrayDropZones: View {
     @ObservedObject var viewModel: NotchViewModel
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: NotchTheme.gap) {
             DropZone(title: "Keep in Tray", subtitle: "Drop to stash for later", symbol: "tray.and.arrow.down.fill",
                      tint: .white, isWide: true, viewModel: viewModel) { urls in
                 TrayStore.shared.add(urls)
@@ -290,6 +292,7 @@ private struct DropZone: View {
     var isWide = false
     let viewModel: NotchViewModel
     let perform: @MainActor ([URL]) async -> Void
+    @Environment(\.notchTheme) private var theme
     @ViewState private var isTargeted = false
 
     init(title: String, subtitle: String? = nil, symbol: String, tint: Color, isWide: Bool = false,
@@ -304,24 +307,24 @@ private struct DropZone: View {
     }
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous)
         VStack(spacing: 7) {
             Image(systemName: symbol)
                 .font(.system(size: isWide ? 26 : 20, weight: .medium))
-                .foregroundStyle(isTargeted ? tint : Color.white.opacity(0.75))
+                .foregroundStyle(isTargeted ? tint : theme.primary.opacity(0.75))
                 .symbolEffect(.bounce, value: isTargeted)
+                .frame(height: 30)
             Text(title)
-                .font(.system(size: 12, weight: .semibold))
+                .font(NotchFont.headline)
             if let subtitle {
                 Text(subtitle)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(Color.notchTertiary)
+                    .font(NotchFont.caption)
+                    .foregroundStyle(theme.tertiary)
             }
         }
         .frame(maxWidth: isWide ? .infinity : 100, maxHeight: .infinity)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(isTargeted ? tint.opacity(0.2) : Color.notchCard))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .strokeBorder(isTargeted ? tint : Color.white.opacity(0.2), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
+        .background(shape.fill(isTargeted ? tint.opacity(0.2) : theme.card))
+        .overlay(shape.strokeBorder(isTargeted ? tint : theme.primary.opacity(0.2), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
         .scaleEffect(isTargeted ? 1.03 : 1)
         .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isTargeted)
         .trayDropTarget(isTargeted: $isTargeted) { providers in

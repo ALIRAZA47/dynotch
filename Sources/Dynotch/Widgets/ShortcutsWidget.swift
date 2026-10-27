@@ -40,7 +40,7 @@ struct ShortcutsWidget: View {
                 PermissionPrompt(symbol: "square.stack.3d.up", message: "Pin shortcuts to run them from here.",
                                  buttonTitle: "Choose…") { SettingsWindowController.shared.show(page: .nook) }
             } else {
-                VStack(spacing: 5) {
+                VStack(spacing: 4) {
                     ForEach(settings.pinnedShortcuts.prefix(4), id: \.self) { name in
                         ShortcutButton(name: name, isRunning: shortcuts.running.contains(name)) { shortcuts.run(name) }
                     }
@@ -54,28 +54,36 @@ private struct ShortcutButton: View {
     let name: String
     let isRunning: Bool
     let action: () -> Void
+    @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 if isRunning {
                     ProgressView().controlSize(.mini)
+                        .frame(width: 12)
                 } else {
-                    Image(systemName: "play.fill").font(.system(size: 8, weight: .bold))
+                    Image(systemName: "play.fill")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(theme.accent)
+                        .frame(width: 12)
                 }
                 Text(name)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(NotchFont.body)
                     .lineLimit(1)
-                Spacer(minLength: 0)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 6)
             .frame(height: 24)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(hovering ? 0.16 : 0.08)))
+            .background(RoundedRectangle(cornerRadius: theme.controlRadius, style: .continuous)
+                .fill(hovering ? theme.controlHover : theme.control))
             .contentShape(Rectangle())
         }
-        .buttonStyle(PressableButtonStyle())
+        .buttonStyle(PressableButtonStyle(scale: 0.96))
         .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: hovering)
         .disabled(isRunning)
+        .help(name)
     }
 }

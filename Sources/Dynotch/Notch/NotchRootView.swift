@@ -5,15 +5,17 @@ struct NotchRootView: View {
     @ObservedObject var viewModel: NotchViewModel
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var mic = MicMonitor.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let metrics = viewModel.metrics
+        let theme = NotchTheme.standard
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
                 if viewModel.isOpen {
                     OpenNotchView(viewModel: viewModel)
                         .transition(.asymmetric(
-                            insertion: .opacity.combined(with: .scale(scale: 0.92, anchor: .top))
+                            insertion: (reduceMotion ? AnyTransition.opacity : .opacity.combined(with: .scale(scale: 0.92, anchor: .top)))
                                 .animation(.spring(response: 0.4, dampingFraction: 0.82).delay(0.04)),
                             removal: .opacity.animation(.easeOut(duration: 0.1))))
                 } else {
@@ -40,6 +42,8 @@ struct NotchRootView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .environment(\.colorScheme, .dark)
+        .environment(\.notchTheme, theme)
+        .tint(theme.accent)
     }
 
     /// Green while a camera is on, orange while only the microphone is. The closed notch only.

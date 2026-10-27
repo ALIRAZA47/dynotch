@@ -64,7 +64,7 @@ final class NotchWindowController {
     func layout() {
         let settings = AppSettings.shared
         viewModel.update(geometry: NotchGeometry.make(for: screen, virtualWidth: settings.virtualNotchWidth))
-        let width = settings.openWidth + NotchMetrics.openTopRadius * 2 + Self.shadowInset * 2
+        let width = settings.openWidth + NotchTheme.maxTopRadius * 2 + Self.shadowInset * 2
         let height = settings.openHeight + Self.shadowInset
         let frame = screen.frame
         panel.setFrame(CGRect(x: (frame.midX - width / 2).rounded(), y: frame.maxY - height, width: width, height: height),

@@ -136,11 +136,27 @@ enum SnapshotRenderer {
             },
             Scene(name: "95-closed-rain", phase: .closed, activity: .notice(LiveNotice(
                 key: "rain", symbol: "cloud.rain.fill", tint: .cyan, text: "in 15m", detail: "Rain starting soon"))),
+            // The other widgets beside the player, busy cards and empty ones. These change the samples, so they go last.
+            Scene(name: "96-open-nook-timer-toggles", phase: .open, tab: .home, prepare: {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.timer, .toggles)
+            }),
+            Scene(name: "97-open-focus-busy", phase: .open, tab: .focus, setUp: {
+                TimerStore.shared.start("pizza 12m")
+            }, prepare: loadBusySamples),
+            Scene(name: "98-open-nook-shortcuts-calendar", phase: .open, tab: .home, prepare: {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.shortcuts, .calendar)
+                AppSettings.shared.pinnedShortcuts = ["Morning routine", "Log a glass of water", "Focus playlist"]
+            }),
+            Scene(name: "99-open-focus-empty", phase: .open, tab: .focus, hasTimers: false, prepare: {
+                CalendarService.shared.loadSample(events: [], reminders: [])
+                NotesStore.shared.loadSample([""])
+            }),
         ]
 
         let settings = AppSettings.shared
-        let size = CGSize(width: settings.openWidth + NotchMetrics.openTopRadius * 2 + 80, height: settings.openHeight + 40)
+        let size = CGSize(width: settings.openWidth + NotchTheme.standard.topRadius * 2 + 80, height: settings.openHeight + 40)
         let savedWidgets = (settings.homeWidgetA, settings.homeWidgetB)
+        let savedShortcuts = settings.pinnedShortcuts
         for scene in scenes {
             scene.prepare?()
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
@@ -167,6 +183,7 @@ enum SnapshotRenderer {
             try? png.write(to: folder.appendingPathComponent(scene.name + ".png"))
         }
         (settings.homeWidgetA, settings.homeWidgetB) = savedWidgets
+        if settings.pinnedShortcuts != savedShortcuts { settings.pinnedShortcuts = savedShortcuts }
         print("Wrote \(scenes.count) snapshots to \(folder.path)")
         renderSettings(into: folder)
     }
@@ -342,6 +359,30 @@ enum SnapshotRenderer {
             FileManager.default.createFile(atPath: url.path, contents: Data())
         }
         TrayStore.shared.loadSample(urls)
+    }
+
+    /// A day with more events and reminders than the cards have room for, and a long title or two.
+    private static func loadBusySamples() {
+        let now = Date.now
+        func at(_ minutes: Double) -> Date { now.addingTimeInterval(minutes * 60) }
+        CalendarService.shared.loadSample(
+            events: [
+                .init(id: "1", title: "Design review", start: at(12), end: at(57), isAllDay: false, color: .orange,
+                      meetingURL: URL(string: "https://meet.google.com/abc-defg-hij")),
+                .init(id: "2", title: "Lunch with Sam", start: at(140), end: at(200), isAllDay: false, color: .green, meetingURL: nil),
+                .init(id: "4", title: "Quarterly planning with the whole product team", start: at(215), end: at(275),
+                      isAllDay: false, color: .blue, meetingURL: nil),
+                .init(id: "5", title: "Yoga", start: at(300), end: at(360), isAllDay: false, color: .purple, meetingURL: nil),
+            ],
+            reminders: [
+                .init(id: "a", title: "Send the invoice", dueDate: at(90), color: .orange),
+                .init(id: "d", title: "Call the landlord about the leaking kitchen tap before the weekend", dueDate: at(-1500),
+                      color: .red),
+                .init(id: "b", title: "Book flights for March", dueDate: Calendar.current.date(byAdding: .day, value: 1, to: now),
+                      color: .blue),
+                .init(id: "c", title: "Water the plants", dueDate: nil, color: .green),
+                .init(id: "e", title: "Renew the passport", dueDate: nil, color: .purple),
+            ])
     }
 
     private static let samplePairedDevices: [DeviceBatteryMonitor.PairedDevice] = [

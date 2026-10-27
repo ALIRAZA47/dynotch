@@ -2,10 +2,11 @@ import SwiftUI
 
 struct SystemStatsWidget: View {
     @ObservedObject private var monitor = SystemMonitor.shared
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         WidgetCard(title: "System", symbol: "cpu") {
-            VStack(spacing: 9) {
+            VStack(spacing: 8) {
                 StatRow(label: "CPU", value: "\(Int((monitor.cpu * 100).rounded()))%",
                         fraction: monitor.cpu, color: color(for: monitor.cpu)) {
                     Sparkline(values: monitor.cpuHistory, color: color(for: monitor.cpu))
@@ -21,10 +22,10 @@ struct SystemStatsWidget: View {
                     Label(Format.rate(monitor.upload), systemImage: "arrow.up")
                     Spacer(minLength: 0)
                 }
-                .font(.system(size: 10.5, weight: .medium, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(Color.notchSecondary)
+                .font(NotchFont.numeric(10.5, .medium))
+                .foregroundStyle(theme.secondary)
                 .labelStyle(CompactLabelStyle())
+                .accessibilityElement(children: .combine)
             }
         }
         .onAppear { monitor.beginObserving() }
@@ -42,6 +43,7 @@ private struct StatRow<Accessory: View>: View {
     let fraction: Double
     let color: Color
     @ViewBuilder var accessory: Accessory
+    @Environment(\.notchTheme) private var theme
 
     init(label: String, value: String, fraction: Double, color: Color,
          @ViewBuilder accessory: () -> Accessory = { EmptyView() }) {
@@ -53,21 +55,21 @@ private struct StatRow<Accessory: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
                 Text(label)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(NotchFont.bodyStrong)
                 Spacer(minLength: 0)
                 accessory
                 Text(value)
-                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(Color.notchSecondary)
+                    .font(NotchFont.numeric(10.5, .medium))
+                    .foregroundStyle(theme.secondary)
                     .lineLimit(1)
             }
             LevelBar(level: fraction, color: color)
                 .frame(height: 4)
         }
+        .accessibilityElement(children: .combine)
     }
 }
 

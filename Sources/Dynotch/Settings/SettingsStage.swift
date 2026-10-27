@@ -116,7 +116,7 @@ private struct StagePreview: View {
         if isOpen {
             let scale = Self.openScale
             PreviewNotch(size: CGSize(width: settings.openWidth * scale, height: settings.openHeight * scale),
-                         topRadius: NotchMetrics.openTopRadius * scale, bottomRadius: NotchMetrics.openBottomRadius * scale,
+                         topRadius: NotchTheme.standard.topRadius * scale, bottomRadius: NotchTheme.standard.bottomRadius * scale,
                          shadow: settings.showOpenShadow) {
                 OpenPreview(tab: page == .tray ? .tray : .home, scale: scale)
             }
@@ -533,7 +533,7 @@ private struct NookSketch: View {
                             .lineLimit(1)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.notchCard))
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(NotchTheme.standard.card))
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 }
             }
@@ -622,7 +622,7 @@ private struct TraySketch: View {
             }
             .padding(6)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.notchCard))
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(NotchTheme.standard.card))
             VStack(spacing: 3) {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .font(.system(size: 9, weight: .medium))
@@ -631,7 +631,7 @@ private struct TraySketch: View {
             .foregroundStyle(.white.opacity(0.8))
             .frame(width: 50)
             .frame(maxHeight: .infinity)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.notchCard))
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(NotchTheme.standard.card))
         }
     }
 }

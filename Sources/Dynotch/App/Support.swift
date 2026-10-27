@@ -106,18 +106,15 @@ extension NSImage {
     }
 }
 
-extension Color {
-    static let notchSecondary = Color.white.opacity(0.58)
-    static let notchTertiary = Color.white.opacity(0.36)
-    static let notchCard = Color.white.opacity(0.07)
-    static let notchCardHover = Color.white.opacity(0.12)
-}
-
 extension Animation {
     static let notchOpen = Animation.spring(response: 0.42, dampingFraction: 0.76)
     static let notchClose = Animation.spring(response: 0.36, dampingFraction: 0.95)
     static let notchHover = Animation.spring(response: 0.28, dampingFraction: 0.7)
     static let notchActivity = Animation.spring(response: 0.42, dampingFraction: 0.8)
+    /// The selected tab's pill moving along the tab bar.
+    static let notchTab = Animation.spring(response: 0.32, dampingFraction: 0.82)
+    /// A highlight under the pointer coming and going.
+    static let notchHighlight = Animation.easeOut(duration: 0.12)
 }
 
 enum Shell {

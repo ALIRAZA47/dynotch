@@ -6,28 +6,29 @@ struct DevicesWidget: View {
     @ObservedObject private var power = PowerMonitor.shared
     @ObservedObject private var monitor = DeviceBatteryMonitor.shared
     @Environment(\.isSnapshot) private var isSnapshot
+    @Environment(\.notchTheme) private var theme
 
     /// Looked up once: `Host` can be slow to answer.
     private static let macName = Host.current().localizedName ?? "This Mac"
 
     var body: some View {
         WidgetCard(title: "Batteries", symbol: "battery.75percent") {
-            if monitor.isAuthorized {
-                GeometryReader { proxy in
+            // Beside the player the card is narrow, and each name gets a line of its own.
+            GeometryReader { proxy in
+                let compact = proxy.size.width < 150
+                if monitor.isAuthorized {
                     // As many paired devices as fit, down to none.
                     ViewThatFits(in: .vertical) {
                         ForEach(Array((0...min(monitor.paired.count, 3)).reversed()), id: \.self) { count in
-                            rows(paired: count, compact: proxy.size.width < 160)
+                            rows(paired: count, compact: compact)
                         }
                     }
-                }
-            } else {
-                VStack(alignment: .leading, spacing: 8) {
-                    macRow
-                    Spacer(minLength: 0)
-                    PillButton(title: "Show Bluetooth devices", symbol: "dot.radiowaves.right", action: monitor.requestAccess)
-                        .frame(maxWidth: .infinity)
-                    Spacer(minLength: 0)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        macRow(compact: compact)
+                        PermissionPrompt(symbol: "dot.radiowaves.right", message: "See your AirPods, keyboard and more.",
+                                         buttonTitle: "Allow Bluetooth", action: monitor.requestAccess)
+                    }
                 }
             }
         }
@@ -37,14 +38,14 @@ struct DevicesWidget: View {
     private func rows(paired count: Int, compact: Bool) -> some View {
         let connected = monitor.devices.filter { $0.lowest != nil || $0.batteryCase != nil }
         return VStack(alignment: .leading, spacing: 8) {
-            macRow
+            macRow(compact: compact)
             ForEach(connected.prefix(3)) { device in
-                connectedRow(device)
+                connectedRow(device, compact: compact)
             }
             if connected.isEmpty, !power.hasBattery, monitor.paired.isEmpty {
                 Text("No Bluetooth devices connected")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.notchTertiary)
+                    .font(NotchFont.footnote)
+                    .foregroundStyle(theme.tertiary)
             }
             ForEach(monitor.paired.prefix(count)) { device in
                 PairedRow(device: device, connection: monitor.connections[device.id], compact: compact, isSnapshot: isSnapshot) {
@@ -55,19 +56,20 @@ struct DevicesWidget: View {
     }
 
     @ViewBuilder
-    private var macRow: some View {
+    private func macRow(compact: Bool) -> some View {
         if power.hasBattery {
             DeviceRow(symbol: "laptopcomputer", name: isSnapshot ? "MacBook Pro" : Self.macName,
                       detail: power.isCharging ? "Charging" : power.isPluggedIn ? "Plugged in" : nil,
-                      level: power.level, charging: power.isCharging || power.isPluggedIn)
+                      level: power.level, charging: power.isCharging || power.isPluggedIn, compact: compact)
         }
     }
 
-    private func connectedRow(_ device: DeviceBatteryMonitor.Device) -> some View {
+    private func connectedRow(_ device: DeviceBatteryMonitor.Device, compact: Bool) -> some View {
         let status = Status(monitor.connections[device.id])
-        return DeviceRow(symbol: device.kind.symbol, name: device.name, detail: status?.text ?? budsDetail(device),
-                         detailTint: status?.tint ?? Color.notchTertiary,
-                         level: device.lowest ?? device.batteryCase ?? 0, charging: false)
+        let buds = budsDetail(device)
+        return DeviceRow(symbol: device.kind.symbol, name: device.name, detail: status?.text ?? buds,
+                         detailTint: status?.tint, detailListsLevels: status == nil && buds != nil,
+                         level: device.lowest ?? device.batteryCase ?? 0, charging: false, compact: compact)
             .contextMenu {
                 Button("Disconnect") { monitor.disconnect(device) }
                     .disabled(monitor.connections[device.id] == .disconnecting)
@@ -81,66 +83,82 @@ struct DevicesWidget: View {
     }
 }
 
-/// What a row says while it connects or disconnects, or after that failed.
+/// What a row says while it connects or disconnects, or after that failed. No tint means the
+/// row's own quiet color.
 private struct Status {
     let text: String
-    let tint: Color
+    let tint: Color?
 
     init?(_ connection: DeviceBatteryMonitor.Connection?) {
         switch connection {
-        case .connecting: (text, tint) = ("Connecting…", Color.notchTertiary)
-        case .disconnecting: (text, tint) = ("Disconnecting…", Color.notchTertiary)
+        case .connecting: (text, tint) = ("Connecting…", nil)
+        case .disconnecting: (text, tint) = ("Disconnecting…", nil)
         case .failed(let message): (text, tint) = (message, Color.orange)
         case nil: return nil
         }
     }
 }
 
+/// A device's symbol, name and level, with a meter or a line about it underneath. A compact row
+/// gives the name the whole first line and puts the level underneath.
 private struct DeviceRow: View {
     let symbol: String
     let name: String
     let detail: String?
-    var detailTint = Color.notchTertiary
+    var detailTint: Color?
+    /// The line underneath already gives the levels, like an AirPods' buds and case.
+    var detailListsLevels = false
     let level: Int
     let charging: Bool
+    var compact = false
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: symbol)
-                .font(.system(size: 13))
-                .frame(width: 20)
-                .foregroundStyle(Color.notchSecondary)
-            VStack(alignment: .leading, spacing: 2) {
+                .font(.system(size: 12))
+                .frame(width: 18)
+                .foregroundStyle(theme.secondary)
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
                     Text(name)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(NotchFont.body)
                         .lineLimit(1)
-                    Spacer(minLength: 0)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .help(name)
                     if charging {
                         Image(systemName: "bolt.fill")
                             .font(.system(size: 8))
                             .foregroundStyle(.green)
                     }
-                    Text("\(level)%")
-                        .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(color)
+                    if !compact { percentage }
                 }
-                if let detail {
-                    Text(detail)
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(detailTint)
-                        .lineLimit(1)
-                } else {
-                    LevelBar(level: Double(level) / 100, color: color)
-                        .frame(height: 3)
+                HStack(spacing: 6) {
+                    if let detail {
+                        Text(detail)
+                            .font(NotchFont.caption)
+                            .foregroundStyle(detailTint ?? theme.tertiary)
+                            .lineLimit(1)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        LevelBar(level: Double(level) / 100, color: color)
+                            .frame(height: 3)
+                    }
+                    if compact, !detailListsLevels { percentage }
                 }
             }
         }
     }
 
+    private var percentage: some View {
+        Text("\(level)%")
+            .font(NotchFont.numeric(compact ? 10.5 : 11))
+            .foregroundStyle(color)
+            .layoutPriority(1)
+    }
+
     private var color: Color {
-        charging ? .green : level <= 10 ? .red : level <= 20 ? .orange : .white
+        charging ? .green : level <= 10 ? .red : level <= 20 ? .orange : theme.primary
     }
 }
 
@@ -152,34 +170,33 @@ private struct PairedRow: View {
     let compact: Bool
     let isSnapshot: Bool
     let connect: () -> Void
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         let status = Status(connection)
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             Image(systemName: device.kind.symbol)
-                .font(.system(size: 13))
-                .frame(width: 20)
-                .foregroundStyle(Color.notchTertiary)
+                .font(.system(size: 12))
+                .frame(width: 18)
+                .foregroundStyle(theme.tertiary)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 4) {
                     Text(device.name)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.notchSecondary)
+                        .font(NotchFont.body)
+                        .foregroundStyle(theme.secondary)
                         .lineLimit(1)
-                    Spacer(minLength: 0)
-                    if connection == .connecting {
-                        spinner
-                            .frame(width: 16, height: 16)
-                    } else {
-                        ConnectButton(title: status == nil ? "Connect" : "Retry",
-                                      symbol: status == nil ? "link" : "arrow.clockwise", compact: compact, action: connect)
-                    }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .help(device.name)
+                    if !compact { action(status) }
                 }
-                if let status {
-                    Text(status.text)
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(status.tint)
-                        .lineLimit(1)
+                // A narrow row keeps the first line for the name, and the button goes underneath.
+                if compact {
+                    HStack(spacing: 4) {
+                        statusText(status?.text ?? "Not connected", tint: status?.tint)
+                        action(status)
+                    }
+                } else if let status {
+                    statusText(status.text, tint: status.tint)
                 }
             }
         }
@@ -190,11 +207,30 @@ private struct PairedRow: View {
     }
 
     @ViewBuilder
+    private func action(_ status: Status?) -> some View {
+        if connection == .connecting {
+            spinner
+                .frame(width: 16, height: 16)
+        } else {
+            ConnectButton(title: status == nil ? "Connect" : "Retry",
+                          symbol: status == nil ? "link" : "arrow.clockwise", compact: compact, action: connect)
+        }
+    }
+
+    private func statusText(_ text: String, tint: Color?) -> some View {
+        Text(text)
+            .font(NotchFont.caption)
+            .foregroundStyle(tint ?? theme.tertiary)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
     private var spinner: some View {
         if isSnapshot {
             Image(systemName: "circle.dotted")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.notchSecondary)
+                .foregroundStyle(theme.secondary)
         } else {
             ProgressView().controlSize(.mini)
         }
@@ -206,6 +242,7 @@ private struct ConnectButton: View {
     let symbol: String
     let compact: Bool
     let action: () -> Void
+    @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
 
     var body: some View {
@@ -217,18 +254,19 @@ private struct ConnectButton: View {
                         .frame(width: 20)
                 } else {
                     Text(title)
-                        .font(.system(size: 9.5, weight: .semibold))
-                        .padding(.horizontal, 7)
+                        .font(.system(size: 10, weight: .semibold))
+                        .padding(.horizontal, 8)
                 }
             }
-            .foregroundStyle(.white)
-            .frame(height: 17)
-            .background(Capsule().fill(Color.white.opacity(hovering ? 0.24 : 0.14)))
+            .foregroundStyle(theme.accent)
+            .frame(height: 18)
+            .background(Capsule().fill(theme.accent.opacity(hovering ? 0.26 : 0.16)))
             .contentShape(Capsule())
             .fixedSize()
         }
         .buttonStyle(PressableButtonStyle())
         .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: hovering)
         .help(title)
         .accessibilityLabel(title)
     }

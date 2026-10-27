@@ -6,6 +6,7 @@ import SwiftUI
 struct OutputButton: View {
     var tint: Color
     @ObservedObject private var outputs = AudioOutputs.shared
+    @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
 
     var body: some View {
@@ -15,11 +16,12 @@ struct OutputButton: View {
         } label: {
             Image(systemName: outputs.current?.symbol ?? "hifispeaker.fill")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(outputs.isPickerShown ? tint : Color.white.opacity(hovering ? 0.9 : 0.36))
+                .foregroundStyle(outputs.isPickerShown ? tint : hovering ? theme.primary : theme.tertiary)
                 .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(PressableButtonStyle())
         .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: hovering)
         .help(outputs.current.map { "Playing through \($0.name)" } ?? "Choose an output")
         .accessibilityLabel("Output")
         .accessibilityValue(outputs.current?.name ?? "")
@@ -33,45 +35,26 @@ struct OutputPicker: View {
     @ObservedObject private var outputs = AudioOutputs.shared
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        WidgetCard(title: "Output", symbol: "hifispeaker.fill") {
             HStack(spacing: 6) {
-                Text("OUTPUT")
-                    .font(.system(size: 9.5, weight: .bold))
-                    .tracking(0.6)
-                    .foregroundStyle(Color.notchTertiary)
-                Spacer(minLength: 0)
                 AirPlayButton(tint: tint)
-                Button(action: close) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(Color.notchSecondary)
-                        .frame(width: 20, height: 20)
-                        .background(Circle().fill(Color.white.opacity(0.1)))
-                        .contentShape(Circle())
-                }
-                .buttonStyle(PressableButtonStyle())
-                .help("Back to the player")
+                CloseButton(action: close)
             }
-            .frame(height: 20)
-            Scroller(.vertical) {
-                VStack(spacing: 2) {
-                    ForEach(outputs.devices) { device in
-                        OutputRow(device: device, isCurrent: device.id == outputs.currentID, tint: tint) {
-                            choose(device)
+        } content: {
+            if outputs.devices.isEmpty {
+                EmptyState(symbol: "speaker.slash", message: "No outputs found.")
+            } else {
+                Scroller(.vertical, fadesOverflow: true) {
+                    VStack(spacing: 2) {
+                        ForEach(outputs.devices) { device in
+                            OutputRow(device: device, isCurrent: device.id == outputs.currentID, tint: tint) {
+                                choose(device)
+                            }
                         }
-                    }
-                    if outputs.devices.isEmpty {
-                        Text("No outputs found.")
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(Color.notchSecondary)
-                            .padding(.top, 8)
                     }
                 }
             }
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 15, style: .continuous).fill(Color.notchCard))
     }
 
     private func choose(_ device: AudioOutputs.Device) {
@@ -93,20 +76,22 @@ private struct OutputRow: View {
     let isCurrent: Bool
     let tint: Color
     let action: () -> Void
+    @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 9) {
+            HStack(spacing: 8) {
                 Image(systemName: device.symbol)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(isCurrent ? tint : Color.notchSecondary)
+                    .foregroundStyle(isCurrent ? tint : theme.secondary)
                     .frame(width: 18)
                 Text(device.name)
-                    .font(.system(size: 12.5, weight: isCurrent ? .semibold : .medium))
-                    .foregroundStyle(Color.white.opacity(isCurrent ? 1 : 0.85))
+                    .font(isCurrent ? NotchFont.bodyStrong : NotchFont.body)
+                    .foregroundStyle(isCurrent ? theme.primary : theme.primary.opacity(0.85))
                     .lineLimit(1)
-                Spacer(minLength: 4)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .help(device.name)
                 if isCurrent {
                     Image(systemName: "checkmark")
                         .font(.system(size: 10.5, weight: .bold))
@@ -115,13 +100,37 @@ private struct OutputRow: View {
             }
             .padding(.horizontal, 8)
             .frame(height: 26)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(isCurrent ? 0.1 : hovering ? 0.06 : 0)))
+            .background(RoundedRectangle(cornerRadius: theme.controlRadius, style: .continuous)
+                .fill(isCurrent ? theme.controlHover : hovering ? theme.control : .clear))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(PressableButtonStyle(scale: 0.98))
         .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: hovering)
         .accessibilityAddTraits(isCurrent ? .isSelected : [])
+    }
+}
+
+/// Back to the player.
+private struct CloseButton: View {
+    let action: () -> Void
+    @Environment(\.notchTheme) private var theme
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(hovering ? theme.primary : theme.secondary)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(hovering ? theme.controlHover : theme.control))
+                .contentShape(Circle())
+        }
+        .buttonStyle(PressableButtonStyle())
+        .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: hovering)
+        .help("Back to the player")
+        .accessibilityLabel("Back to the player")
     }
 }
 
@@ -129,6 +138,7 @@ private struct OutputRow: View {
 private struct AirPlayButton: View {
     var tint: Color
     @Environment(\.isSnapshot) private var isSnapshot
+    @Environment(\.notchTheme) private var theme
     @ViewState private var handle = RoutePickerHandle()
     @ViewState private var hovering = false
 
@@ -138,23 +148,24 @@ private struct AirPlayButton: View {
                 if isSnapshot {
                     Image(systemName: "airplayaudio")
                         .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(Color.notchSecondary)
+                        .foregroundStyle(theme.secondary)
                 } else {
                     RoutePicker(handle: handle, tint: NSColor(tint))
                 }
             }
             .frame(width: 20, height: 20)
             Text("AirPlay")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color.notchSecondary)
+                .font(NotchFont.bodyStrong)
+                .foregroundStyle(hovering ? theme.primary : theme.secondary)
         }
         .padding(.leading, 2)
         .padding(.trailing, 9)
         .frame(height: 20)
-        .background(Capsule().fill(Color.white.opacity(hovering ? 0.14 : 0.08)))
+        .background(Capsule().fill(hovering ? theme.controlHover : theme.control))
         .contentShape(Capsule())
         .onTapGesture { handle.present() }
         .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: hovering)
         .help("Play through an AirPlay speaker or TV")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("AirPlay")
