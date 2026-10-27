@@ -14,7 +14,7 @@ dependencies.
 | | |
 |---|---|
 | **Notch shell** | Hover, click, trackpad swipe or ⌃⌥N to open; swipe up, Esc or move away to close. Spring animations, haptics, hover grow. A virtual notch on Macs and displays without one. Choose the built-in display, the main display or all displays. |
-| **Live activities** (closed notch) | Album art and an equalizer while music plays; the song title when the track changes; focus-timer countdown; volume and brightness HUD; charging; low battery (Mac and Bluetooth devices); upcoming events five minutes ahead; Bluetooth devices connecting; Shortcuts finishing. |
+| **Live activities** (closed notch) | Album art and an equalizer while music plays; the song title when the track changes; focus-timer countdown; volume and brightness HUD; charging; low battery (Mac and Bluetooth devices); upcoming events five minutes ahead; Bluetooth devices connecting; Shortcuts finishing; notifications from Messages, Mail, Slack and other apps (see [Notification peeks](#notification-peeks)). |
 | **Nook tab** | Media player for Apple Music and Spotify: artwork, scrubber, play/pause, next/previous, shuffle, repeat, favorite. Its accent color comes from the album art. Two configurable widgets beside it: Calendar, Mirror, Shortcuts, Focus timer, Batteries, Quick toggles or Notes. |
 | **Tray tab** | Drag files toward the notch and it opens with drop zones: **Keep in Tray**, **AirDrop**, **Compress** and **Copy to…**. Tray items have Quick Look thumbnails, drag back out to any app, and survive relaunches. The right-click menu offers Open, Open With, Show in Finder, Copy, AirDrop, Share, Compress, Extract, Convert Image (PNG/JPEG/HEIC), Make Smaller, Copy to…, Move to… and Remove. Dropped images, links and text become files. |
 | **Focus tab** | Pomodoro timer (focus, short and long breaks, sound, auto-start), Reminders (check off, add new) and a Notes scratchpad. |
@@ -81,6 +81,32 @@ to `~/.claude/settings.json`:
 }
 ```
 
+## Notification peeks
+
+When a notification arrives, it slides out of the closed notch: the app's symbol, who it's
+from, and a line of text. Messages, Mail, Slack, Microsoft Teams, Outlook, WhatsApp, Telegram,
+Signal, Discord, FaceTime, Zoom, Calendar and Reminders have symbols of their own; other apps
+get a bell, and the line starts with the app's name.
+
+**Settings → Live Activities → Notifications** chooses which apps peek. **Hide message text**
+shows only the app and the sender, which is worth turning on if you share your screen: Dynotch
+doesn't check Focus or screen sharing.
+
+**Turning it on.** macOS has no public API for other apps' notifications, so Dynotch reads
+them from Notification Center's own database
+(`~/Library/Group Containers/group.com.apple.usernoted/db2/db`), which only apps with Full
+Disk Access can open. In System Settings → Privacy & Security → Full Disk Access, turn on
+Dynotch (add it with **+** if it isn't listed). macOS may ask you to quit and reopen Dynotch.
+
+**System banners still appear.** Dynotch only reads notifications, so macOS keeps showing its
+own banner for each one. To see only the peek for an app, open System Settings →
+Notifications, choose the app and set its alert style to **None**. Leave **Show in
+Notification Center** on, because that's where Dynotch reads them from.
+
+**Privacy.** The database is opened read-only. Dynotch shows a notification and forgets it:
+nothing a notification says is logged or saved. The only thing it remembers is the time of
+the newest notification it has seen, and only while it runs.
+
 ## Permissions
 
 Each permission is requested the first time you use the feature that needs it.
@@ -93,6 +119,7 @@ Each permission is requested the first time you use the feature that needs it.
 | Calendar, Reminders | The Calendar and Reminders widgets |
 | Camera | The Mirror widget (it's only on while you're looking at it) |
 | Bluetooth | Battery levels of connected devices |
+| Full Disk Access | Notification peeks. There's no prompt for this one; turn it on in System Settings. |
 
 Grants survive rebuilds as long as the app is signed with the local identity (see
 above). An ad hoc build may lose them.
@@ -111,6 +138,9 @@ above). An ad hoc build may lose them.
   DisplayServices framework. If that's unavailable it stays quiet.
 - Not included from MacNotch: AI translation, setup profiles, and Night Shift / True Tone
   toggles (the last two have no public API).
+- Notification peeks read a database that Apple doesn't document. Its location and layout
+  have changed between macOS versions before; if they change again, Settings says
+  notifications can't be read on that Mac.
 
 ## Layout
 
@@ -123,6 +153,7 @@ Sources/Dynotch/
   Tray/       tray store, file actions, tray UI and drop zones
   Widgets/    mirror, focus timer, notes, system stats, batteries, quick toggles, shortcuts
   HUD/        volume (CoreAudio) and brightness monitors
+  Notifications/  notification peeks: Notification Center reader, settings
   Settings/   settings window and permissions page
   Debug/      snapshot renderer
 Support/      Info.plist, app icon
