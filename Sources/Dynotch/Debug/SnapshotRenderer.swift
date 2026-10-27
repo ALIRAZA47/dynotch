@@ -21,6 +21,7 @@ enum SnapshotRenderer {
         var cameraInUse = false
         var hasTimers = true
         var downloadKnowsSize = true
+        var focus: FocusMode?
     }
 
     static func render(into folder: URL) {
@@ -44,6 +45,10 @@ enum SnapshotRenderer {
                                      detail: "Are we still on for lunch tomorrow? I booked the place by the river for half past twelve")
         let downloaded = LiveNotice(key: "download", symbol: "arrow.down.circle.fill", tint: DownloadMonitor.tint,
                                     text: "Downloaded", detail: "Keynote Themes.zip")
+        let doNotDisturb = FocusMode(id: "dnd", name: "Do Not Disturb", symbol: "moon.fill", tint: .indigo)
+        let work = FocusMode(id: "work", name: "Work", symbol: "briefcase.fill", tint: .teal)
+        let focusOn = LiveNotice(key: "focus", symbol: "moon.fill", tint: .indigo, text: "On", detail: "Do Not Disturb")
+        let focusOff = LiveNotice(key: "focus", symbol: "briefcase.fill", tint: Color.white.opacity(0.6), text: "Off", detail: "Work")
         let scenes = [
             Scene(name: "01-closed-idle", phase: .closed),
             Scene(name: "02-closed-hover", phase: .hovering),
@@ -87,6 +92,11 @@ enum SnapshotRenderer {
             Scene(name: "62-closed-download-and-music", phase: .closed, activity: .download, secondary: .music),
             Scene(name: "63-closed-timer-and-download", phase: .closed, activity: .timer, secondary: .download),
             Scene(name: "64-closed-downloaded", phase: .closed, activity: .notice(downloaded)),
+            Scene(name: "70-closed-focus", phase: .closed, secondary: .focus(doNotDisturb), focus: doNotDisturb),
+            Scene(name: "71-closed-music-and-focus", phase: .closed, activity: .music, secondary: .focus(work), focus: work),
+            Scene(name: "72-closed-focus-on", phase: .closed, activity: .notice(focusOn), focus: doNotDisturb),
+            Scene(name: "73-closed-focus-off", phase: .closed, activity: .notice(focusOff)),
+            Scene(name: "74-closed-muted-and-focus", phase: .closed, secondary: .micMuted, micMuted: true, focus: work),
         ]
 
         let settings = AppSettings.shared
@@ -96,6 +106,7 @@ enum SnapshotRenderer {
             MicMonitor.shared.loadSample(muted: scene.micMuted, micInUse: scene.micInUse, cameraInUse: scene.cameraInUse)
             if scene.hasTimers { TimerStore.shared.loadSample(at: sampleTime) } else { TimerStore.shared.clearSample() }
             DownloadMonitor.shared.loadSample(knowsSize: scene.downloadKnowsSize)
+            FocusMonitor.shared.loadSample(scene.focus)
             let viewModel = NotchViewModel(geometry: geometry)
             viewModel.stage(phase: scene.phase, activity: scene.activity, secondary: scene.secondary, tab: scene.tab,
                             draggingFiles: scene.draggingFiles)

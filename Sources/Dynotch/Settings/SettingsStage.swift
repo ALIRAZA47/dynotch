@@ -379,6 +379,8 @@ private struct ClosedPreview: View {
         case .download:
             DownloadRing(fraction: 0.45, lineWidth: 2.4 * scale, arrowSize: 6 * scale)
                 .padding(1.5 * scale)
+        case .focus(let mode):
+            FocusGlyph(mode: mode, size: ClosedLayout.glyphSize * scale)
         }
     }
 }

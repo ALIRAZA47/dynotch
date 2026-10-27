@@ -43,19 +43,27 @@ enum CompactActivity: Equatable {
     case countdown(Countdown)
     case stopwatch
     case download
+    /// A Focus is on. Like the mute badge, it shows even when nothing else does.
+    case focus(FocusMode)
 
     /// The main activity already shows this one.
     func isShown(by activity: ClosedActivity) -> Bool {
         switch (self, activity) {
         case (.timer, .timer), (.music, .music), (.music, .trackPeek), (.stopwatch, .stopwatch), (.download, .download): true
         case (.micMuted, .notice(let notice)): notice.key == "mic"
+        case (.focus, .notice(let notice)): notice.key == "focus"
         case (.countdown(let compact), .countdown(let main)): compact.id == main.id
         default: false
         }
     }
 
     /// A state rather than something going on, so it may show on its own while "Two at once" is off.
-    var isStatus: Bool { self == .micMuted }
+    var isStatus: Bool {
+        switch self {
+        case .micMuted, .focus: true
+        default: false
+        }
+    }
 }
 
 /// Everything in the closed notch: the main activity and the glyph of a second one beside it.
@@ -67,7 +75,7 @@ struct ClosedContent: Equatable {
 /// Decides what the closed notch shows. The main activity goes by priority: notices, a new
 /// track, a running timer (the focus timer or a named one, whichever ends soonest, then the
 /// stopwatch), a download, then music that's playing. The most important of the others that
-/// has a compact form shows beside it, the mute badge first.
+/// has a compact form shows beside it: the mute badge, timers, a download, the Focus, music.
 @MainActor
 final class LiveActivityCenter: ObservableObject {
     static let shared = LiveActivityCenter()
@@ -96,6 +104,7 @@ final class LiveActivityCenter: ObservableObject {
             TimerStore.shared.$countdowns.map { _ in () }.eraseToAnyPublisher(),
             TimerStore.shared.$stopwatch.map { _ in () }.eraseToAnyPublisher(),
             DownloadMonitor.shared.$downloads.map(\.isEmpty).removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            FocusMonitor.shared.$mode.map { _ in () }.eraseToAnyPublisher(),
             AppSettings.shared.objectWillChange.map { _ in () }.eraseToAnyPublisher()
         )
         // @Published fires before the value changes; read it on the next turn.
@@ -174,6 +183,7 @@ final class LiveActivityCenter: ObservableObject {
         if settings.liveMicMuted, MicMonitor.shared.isMuted { compact.append(.micMuted) }
         compact += timers.map(\.compact)
         if downloading { compact.append(.download) }
+        if settings.liveFocus, let focus = FocusMonitor.shared.mode { compact.append(.focus(focus)) }
         if musicPlaying { compact.append(.music) }
         var secondary = compact.first { !$0.isShown(by: activity) }
         // Without "Two at once", only a status like the mute badge shows, and only when nothing else does.

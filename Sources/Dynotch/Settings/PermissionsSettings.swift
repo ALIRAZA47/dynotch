@@ -44,6 +44,9 @@ final class PermissionStatus: ObservableObject {
         DownloadMonitor.shared.$access
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        FocusMonitor.shared.$access
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
     }
 
     var privacy: [Item] {
@@ -63,7 +66,20 @@ final class PermissionStatus: ObservableObject {
             Item(title: "Bluetooth", purpose: "Battery levels of AirPods, keyboards and mice", symbol: "airpodspro",
                  tint: .blue, state: devices.isAuthorized ? .granted : .notDetermined, action: devices.requestAccess),
             downloadsItem,
+            fullDiskAccessItem,
         ]
+    }
+
+    /// There's no prompt for Full Disk Access; the button opens its pane in System Settings.
+    private var fullDiskAccessItem: Item {
+        let focus = FocusMonitor.shared
+        let state: State = switch focus.access {
+        case .granted: .granted
+        case .denied: .denied
+        case .unknown: .notDetermined
+        }
+        return Item(title: "Full Disk Access", purpose: "The Focus that's on, read from macOS's Focus settings",
+                    symbol: "moon.fill", tint: .indigo, state: state, action: focus.requestAccess)
     }
 
     private var downloadsItem: Item {

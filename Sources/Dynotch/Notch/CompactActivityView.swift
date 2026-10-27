@@ -13,7 +13,22 @@ struct CompactActivityView: View {
         case .countdown(let countdown): CountdownGlyph(countdown: countdown)
         case .stopwatch: StopwatchGlyph()
         case .download: DownloadGlyph()
+        case .focus(let mode): FocusGlyph(mode: mode)
         }
+    }
+}
+
+/// The symbol of the Focus that's on, in its color.
+struct FocusGlyph: View {
+    let mode: FocusMode
+    var size: CGFloat = ClosedLayout.glyphSize
+
+    var body: some View {
+        Image(systemName: mode.symbol)
+            .font(.system(size: size * 0.78, weight: .semibold))
+            .foregroundStyle(mode.tint)
+            .frame(width: size, height: size)
+            .accessibilityLabel("\(mode.name) is on")
     }
 }
 

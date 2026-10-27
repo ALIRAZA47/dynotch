@@ -270,7 +270,7 @@ private struct VirtualNotchSketch: View {
 /// The live activities that can be turned off, and a sample of each for the preview.
 enum LiveActivityKind: String, CaseIterable, Identifiable {
     case music, trackPeek, timer, levels, charging, lowBattery, events, devices
-    case micMuted, countdowns, downloads
+    case micMuted, countdowns, downloads, focusMode
 
     var id: String { rawValue }
 
@@ -287,6 +287,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .micMuted: "Muted microphone"
         case .countdowns: "Timers"
         case .downloads: "Downloads"
+        case .focusMode: "Focus"
         }
     }
 
@@ -303,6 +304,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .micMuted: "A red badge while the mic is muted"
         case .countdowns: "Named timers and the stopwatch from the Focus tab"
         case .downloads: "Progress as a file downloads, and a notice when it's done"
+        case .focusMode: "Your Focus's symbol while one is on, and a notice when it changes"
         }
     }
 
@@ -319,6 +321,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .micMuted: "mic.slash.fill"
         case .countdowns: "hourglass"
         case .downloads: "arrow.down.circle.fill"
+        case .focusMode: "moon.fill"
         }
     }
 
@@ -335,6 +338,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .micMuted: .red
         case .countdowns: TimerStore.tint
         case .downloads: DownloadMonitor.tint
+        case .focusMode: .indigo
         }
     }
 
@@ -352,6 +356,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .micMuted: \.liveMicMuted
         case .countdowns: \.liveCountdowns
         case .downloads: \.liveDownloads
+        case .focusMode: \.liveFocus
         }
     }
 
@@ -377,6 +382,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .micMuted: .idle
         case .countdowns: .countdown(Self.sampleCountdown)
         case .downloads: .download
+        case .focusMode: .idle
         }
     }
 
@@ -386,6 +392,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
     var sampleSecondary: CompactActivity? {
         switch self {
         case .micMuted: .micMuted
+        case .focusMode: .focus(FocusMode(id: "sample", name: "Do Not Disturb", symbol: "moon.fill", tint: .indigo))
         default: nil
         }
     }
@@ -394,6 +401,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
 struct ActivitySettings: View {
     @ObservedObject var navigation: SettingsNavigation
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var focus = FocusMonitor.shared
 
     private let options = [
         SwitchOption(title: "Two at once", detail: "A second activity as a small glyph at the end of the right ear",
@@ -437,7 +445,7 @@ struct ActivitySettings: View {
                 }
             }
             SettingsSection(title: "Options",
-                            footer: "With two at once, the mute badge, a timer, a download or the music you're playing keeps a small glyph while something else takes the notch. The ring is green for a camera and orange for the mic.") {
+                            footer: "With two at once, the mute badge, a timer, a download, your Focus or the music you're playing keeps a small glyph while something else takes the notch. The ring is green for a camera and orange for the mic.") {
                 SwitchGrid(options: options)
             }
         }
@@ -445,7 +453,9 @@ struct ActivitySettings: View {
 
     private func activityTile(_ kind: LiveActivityKind) -> some View {
         let needsMusic = kind == .trackPeek && !settings.liveMusic
-        return SwitchTile(title: kind.title, detail: needsMusic ? "Needs Now playing" : kind.detail,
+        let needsDiskAccess = kind == .focusMode && settings.liveFocus && focus.access == .denied
+        let detail = needsMusic ? "Needs Now playing" : needsDiskAccess ? "Needs Full Disk Access, under Permissions" : kind.detail
+        return SwitchTile(title: kind.title, detail: detail,
                           symbol: kind.symbol, tint: kind.tint, isOn: $settings[dynamicMember: kind.setting])
             .disabled(needsMusic)
             .onHover { inside in

@@ -185,6 +185,10 @@ final class AppSettings: ObservableObject {
     @Published var downloadsToTray: Bool = AppSettings.value("downloadsToTray", false) {
         didSet { save("downloadsToTray", downloadsToTray) }
     }
+    /// The Focus that's on, by its symbol, and a notice when it changes.
+    @Published var liveFocus: Bool = AppSettings.value("liveFocus", true) {
+        didSet { save("liveFocus", liveFocus) }
+    }
 
     // MARK: Nook
 
