@@ -1116,10 +1116,18 @@ struct TraySettings: View {
                 SwitchGrid(options: options)
             }
             SettingsSection(title: "Screenshots",
-                            footer: "Dynotch watches the folder the Screenshot app saves to: \(ScreenshotWatcher.folderNames).") {
+                            footer: "Dynotch watches the folder the Screenshot app saves to: \(ScreenshotWatcher.folderNames). Its own captures are saved there too, named like macOS's. In the editor, drag out a region or click for the whole display, mark it up, then copy, save, add to the tray or pin it.") {
                 SettingsCard {
                     SwitchRow(title: "Add screenshots to the tray", detail: "New screenshots and screen recordings show up here",
                               symbol: "camera.viewfinder", tint: .orange, isOn: $settings.screenshotsToTray)
+                    CardDivider()
+                    SwitchRow(title: "Capture with ⌃⌥S", detail: "Freeze the screen, select a region and mark it up. Also in the menu bar menu.",
+                              symbol: "rectangle.dashed.badge.record", tint: .purple, isOn: $settings.captureShortcut)
+                    CardDivider()
+                    SwitchRow(title: "Shutter sound", detail: "The Screenshot app's click when a capture is taken",
+                              symbol: "speaker.wave.2.fill", tint: .teal, isOn: $settings.shutterSound)
+                    CardDivider()
+                    CaptureActionRow()
                 }
             }
             SettingsSection(title: "In the tray", footer: "Click an item and press Space to preview it, as in Finder. The arrow keys move between items.") {
@@ -1143,6 +1151,36 @@ struct TraySettings: View {
                 .background(CardBackground())
             }
         }
+    }
+}
+
+/// What Return does in the capture editor: copy, save, or both.
+private struct CaptureActionRow: View {
+    @ObservedObject private var settings = AppSettings.shared
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SymbolBadge(symbol: "return", tint: Palette.accent, size: 26)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("After capture")
+                    .font(.system(size: 13, weight: .medium))
+                Text("What Return does once a region is selected")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 12)
+            HStack(spacing: 6) {
+                ForEach(CaptureAction.allCases) { action in
+                    ChoiceChip(title: action.title, symbol: action.symbol, isSelected: settings.captureAction == action) {
+                        settings.captureAction = action
+                    }
+                    .fixedSize()
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
     }
 }
 
@@ -1254,6 +1292,9 @@ struct AboutSettings: View {
                     CardDivider()
                     ShortcutRow(keys: ["⌃", "⌥", "M"], spokenKeys: "Control Option M", action: settings.micShortcut
                         ? "Mute or unmute the microphone" : "Mute or unmute the microphone (turned off in Live Activities)")
+                    CardDivider()
+                    ShortcutRow(keys: ["⌃", "⌥", "S"], spokenKeys: "Control Option S", action: settings.captureShortcut
+                        ? "Capture part of the screen" : "Capture part of the screen (turned off in Tray)")
                     CardDivider()
                     ShortcutRow(keys: ["⌘", "1 – 8"], spokenKeys: "Command 1 to 8", action: "Jump to a page of these settings")
                     CardDivider()

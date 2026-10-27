@@ -59,9 +59,10 @@ final class QuickToggles: ObservableObject {
         }
     }
 
+    /// Dynotch's own capture, with the notch out of the way first.
     func takeScreenshot() {
-        NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: "/System/Applications/Utilities/Screenshot.app"),
-                                           configuration: NSWorkspace.OpenConfiguration())
+        NotchManager.shared.close()
+        CaptureController.shared.begin()
     }
 
     func sleepDisplay() {

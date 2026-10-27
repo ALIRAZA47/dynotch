@@ -21,6 +21,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
     private var hotKey: HotKey?
     private var muteHotKey: HotKey?
+    private var captureHotKey: HotKey?
     private let profilesMenu = NSMenu(title: "Profiles")
     private var cancellables = Set<AnyCancellable>()
 
@@ -87,10 +88,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     : nil
             }
             .store(in: &cancellables)
+        settings.$captureShortcut
+            .sink { [weak self] enabled in
+                self?.captureHotKey?.unregister()
+                self?.captureHotKey = enabled
+                    ? HotKey(keyCode: kVK_ANSI_S, modifiers: controlKey | optionKey) { CaptureController.shared.begin() }
+                    : nil
+            }
+            .store(in: &cancellables)
 
         if !settings.hasLaunchedBefore {
             settings.hasLaunchedBefore = true
             WelcomeWindowController.shared.show()
+        }
+
+        // `--capture-test` opens the capture editor over a made-up picture of each display, so the
+        // tools can be tried without Screen Recording access. `--capture-self-test <folder>` drives
+        // them with synthesized events, writes what it made there, and quits.
+        if arguments.contains("--capture-test") {
+            CaptureController.shared.beginTest()
+        } else if let index = arguments.firstIndex(of: "--capture-self-test") {
+            let folder = arguments.count > index + 1 ? arguments[index + 1] : FileManager.default.temporaryDirectory.path
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { exit(CaptureSelfTest.run(into: URL(fileURLWithPath: folder)) ? 0 : 1) }
+            }
         }
     }
 
@@ -126,6 +147,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(item("Open Tray", #selector(openTray)))
         menu.addItem(item("Start Focus Timer", #selector(startTimer)))
         menu.addItem(item("Mute Microphone", #selector(toggleMicMute), key: "m", modifiers: [.control, .option]))
+        menu.addItem(item("Capture Screen", #selector(captureScreen), key: "s", modifiers: [.control, .option]))
         let profiles = NSMenuItem(title: "Profiles", action: nil, keyEquivalent: "")
         profilesMenu.delegate = self
         profiles.submenu = profilesMenu
@@ -165,6 +187,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleMicMute() {
         MicMonitor.shared.toggleMute()
+    }
+
+    /// The menu closes before the screen is frozen, so it isn't in the capture.
+    @objc private func captureScreen() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            MainActor.assumeIsolated { CaptureController.shared.begin() }
+        }
     }
 
     @objc private func chooseProfile(_ sender: NSMenuItem) {
@@ -229,9 +258,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 }
 
 extension AppDelegate: NSMenuItemValidation {
-    /// Ticks Mute Microphone while the mic is muted, and shows ⌃⌥M only while that shortcut is on.
+    /// Ticks Mute Microphone while the mic is muted, and shows ⌃⌥M and ⌃⌥S only while those shortcuts are on.
     /// Check for Updates names the new version once a check has found one.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        if menuItem.action == #selector(captureScreen) {
+            menuItem.keyEquivalent = AppSettings.shared.captureShortcut ? "s" : ""
+            return !CaptureController.shared.isActive
+        }
         if menuItem.action == #selector(checkForUpdates) {
             if case .available(let release) = UpdateChecker.shared.status {
                 menuItem.title = "Update to Dynotch \(release.version)…"

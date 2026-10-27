@@ -11,6 +11,7 @@ import SwiftUI
 ///     dynotch://tray/add?path=/a/file&path=/another/file&show=1
 ///     dynotch://profile?name=Work      switches to a saved profile
 ///     dynotch://focus/report           saves a Focus report to ~/Library/Logs/Dynotch
+///     dynotch://capture                freezes the screen to capture a region, like ⌃⌥S
 @MainActor
 enum URLCommands {
     static func handle(_ url: URL) {
@@ -42,6 +43,8 @@ enum URLCommands {
             ProfileStore.shared.switchTo(named: value("name") ?? "")
         case "focus" where path.dropFirst().first == "report":
             FocusMonitor.shared.writeReport()
+        case "capture":
+            CaptureController.shared.begin()
         default:
             NSLog("Dynotch: ignoring %@", url.absoluteString)
         }

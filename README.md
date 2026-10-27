@@ -6,7 +6,7 @@ Hover the notch (or swipe down on the trackpad) and it opens into a panel with
 your music, files, calendar, a focus timer and more. When it's closed, live activities
 show up beside the camera.
 
-It's a native SwiftUI + AppKit app, about 17,700 lines of Swift, with no third-party
+It's a native SwiftUI + AppKit app, about 20,500 lines of Swift, with no third-party
 dependencies.
 
 ## Features
@@ -23,9 +23,10 @@ dependencies.
 | **Nook tab** | Media player for Apple Music and Spotify: artwork, scrubber, play/pause, next/previous, shuffle, repeat, favorite. Its accent color comes from the album art. Two configurable widgets beside it: Calendar, Mirror, Shortcuts, Focus timer, Batteries, Quick toggles, Notes or Weather. |
 | **Weather** | Current conditions and today's high and low from [Open-Meteo](https://open-meteo.com) (no account or key), for a city you search for in Settings or, if you allow it, where your Mac is. Temperatures follow the system's unit unless you pick Celsius or Fahrenheit. When rain is about to start, a heads-up appears in the closed notch, from Open-Meteo's 15-minute forecast where there is one. |
 | **Tray tab** | Drag files toward the notch and it opens with drop zones: **Keep in Tray**, **AirDrop**, **Compress** and **Copy to…**. Tray items have Quick Look thumbnails, drag back out to any app, and survive relaunches. Click one and press Space to preview it in Quick Look, as in Finder; the arrow keys move between items. The right-click menu offers Quick Look, Open, Open With, Show in Finder, Copy, AirDrop, Share, Compress, Extract, Convert Image (PNG/JPEG/HEIC), Make Smaller, Copy to…, Move to… and Remove. Dropped images, links and text become files. New screenshots and screen recordings land in the Tray as macOS saves them, from whichever folder the Screenshot app uses. |
+| **Capture** | ⌃⌥S, **Capture Screen** in the menu bar menu, the Stats tab's Capture toggle or `dynotch capture` freezes every display under a dimmed overlay, like Flameshot. Drag out a region, or click for the whole display; drag inside it to move it, or its eight handles to resize it, with its size shown beside it. A toolbar appears under the selection: Pencil, Line, Arrow, Rectangle, Ellipse, Marker (a wide highlighter stroke), Text (click to place, type in place, Return commits), Blur (pixelates what's under it) and Counter (numbered badges), picked by P, L, A, R, C, M, T, B and N, or S to go back to moving the selection; eight colors and a width from 1 to 16 points, which the text's size follows; ⌘Z and ⇧⌘Z undo and redo. Then **Copy** (⌘C) puts a PNG on the clipboard, **Save** (⌘S) writes a PNG into the folder the Screenshot app saves to, named as macOS names its own, so it lands in the Tray too, **Add to Tray** does that and opens the Tray, and **Pin** floats the capture above every window until Esc, ⌘W or its close glyph. Return does what **Settings → Tray** says: copy, save, or both. Esc cancels. The result is drawn at the display's scale, pixel for pixel what was on screen. Needs Screen Recording, asked for the first time. |
 | **Focus tab** | Pomodoro timer (focus, short and long breaks, sound, auto-start), Reminders (check off, add new) and Notes: several notes with Markdown checklists (click a box to tick it; Return continues the list), saved as `.md` files named after their first line. Pick a folder in iCloud Drive in Settings and they sync to your other Macs; changes made on disk show up right away. |
 | **Timers** | Beside the Pomodoro, type "tea 4m", "eggs 90s", "nap 1h30" or "laundry 45" (a number on its own is minutes) to start a named timer; pause, resume or cancel it, and run a stopwatch. The closed notch shows the timer that ends soonest, the Pomodoro included, with the next one as a glyph beside it. At zero, a notice and a sound. |
-| **Stats tab** | CPU (with a sparkline), memory, disk and network; battery levels for the Mac, AirPods (each bud and the case), keyboards, mice and more, with paired devices that aren't connected listed underneath (headphones first) and a Connect button for each; right-click a connected device to disconnect it; quick toggles for Dark Mode, Keep Awake, Mute, Color Picker (copies the hex code), Screenshot and Sleep Display. |
+| **Stats tab** | CPU (with a sparkline), memory, disk and network; battery levels for the Mac, AirPods (each bud and the case), keyboards, mice and more, with paired devices that aren't connected listed underneath (headphones first) and a Connect button for each; right-click a connected device to disconnect it; quick toggles for Dark Mode, Keep Awake, Mute, Color Picker (copies the hex code), Capture (Dynotch's own, above) and Sleep Display. |
 | **Audio and keys** | **Live equalizer** (opt-in, macOS 14.2 or later) makes the equalizer bars follow the music: a Core Audio process tap listens to Music or Spotify, only while it plays and some bars are on screen, and splits the sound into four bands. **Replace system HUD** (opt-in) takes over the volume, mute and brightness keys so only Dynotch's meter shows, in steps of a sixteenth (a sixty-fourth with ⇧⌥), even at either end of the range. Keys Dynotch can't handle, like an output without a volume control or an external display, go to macOS as usual. Swipe two fingers sideways over the closed notch, or over the open notch's header, to skip tracks (left for next, right for previous); over the rest of the open notch the same swipe moves between tabs. Scroll over the artwork in the Nook to change the volume. The output button beside the player lists the Mac's outputs (speakers, headphones, displays, Bluetooth) and switches the default output; AirPlay speakers and TVs come from AVKit's AirPlay picker in the same list. |
 | **Calendar** | A five-day strip; "in 12m" and "Now" labels; a Join button for Zoom, Meet, Teams, Webex and FaceTime links. |
 | **Profiles** | Saved setups such as Work, Home and Presenting. A profile keeps what the notch shows and how it opens: tabs, widgets, live activities (and which apps' notifications peek), size, theme and displays. Switch from the menu bar's **Profiles** menu, **Settings → General → Profiles**, or `dynotch profile Work`. The profile that's on keeps the changes you make. A profile can switch on by itself when a Focus turns on (a particular one, or any) or when an external display connects; when that Focus ends or the display goes, the notch goes back to how it was, unless you switched profiles by hand in between. Focus rules need Full Disk Access, like the Focus activity. |
@@ -113,6 +114,9 @@ For development, `swift build` and `.build/debug/Dynotch` also work.
 `Dynotch --snapshot <folder>` renders every notch state with sample data to PNGs,
 which is handy for reviewing UI changes. `Dynotch --energy-probe` counts how often the polls
 would run and wake the Mac in an hour, in each of the conditions under [Energy](#energy).
+`Dynotch --capture-test` opens the capture editor over a made-up picture of each display, so
+its tools can be tried without Screen Recording access, and `Dynotch --capture-self-test <folder>`
+drives them with synthesized events off screen, prints a line per check and leaves the result there.
 
 ## Scripting
 
@@ -132,10 +136,12 @@ ln -s /Applications/Dynotch.app/Contents/Resources/dynotch /usr/local/bin/dynotc
 | `dynotch timer start` | Controls the focus timer: `start`, `pause`, `toggle`, `reset` or `skip`. |
 | `dynotch tray --show report.pdf` | Adds files to the Tray, and opens it with `--show`. |
 | `dynotch profile Work` | Switches to a saved profile by name. The notch says which, or that there's no such profile. |
+| `dynotch capture` | Freezes the screen to capture a region, like ⌃⌥S. |
 | `dynotch focus-report` | Saves what the Focus settings hold, and which Focus Dynotch makes of them, to `~/Library/Logs/Dynotch/focus-report.json`, then prints that path. Names and places are left out. For when the notch shows the wrong Focus; it needs Full Disk Access, like the Focus activity. |
 
 Other apps can open the same links, for example
-`dynotch://notify?text=Hello&tint=orange`, `dynotch://timer/start` or `dynotch://profile?name=Work`.
+`dynotch://notify?text=Hello&tint=orange`, `dynotch://timer/start`, `dynotch://profile?name=Work` or
+`dynotch://capture`.
 
 **When a long command finishes.** Source `notify-long-commands.zsh` (it sits next to
 `dynotch` in the app) from `~/.zshrc`. Any command that runs for 30 seconds or more
@@ -232,6 +238,7 @@ Each permission is requested the first time you use the feature that needs it.
 | Accessibility | Replace system HUD: handling the volume and brightness keys. Asked for when you turn it on |
 | System audio recording | Live equalizer: hearing what Music or Spotify plays. Nothing is recorded. Asked for when you turn it on |
 | Bluetooth | Battery levels of connected devices, and connecting or disconnecting paired ones |
+| Screen Recording | Capture: freezing the screen to select a region. Asked for the first time you capture; after a refusal, **Settings → Permissions** opens its pane in System Settings |
 | Downloads folder | Download progress in the closed notch, and finished downloads in the Tray |
 | Full Disk Access | Notification peeks, and which Focus is on. There's no prompt for this one; **Settings → Permissions** opens its pane in System Settings. |
 | Location (optional) | Weather where your Mac is, if you turn on Use My Location instead of picking a city |
@@ -274,6 +281,7 @@ Sources/Dynotch/
   Media/      Now Playing service (distributed notifications + AppleScript), player UI
   Calendar/   EventKit service, calendar and reminders widgets
   Tray/       tray store, file actions, tray UI and drop zones, screenshot watcher, Quick Look
+  Capture/    the screenshot tool: freezing the displays, the overlay and editor, Core Graphics rendering, pinned captures
   Widgets/    mirror, focus timer, notes, system stats, batteries, quick toggles, shortcuts, weather
   HUD/        volume (CoreAudio) and brightness monitors, media-key tap
   Notifications/  notification peeks: Notification Center reader, settings
@@ -281,7 +289,7 @@ Sources/Dynotch/
   Profiles/   saved setups and the rules that switch them
   Settings/   settings window and permissions page
   Welcome/    the first-run welcome tour
-  Debug/      snapshot renderer, energy probe
+  Debug/      snapshot renderer, energy probe, capture self-test
 Support/      Info.plist, app icon
 scripts/      build script, icon generator
 ```

@@ -56,6 +56,9 @@ final class PermissionStatus: ObservableObject {
         Publishers.Merge(ScreenshotWatcher.shared.objectWillChange, WeatherService.shared.objectWillChange)
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        CaptureController.shared.objectWillChange
+            .sink { [weak self] in self?.objectWillChange.send() }
+            .store(in: &cancellables)
     }
 
     var privacy: [Item] {
@@ -80,10 +83,19 @@ final class PermissionStatus: ObservableObject {
                  symbol: "waveform", tint: .pink, state: audioCaptureState, action: AudioLevels.shared.requestPermission),
             Item(title: "Bluetooth", purpose: "Battery levels of AirPods, keyboards and mice, and connecting them", symbol: "airpodspro",
                  tint: .blue, state: devices.isAuthorized ? .granted : .notDetermined, action: devices.requestAccess),
+            screenRecordingItem,
             downloadsItem,
             fullDiskAccessItem,
         ] + (AppSettings.shared.screenshotsToTray ? [screenshotsItem] : [])
             + (AppSettings.shared.weatherUsesLocation ? [locationItem] : [])
+    }
+
+    /// macOS asks once, when the first capture is taken; after a refusal the button opens System Settings.
+    private var screenRecordingItem: Item {
+        let capture = CaptureController.shared
+        let state: State = capture.hasAccess ? .granted : capture.hasAsked ? .denied : .notDetermined
+        return Item(title: "Screen Recording", purpose: "Capturing part of the screen with ⌃⌥S", symbol: "rectangle.dashed.badge.record",
+                    tint: .purple, state: state, action: capture.requestAccess)
     }
 
     /// Only asked for when the Weather widget is set to use where the Mac is.

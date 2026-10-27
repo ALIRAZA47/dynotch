@@ -113,6 +113,29 @@ enum TemperatureUnits: String, CaseIterable, Identifiable {
     }
 }
 
+/// What Return does in the capture editor once a region is selected.
+enum CaptureAction: String, CaseIterable, Identifiable {
+    case copy, save, copyAndSave
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .copy: "Copy"
+        case .save: "Save"
+        case .copyAndSave: "Copy and save"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .copy: "doc.on.clipboard"
+        case .save: "square.and.arrow.down"
+        case .copyAndSave: "doc.on.doc"
+        }
+    }
+}
+
 enum PlayerChoice: String, CaseIterable, Identifiable {
     case music, spotify
 
@@ -332,6 +355,21 @@ final class AppSettings: ObservableObject {
     }
     @Published var screenshotsToTray: Bool = AppSettings.value("screenshotsToTray", true) {
         didSet { save("screenshotsToTray", screenshotsToTray) }
+    }
+
+    // MARK: Capture
+
+    /// ⌃⌥S freezes the screen to capture a region.
+    @Published var captureShortcut: Bool = AppSettings.value("captureShortcut", true) {
+        didSet { save("captureShortcut", captureShortcut) }
+    }
+    /// What Return does in the capture editor.
+    @Published var captureAction: CaptureAction = AppSettings.value("captureAction", CaptureAction.copy) {
+        didSet { save("captureAction", captureAction.rawValue) }
+    }
+    /// The Screenshot app's click when a capture is taken.
+    @Published var shutterSound: Bool = AppSettings.value("shutterSound", true) {
+        didSet { save("shutterSound", shutterSound) }
     }
 
     // MARK: Focus timer

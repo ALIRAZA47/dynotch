@@ -8,13 +8,14 @@
 #   dynotch tray [--show] FILE...
 #   dynotch profile NAME
 #   dynotch focus-report
+#   dynotch capture
 #
 # COLOR is red, orange, yellow, green, mint, teal, cyan, blue, indigo, purple,
 # pink, white or gray, or a hex value such as #FF6B5C.
 set -euo pipefail
 
 usage() {
-    sed -n '4,13p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '4,14p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -68,6 +69,8 @@ case "$command" in
     profile)
         [ $# -eq 1 ] && [ -n "$1" ] || usage 1
         send "profile?name=$(encode "$1")" ;;
+    capture)
+        send "capture" ;;
     focus-report)
         # Dynotch writes it, since reading the Focus settings takes its Full Disk Access.
         report="$HOME/Library/Logs/Dynotch/focus-report.json"

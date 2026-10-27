@@ -10,6 +10,8 @@ final class NotchManager {
     private var monitors: [Any] = []
     /// The drag pasteboard's change count at the last click; a new drag bumps it.
     private var dragChangeCount = NSPasteboard(name: .drag).changeCount
+    /// Set while the capture overlay covers the screen, so the notch neither grows nor opens under it.
+    var isPointerSuspended = false
     private var cancellables = Set<AnyCancellable>()
 
     private init() {}
@@ -140,6 +142,7 @@ final class NotchManager {
     }
 
     private func route(_ event: NSEvent) {
+        guard !isPointerSuspended else { return }
         EnergyCoordinator.shared.sawInput()
         let point = NSEvent.mouseLocation
         switch event.type {
