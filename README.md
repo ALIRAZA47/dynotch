@@ -19,7 +19,7 @@ dependencies.
 | **Tray tab** | Drag files toward the notch and it opens with drop zones: **Keep in Tray**, **AirDrop**, **Compress** and **Copy to…**. Tray items have Quick Look thumbnails, drag back out to any app, and survive relaunches. The right-click menu offers Open, Open With, Show in Finder, Copy, AirDrop, Share, Compress, Extract, Convert Image (PNG/JPEG/HEIC), Make Smaller, Copy to…, Move to… and Remove. Dropped images, links and text become files. |
 | **Focus tab** | Pomodoro timer (focus, short and long breaks, sound, auto-start), Reminders (check off, add new) and a Notes scratchpad. |
 | **Stats tab** | CPU (with a sparkline), memory, disk and network; battery levels for the Mac, AirPods (each bud and the case), keyboards, mice and more; quick toggles for Dark Mode, Keep Awake, Mute, Color Picker (copies the hex code), Screenshot and Sleep Display. |
-| **Audio and keys** | **Replace system HUD** (opt-in) takes over the volume, mute and brightness keys so only Dynotch's meter shows, in steps of a sixteenth (a sixty-fourth with ⇧⌥), even at either end of the range. Keys Dynotch can't handle, like an output without a volume control or an external display, go to macOS as usual. Swipe two fingers sideways over the notch to skip tracks (left for next, right for previous), and scroll over the artwork in the Nook to change the volume. The output button beside the player lists the Mac's outputs (speakers, headphones, displays, Bluetooth) and switches the default output; AirPlay speakers and TVs come from AVKit's AirPlay picker in the same list. |
+| **Audio and keys** | **Live equalizer** (opt-in, macOS 14.2 or later) makes the equalizer bars follow the music: a Core Audio process tap listens to Music or Spotify, only while it plays and some bars are on screen, and splits the sound into four bands. **Replace system HUD** (opt-in) takes over the volume, mute and brightness keys so only Dynotch's meter shows, in steps of a sixteenth (a sixty-fourth with ⇧⌥), even at either end of the range. Keys Dynotch can't handle, like an output without a volume control or an external display, go to macOS as usual. Swipe two fingers sideways over the notch to skip tracks (left for next, right for previous), and scroll over the artwork in the Nook to change the volume. The output button beside the player lists the Mac's outputs (speakers, headphones, displays, Bluetooth) and switches the default output; AirPlay speakers and TVs come from AVKit's AirPlay picker in the same list. |
 | **Calendar** | A five-day strip; "in 12m" and "Now" labels; a Join button for Zoom, Meet, Teams, Webex and FaceTime links. |
 | **App** | Menu bar icon, Settings window (General, Appearance, Live Activities, Nook & Widgets, Tray, Focus Timer, Permissions, About), launch at login. Runs as an agent app with no Dock icon. |
 
@@ -94,6 +94,7 @@ Each permission is requested the first time you use the feature that needs it.
 | Calendar, Reminders | The Calendar and Reminders widgets |
 | Camera | The Mirror widget (it's only on while you're looking at it) |
 | Accessibility | Replace system HUD: handling the volume and brightness keys. Asked for when you turn it on |
+| System audio recording | Live equalizer: hearing what Music or Spotify plays. Nothing is recorded. Asked for when you turn it on |
 | Bluetooth | Battery levels of connected devices |
 
 Grants survive rebuilds as long as the app is signed with the local identity (see
@@ -107,8 +108,10 @@ above). An ad hoc build may lose them.
   by loading code into an Apple-signed binary. Dynotch doesn't do that.
 - The volume and brightness HUD appears alongside the system one unless **Replace system HUD**
   is on (Settings → Live Activities), which needs Accessibility access.
-- The equalizer bars are decorative. Real audio levels would need screen-recording
-  permission.
+- The equalizer bars are decorative unless **Live equalizer** is on (Settings → Live
+  Activities). That needs macOS 14.2 or later and the System Audio Recording permission, and
+  follows Music and Spotify only. macOS has no public API to check that permission, so Dynotch
+  asks the private TCC framework, as other audio tools do.
 - The brightness HUD reads the built-in display's brightness through the private
   DisplayServices framework. If that's unavailable it stays quiet.
 - Not included from MacNotch: AI translation, setup profiles, and Night Shift / True Tone

@@ -40,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         BrightnessMonitor.shared.start()
         MediaKeyTap.shared.start()
         AudioOutputs.shared.start()
+        AudioLevels.shared.start()
         DeviceBatteryMonitor.shared.start()
         LiveActivityCenter.shared.start()
         NotchManager.shared.start()

@@ -133,6 +133,9 @@ final class AppSettings: ObservableObject {
     @Published var replaceSystemHUD: Bool = AppSettings.value("replaceSystemHUD", false) {
         didSet { save("replaceSystemHUD", replaceSystemHUD) }
     }
+    @Published var liveEqualizer: Bool = AppSettings.value("liveEqualizer", false) {
+        didSet { save("liveEqualizer", liveEqualizer) }
+    }
 
     // MARK: Live activities
 

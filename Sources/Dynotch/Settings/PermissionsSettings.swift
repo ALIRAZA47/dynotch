@@ -41,7 +41,7 @@ final class PermissionStatus: ObservableObject {
                           DeviceBatteryMonitor.shared.objectWillChange)
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
-        MediaKeyTap.shared.objectWillChange
+        Publishers.Merge(MediaKeyTap.shared.objectWillChange, AudioLevels.shared.$permission.map { _ in () })
             .sink { [weak self] in self?.objectWillChange.send() }
             .store(in: &cancellables)
     }
@@ -64,6 +64,8 @@ final class PermissionStatus: ObservableObject {
             Item(title: "Accessibility", purpose: "The volume and brightness keys, with the system HUD replaced",
                  symbol: "accessibility", tint: .indigo, state: MediaKeyTap.shared.hasAccess ? .granted : .notDetermined,
                  action: MediaKeyTap.shared.requestAccess),
+            Item(title: "System audio recording", purpose: "The live equalizer, which listens to Music and Spotify",
+                 symbol: "waveform", tint: .pink, state: audioCaptureState, action: AudioLevels.shared.requestPermission),
             Item(title: "Bluetooth", purpose: "Battery levels of AirPods, keyboards and mice", symbol: "airpodspro",
                  tint: .blue, state: devices.isAuthorized ? .granted : .notDetermined, action: devices.requestAccess),
         ]
@@ -94,6 +96,16 @@ final class PermissionStatus: ObservableObject {
 
     private func state(_ granted: Bool, undetermined: Bool) -> State {
         granted ? .granted : undetermined ? .notDetermined : .denied
+    }
+
+    private var audioCaptureState: State {
+        guard AudioLevels.isSupported else { return .unavailable("Needs macOS 14.2") }
+        switch AudioLevels.shared.permission {
+        case .granted: return .granted
+        case .denied: return .denied
+        case .notDetermined: return .notDetermined
+        case .unknown: return .unavailable("Asked for when the equalizer starts")
+        }
     }
 
     private func automationState(_ status: Automation.Status) -> State {

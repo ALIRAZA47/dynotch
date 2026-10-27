@@ -46,6 +46,10 @@ enum SnapshotRenderer {
             Scene(name: "31-open-nook-outputs", phase: .open, tab: .home, setUp: { loadOutputs(pickerShown: true) }),
             Scene(name: "32-open-nook-empty-outputs", phase: .open, tab: .home, hasTrack: false,
                   setUp: { loadOutputs(pickerShown: true) }),
+            Scene(name: "33-closed-music-live-levels", phase: .closed, activity: .music,
+                  setUp: { AudioLevels.shared.loadSample([0.95, 0.45, 0.7, 0.25]) }),
+            Scene(name: "34-open-nook-live-levels", phase: .open, tab: .home,
+                  setUp: { AudioLevels.shared.loadSample([0.3, 0.9, 0.55, 0.8]) }),
         ]
 
         let settings = AppSettings.shared
@@ -160,6 +164,7 @@ enum SnapshotRenderer {
     private static func resetAudioSamples() {
         VolumeMonitor.shared.loadSample(volume: 0.62, changing: false)
         loadOutputs(pickerShown: false)
+        AudioLevels.shared.loadSample(nil)
     }
 
     private static func loadOutputs(pickerShown: Bool) {
