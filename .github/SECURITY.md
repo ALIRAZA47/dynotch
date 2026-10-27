@@ -10,9 +10,14 @@ before reporting.
 
 **Please don't open a public issue for a security problem.**
 
-Report it privately through GitHub: go to the repository's **Security** tab and choose
-**Report a vulnerability** (GitHub's private vulnerability reporting). That opens a
-private advisory only you and the maintainer can see.
+Report it privately to the maintainer, whichever way fits:
+
+- If the repository's **Security** tab shows **Report a vulnerability**, use that — it
+  opens a private advisory only you and the maintainer can see. (This is GitHub's private
+  vulnerability reporting, which the maintainer turns on once the repository is public or
+  on a plan that offers it.)
+- Otherwise, email the maintainer privately. You'll find the address in the commit history
+  (`git log`) or on the maintainer's GitHub profile.
 
 Please include:
 
