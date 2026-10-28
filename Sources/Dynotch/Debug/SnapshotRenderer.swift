@@ -12,7 +12,8 @@ enum SnapshotRenderer {
 
     // MARK: Scratch defaults
 
-    private static let scratchDomain = "app.dynotch.snapshot"
+    /// One a run, so two runs side by side don't trade settings.
+    private static let scratchDomain = "app.dynotch.snapshot.\(ProcessInfo.processInfo.processIdentifier)"
 
     /// Points every setting at a scratch domain holding sample values. Called before anything
     /// reads a setting; `discardScratchDefaults` clears it again when the run is done.
@@ -30,6 +31,10 @@ enum SnapshotRenderer {
 
     static func discardScratchDefaults() {
         UserDefaults.dynotch.removePersistentDomain(forName: scratchDomain)
+        // An emptied domain still leaves its file behind, and every run has its own.
+        UserDefaults.dynotch.synchronize()
+        try? FileManager.default.removeItem(at: FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Preferences/\(scratchDomain).plist"))
     }
 
     private struct Scene {
@@ -62,7 +67,15 @@ enum SnapshotRenderer {
         var prepare: (@MainActor () -> Void)?
     }
 
-    static func render(into folder: URL) {
+    /// The images whose names start with one of these, or all of them when it's empty.
+    private static var only: [String] = []
+
+    private static func wanted(_ name: String) -> Bool {
+        only.isEmpty || only.contains { name.hasPrefix($0) }
+    }
+
+    static func render(into folder: URL, only prefixes: [String] = []) {
+        only = prefixes
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         PowerMonitor.shared.start()
         loadSamples(in: folder)
@@ -239,7 +252,8 @@ enum SnapshotRenderer {
         let settings = AppSettings.shared
         let savedTheme = settings.theme
         let savedSize = (settings.openWidth, settings.openHeight)
-        for scene in scenes {
+        var written = 0
+        for scene in scenes where wanted(scene.name) {
             apply(scene.theme ?? savedTheme)
             (settings.openWidth, settings.openHeight) = scene.openSize.map { ($0.width, $0.height) } ?? savedSize
             let size = CGSize(width: settings.openWidth + NotchTheme.standard.topRadius * 2 + 80, height: settings.openHeight + 40)
@@ -269,11 +283,11 @@ enum SnapshotRenderer {
             renderer.scale = 2
             guard let image = renderer.cgImage,
                   let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else { continue }
-            try? png.write(to: folder.appendingPathComponent(scene.name + ".png"))
+            if (try? png.write(to: folder.appendingPathComponent(scene.name + ".png"))) != nil { written += 1 }
         }
         apply(savedTheme)
         (settings.openWidth, settings.openHeight) = savedSize
-        print("Wrote \(scenes.count) snapshots to \(folder.path)")
+        print("Wrote \(written) snapshots to \(folder.path)")
         loadSampleProfiles()
         renderSettings(into: folder)
         renderThemes(into: folder)
@@ -287,7 +301,9 @@ enum SnapshotRenderer {
     /// The capture editor over a made-up display: a bare selection, the toolbar with marks of every
     /// kind, a text mark being typed, and a pinned capture.
     private static func renderCapture(into folder: URL) {
-        guard let display = CaptureController.syntheticDisplay(id: 1, frame: CGRect(x: 0, y: 0, width: 1280, height: 800), scale: 2)
+        // One editor makes all four, each from the one before.
+        guard wanted("capture") || only.contains(where: { $0.hasPrefix("capture") }),
+              let display = CaptureController.syntheticDisplay(id: 1, frame: CGRect(x: 0, y: 0, width: 1280, height: 800), scale: 2)
         else { return }
         var count = 0
         let editor = CaptureEditor(displays: [display], accent: AppSettings.shared.theme.accent)
@@ -370,6 +386,8 @@ enum SnapshotRenderer {
         var count = 0
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             for step in WelcomeTour.Step.allCases {
+                let name = "welcome-\(step.rawValue + 1)-\(step)-\(suffix)"
+                guard wanted(name) else { continue }
                 let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: WelcomeWindowController.contentSize),
                                              styleMask: WelcomeWindowController.styleMask, backing: .buffered, defer: false)
                 let tour = WelcomeTour()
@@ -379,7 +397,6 @@ enum SnapshotRenderer {
                 window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(count) * 1_000, y: -50_000))
                 window.orderFrontRegardless()
                 RunLoop.main.run(until: .now + 1.2)
-                let name = "welcome-\(step.rawValue + 1)-\(step)-\(suffix)"
                 if save(window, to: folder.appendingPathComponent(name + ".png")) { count += 1 }
                 if let scrollView = window.contentView.flatMap(overflowingScrollView), let document = scrollView.documentView,
                    document.isFlipped {
@@ -419,6 +436,8 @@ enum SnapshotRenderer {
     private static func renderProfiles(into folder: URL) {
         var count = 0
         for (index, appearance) in [NSAppearance.Name.darkAqua, .aqua].enumerated() {
+            let name = appearance == .aqua ? "settings-profiles-empty-light" : "settings-profiles-dark"
+            guard wanted(name) else { continue }
             if appearance == .aqua { ProfileStore.shared.loadSample([], active: nil) }
             ProfileStore.shared.revealRequested = true
             let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
@@ -430,7 +449,6 @@ enum SnapshotRenderer {
             window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -40_000))
             window.orderFrontRegardless()
             RunLoop.main.run(until: .now + 1.5)
-            let name = appearance == .aqua ? "settings-profiles-empty-light" : "settings-profiles-dark"
             if save(window, to: folder.appendingPathComponent(name + ".png")) { count += 1 }
             window.orderOut(nil)
             window.close()
@@ -448,6 +466,8 @@ enum SnapshotRenderer {
         var count = 0
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             for page in SettingsPage.allCases {
+                let name = String(format: "settings-%d-%@-%@", page.number, page.rawValue, suffix)
+                guard wanted(name) else { continue }
                 let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
                                              styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
                 let navigation = SettingsNavigation()
@@ -459,7 +479,6 @@ enum SnapshotRenderer {
                 window.orderFrontRegardless()
                 // Let tasks finish and animations settle.
                 RunLoop.main.run(until: .now + 1.2)
-                let name = String(format: "settings-%d-%@-%@", page.number, page.rawValue, suffix)
                 if save(window, to: folder.appendingPathComponent(name + ".png")) { count += 1 }
                 if let scrollView = window.contentView.flatMap(overflowingScrollView), let document = scrollView.documentView {
                     let viewport = scrollView.contentView.bounds.height
@@ -490,7 +509,7 @@ enum SnapshotRenderer {
     /// The Live Activities page with its preview held on each activity, as when pointing at its tile.
     private static func renderSpotlights(into folder: URL) {
         var count = 0
-        for (index, kind) in LiveActivityKind.allCases.enumerated() {
+        for (index, kind) in LiveActivityKind.allCases.enumerated() where wanted("stage-\(kind.rawValue)") {
             let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
                                          styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
             let navigation = SettingsNavigation()
@@ -517,7 +536,7 @@ enum SnapshotRenderer {
             ("graphite-dark", .darkAqua, NotchTheme(accent: .graphite, topRadius: 20, bottomRadius: 24)),
         ]
         var count = 0
-        for (index, look) in looks.enumerated() {
+        for (index, look) in looks.enumerated() where wanted("settings-2-appearance-\(look.name)") {
             apply(look.theme)
             let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
                                          styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
