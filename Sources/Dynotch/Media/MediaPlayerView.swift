@@ -64,7 +64,8 @@ struct MediaPlayerView: View {
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .help(track.title)
-                if let favorite = media.isFavorite {
+                if media.canFavorite {
+                    let favorite = media.isFavorite ?? false
                     Button(action: media.toggleFavorite) {
                         Image(systemName: favorite ? "star.fill" : "star")
                             .font(.system(size: 12, weight: .semibold))

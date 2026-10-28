@@ -52,8 +52,11 @@ final class NowPlayingService: ObservableObject {
     @Published private(set) var accent: NSColor = .white
     @Published private(set) var shuffle = false
     @Published private(set) var repeatMode: RepeatMode = .off
-    /// nil when the player can't favorite tracks over AppleScript (Spotify).
+    /// nil when Music didn't say, and always for Spotify, which can't favorite tracks over AppleScript.
     @Published private(set) var isFavorite: Bool?
+
+    /// Music favorites tracks over AppleScript; Spotify's `starred` can only be read, and always reads false.
+    var canFavorite: Bool { player == .music }
 
     private var position: TimeInterval = 0
     private var positionDate = Date()
@@ -148,10 +151,12 @@ final class NowPlayingService: ObservableObject {
         }
     }
 
+    /// A track whose state Music didn't give is taken as not a favorite yet, so the first click favorites it.
     func toggleFavorite() {
-        guard player == .music, let isFavorite else { return }
-        self.isFavorite = !isFavorite
-        send(Self.musicFavoriteScript(!isFavorite))
+        guard canFavorite else { return }
+        let favorite = !(isFavorite ?? false)
+        isFavorite = favorite
+        send(Self.musicFavoriteScript(favorite))
     }
 
     func openPlayer() {
