@@ -54,6 +54,8 @@ enum SnapshotRenderer {
         var command: String?
         /// The Focus tab's second card shows the notes.
         var focusShowsNotes = false
+        /// The open notch at this size instead of the setting's, for this scene only.
+        var openSize: CGSize?
         /// More sample state for this scene; `resetAudioSamples` undoes it before the next one.
         var setUp: (@MainActor () -> Void)?
         /// Sample state for this scene. Scenes after it keep it.
@@ -232,13 +234,15 @@ enum SnapshotRenderer {
                 CalendarService.shared.loadSample(events: [], reminders: [])
                 NotesStore.shared.loadSample([""])
             }),
-        ]
+        ] + sizeScenes()
 
         let settings = AppSettings.shared
-        let size = CGSize(width: settings.openWidth + NotchTheme.standard.topRadius * 2 + 80, height: settings.openHeight + 40)
         let savedTheme = settings.theme
+        let savedSize = (settings.openWidth, settings.openHeight)
         for scene in scenes {
             apply(scene.theme ?? savedTheme)
+            (settings.openWidth, settings.openHeight) = scene.openSize.map { ($0.width, $0.height) } ?? savedSize
+            let size = CGSize(width: settings.openWidth + NotchTheme.standard.topRadius * 2 + 80, height: settings.openHeight + 40)
             scene.prepare?()
             AppSettings.shared.focusShowsNotes = scene.focusShowsNotes
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
@@ -268,6 +272,7 @@ enum SnapshotRenderer {
             try? png.write(to: folder.appendingPathComponent(scene.name + ".png"))
         }
         apply(savedTheme)
+        (settings.openWidth, settings.openHeight) = savedSize
         print("Wrote \(scenes.count) snapshots to \(folder.path)")
         loadSampleProfiles()
         renderSettings(into: folder)
@@ -657,6 +662,50 @@ enum SnapshotRenderer {
                 .init(id: "c", title: "Water the plants", dueDate: nil, color: .green),
                 .init(id: "e", title: "Renew the passport", dueDate: nil, color: .purple),
             ])
+    }
+
+    /// Each tab at the smallest and the largest open size the settings allow, with more in every
+    /// list than fits, so content that runs over or leaves a gap shows.
+    private static func sizeScenes() -> [Scene] {
+        let sizes = [("small", CGSize(width: 600, height: 196)), ("large", CGSize(width: 840, height: 260))]
+        return sizes.flatMap { label, size in
+            [
+                Scene(name: "size-\(label)-1-nook", phase: .open, tab: .home, openSize: size, prepare: loadCrowdedSamples),
+                Scene(name: "size-\(label)-2-nook-batteries", phase: .open, tab: .home, openSize: size, prepare: {
+                    (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.devices, .calendar)
+                }),
+                Scene(name: "size-\(label)-3-tray", phase: .open, tab: .tray, openSize: size),
+                Scene(name: "size-\(label)-4-tray-dropping", phase: .open, tab: .tray, draggingFiles: true, openSize: size),
+                Scene(name: "size-\(label)-5-focus", phase: .open, tab: .focus, openSize: size),
+                Scene(name: "size-\(label)-6-focus-notes", phase: .open, tab: .focus, focusShowsNotes: true, openSize: size),
+                Scene(name: "size-\(label)-7-control", phase: .open, tab: .stats, openSize: size),
+                Scene(name: "size-\(label)-8-nook-empty", phase: .open, tab: .home, hasTrack: false, openSize: size),
+            ]
+        } + sizes.map { label, size in
+            // Last, as it empties the tray for good.
+            Scene(name: "size-\(label)-9-tray-empty", phase: .open, tab: .tray, openSize: size, prepare: {
+                TrayStore.shared.loadSample([])
+            })
+        }
+    }
+
+    /// A busy day, a long note and more Bluetooth devices than a card has room for.
+    private static func loadCrowdedSamples() {
+        loadBusySamples()
+        (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.calendar, .devices)
+        NotesStore.shared.loadSample([
+            "Weekend\n- [x] Book the campsite\n- [ ] Pack the tent\n- [ ] Call Sam about the car\n- [ ] Buy firewood\n"
+                + "- [ ] Charge the lamps\n- [ ] Check the weather\nBring the good coffee",
+            "Ideas\n- Notch widget for the weather",
+        ])
+        DeviceBatteryMonitor.shared.loadSample([
+            .init(id: "airpods", name: "AirPods Pro", kind: .earbuds, left: 80, right: 78, batteryCase: 27),
+            .init(id: "keyboard", name: "Magic Keyboard", kind: .keyboard, main: 64),
+            .init(id: "trackpad", name: "Magic Trackpad", kind: .trackpad, main: 41),
+            .init(id: "mouse", name: "MX Master 3S", kind: .mouse, main: 18),
+            .init(id: "controller", name: "DualSense Wireless Controller", kind: .gamepad, main: 92),
+            .init(id: "beats", name: "Beats Studio Pro", kind: .headphones, main: 55),
+        ], paired: samplePairedDevices)
     }
 
     private static let samplePairedDevices: [DeviceBatteryMonitor.PairedDevice] = [

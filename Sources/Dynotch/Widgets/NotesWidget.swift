@@ -29,7 +29,10 @@ struct NoteBody: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             if isSnapshot {
-                NotePreview(text: store.current?.text ?? "")
+                // The editor scrolls, so a long note mustn't make the card taller.
+                Color.clear
+                    .overlay(alignment: .topLeading) { NotePreview(text: store.current?.text ?? "") }
+                    .clipped()
             } else if let note = store.current {
                 NoteEditor(noteID: note.id, text: note.text, handle: editor) { store.update(note.id, text: $0) }
             }

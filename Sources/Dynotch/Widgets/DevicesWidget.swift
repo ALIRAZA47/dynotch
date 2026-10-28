@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// The Mac's battery plus every connected Bluetooth device that reports one. Paired devices that
-/// aren't connected fill any room left, headphones first, each with a Connect button.
+/// The Mac's battery plus every connected Bluetooth device that reports one, then the paired devices
+/// that aren't connected, headphones first, each with a Connect button. More than fit scroll.
 struct DevicesWidget: View {
     /// CPU, memory and network at the foot of the card, as on the Control tab.
     var showsSystem = false
@@ -20,11 +20,8 @@ struct DevicesWidget: View {
                 GeometryReader { proxy in
                     let compact = proxy.size.width < 150
                     if monitor.isAuthorized {
-                        // As many paired devices as fit, down to none.
-                        ViewThatFits(in: .vertical) {
-                            ForEach(Array((0...min(monitor.paired.count, 3)).reversed()), id: \.self) { count in
-                                rows(paired: count, compact: compact)
-                            }
+                        Scroller(.vertical, fadesOverflow: true) {
+                            rows(compact: compact)
                         }
                     } else {
                         VStack(alignment: .leading, spacing: 8) {
@@ -42,11 +39,11 @@ struct DevicesWidget: View {
         .onAppear { Task { await monitor.refresh() } }
     }
 
-    private func rows(paired count: Int, compact: Bool) -> some View {
+    private func rows(compact: Bool) -> some View {
         let connected = monitor.devices.filter { $0.lowest != nil || $0.batteryCase != nil }
         return VStack(alignment: .leading, spacing: 6) {
             macRow(compact: compact)
-            ForEach(connected.prefix(3)) { device in
+            ForEach(connected) { device in
                 connectedRow(device, compact: compact)
             }
             if connected.isEmpty, !power.hasBattery, monitor.paired.isEmpty {
@@ -54,7 +51,7 @@ struct DevicesWidget: View {
                     .font(NotchFont.footnote)
                     .foregroundStyle(theme.tertiary)
             }
-            ForEach(monitor.paired.prefix(count)) { device in
+            ForEach(monitor.paired) { device in
                 PairedRow(device: device, connection: monitor.connections[device.id], compact: compact, isSnapshot: isSnapshot) {
                     monitor.connect(device)
                 }

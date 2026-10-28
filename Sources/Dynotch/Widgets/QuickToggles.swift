@@ -91,33 +91,50 @@ struct ControlToggleGrid: View {
     @ObservedObject private var mic = MicMonitor.shared
 
     var body: some View {
-        Grid(horizontalSpacing: spacing, verticalSpacing: spacing) {
-            GridRow {
-                ControlTile(symbol: toggles.isDarkMode ? "moon.fill" : "sun.max.fill", title: "Dark",
-                            state: toggles.isDarkMode ? "On" : "Off", isOn: toggles.isDarkMode, action: toggles.toggleDarkMode)
-                ControlTile(symbol: "cup.and.saucer.fill", title: "Awake", state: toggles.isKeepingAwake ? "On" : "Off",
-                            isOn: toggles.isKeepingAwake, action: toggles.toggleKeepAwake)
-                ControlTile(symbol: mic.isMuted ? "mic.slash.fill" : "mic.fill", title: "Mute mic",
-                            state: mic.hasInput ? (mic.isMuted ? "On" : "Off") : "No mic", isOn: mic.isMuted,
-                            action: mic.toggleMute)
-                    .disabled(!mic.hasInput)
-            }
-            GridRow {
-                ControlTile(symbol: "eyedropper", title: "Color", state: "Copy hex", action: toggles.pickColor)
-                ControlTile(symbol: "camera.viewfinder", title: "Capture", state: "Screenshot", action: toggles.takeScreenshot)
-                ControlTile(symbol: "moon.zzz.fill", title: "Sleep", state: "Display", action: toggles.sleepDisplay)
+        // Two rows of three, sharing whatever room the notch's size leaves them.
+        GeometryReader { proxy in
+            let fit = ControlTile.Fit(width: (proxy.size.width - spacing * 2) / 3, height: (proxy.size.height - spacing) / 2)
+            VStack(spacing: spacing) {
+                HStack(spacing: spacing) {
+                    ControlTile(symbol: toggles.isDarkMode ? "moon.fill" : "sun.max.fill", title: "Dark",
+                                state: toggles.isDarkMode ? "On" : "Off", isOn: toggles.isDarkMode, fit: fit,
+                                action: toggles.toggleDarkMode)
+                    ControlTile(symbol: "cup.and.saucer.fill", title: "Awake", state: toggles.isKeepingAwake ? "On" : "Off",
+                                isOn: toggles.isKeepingAwake, fit: fit, action: toggles.toggleKeepAwake)
+                    ControlTile(symbol: mic.isMuted ? "mic.slash.fill" : "mic.fill", title: "Mute mic",
+                                state: mic.hasInput ? (mic.isMuted ? "On" : "Off") : "No mic", isOn: mic.isMuted, fit: fit,
+                                action: mic.toggleMute)
+                        .disabled(!mic.hasInput)
+                }
+                HStack(spacing: spacing) {
+                    ControlTile(symbol: "eyedropper", title: "Color", state: "Copy hex", fit: fit, action: toggles.pickColor)
+                    ControlTile(symbol: "camera.viewfinder", title: "Capture", state: "Screenshot", fit: fit,
+                                action: toggles.takeScreenshot)
+                    ControlTile(symbol: "moon.zzz.fill", title: "Sleep", state: "Display", fit: fit, action: toggles.sleepDisplay)
+                }
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
 /// A rounded tile: a symbol at the top, its name and state at the bottom.
 private struct ControlTile: View {
+    /// How a tile fits its room: a short one leaves out the state, a narrow one pulls its padding in.
+    struct Fit {
+        let showsState: Bool
+        let padding: CGFloat
+
+        init(width: CGFloat, height: CGFloat) {
+            showsState = height >= 68
+            padding = width < 68 || height < 56 ? 7 : 9
+        }
+    }
+
     let symbol: String
     let title: String
     let state: String
     var isOn = false
+    let fit: Fit
     let action: () -> Void
     @Environment(\.notchTheme) private var theme
     @Environment(\.isEnabled) private var isEnabled
@@ -130,19 +147,21 @@ private struct ControlTile: View {
                 Image(systemName: symbol)
                     .font(.system(size: 15, weight: .semibold))
                     .contentTransition(.symbolEffect(.replace))
-                Spacer(minLength: 4)
+                Spacer(minLength: 2)
                 Text(title)
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                Text(state)
-                    .font(.system(size: 10, weight: .medium))
-                    .opacity(isOn ? 0.75 : 0.6)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .minimumScaleFactor(0.75)
+                if fit.showsState {
+                    Text(state)
+                        .font(.system(size: 10, weight: .medium))
+                        .opacity(isOn ? 0.75 : 0.6)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
             }
             .foregroundStyle(isOn ? theme.onAccent : theme.primary)
-            .padding(9)
+            .padding(fit.padding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(shape.fill(isOn ? AnyShapeStyle(theme.accent) : AnyShapeStyle(hovering ? theme.controlHover : theme.control)))
             .contentShape(shape)

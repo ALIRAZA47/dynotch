@@ -75,18 +75,22 @@ private struct UpNextCard: View {
                             .fixedSize()
                     }
                 }
-                if let event = agenda.event {
-                    EventDetail(event: event)
-                        .padding(.top, 8)
-                } else {
-                    Text("Nothing else today")
-                        .font(NotchFont.title)
-                        .foregroundStyle(theme.secondary)
-                        .padding(.top, 8)
-                }
-                Spacer(minLength: 6)
-                if !agenda.later.isEmpty {
-                    LaterEvents(events: agenda.later)
+                // A short card, or a long day, scrolls.
+                Scroller(.vertical, fadesOverflow: true) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        if let event = agenda.event {
+                            EventDetail(event: event)
+                        } else {
+                            Text("Nothing else today")
+                                .font(NotchFont.title)
+                                .foregroundStyle(theme.secondary)
+                        }
+                        if !agenda.later.isEmpty {
+                            LaterEvents(events: agenda.later)
+                        }
+                    }
+                    .padding(.top, 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -187,41 +191,32 @@ struct JoinButton: View {
     }
 }
 
-/// The rest of the day under a hairline: as many rows as fit, each its time, calendar color and title.
+/// The rest of the day under a hairline, each event its time, calendar color and title.
 private struct LaterEvents: View {
     let events: [CalendarService.Event]
     @Environment(\.notchTheme) private var theme
 
-    private static let row: CGFloat = 16
-    private static let spacing: CGFloat = 4
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 4) {
             theme.divider.frame(height: 1)
-            GeometryReader { proxy in
-                let fitting = max(0, Int((proxy.size.height - 7 + Self.spacing) / (Self.row + Self.spacing)))
-                VStack(alignment: .leading, spacing: Self.spacing) {
-                    ForEach(events.prefix(fitting)) { event in
-                        HStack(spacing: 8) {
-                            Text(event.isAllDay ? "All day" : event.start.formatted(date: .omitted, time: .shortened))
-                                .font(NotchFont.numeric(10.5))
-                                .foregroundStyle(theme.tertiary)
-                                .lineLimit(1)
-                                .frame(width: 46, alignment: .leading)
-                            Capsule()
-                                .fill(event.color)
-                                .frame(width: 3, height: 11)
-                            Text(event.title)
-                                .font(NotchFont.body)
-                                .lineLimit(1)
-                        }
-                        .frame(height: Self.row)
-                        .help(event.title)
-                    }
+                .padding(.bottom, 3)
+            ForEach(events) { event in
+                HStack(spacing: 8) {
+                    Text(event.isAllDay ? "All day" : event.start.formatted(date: .omitted, time: .shortened))
+                        .font(NotchFont.numeric(10.5))
+                        .foregroundStyle(theme.tertiary)
+                        .lineLimit(1)
+                        .frame(width: 46, alignment: .leading)
+                    Capsule()
+                        .fill(event.color)
+                        .frame(width: 3, height: 11)
+                    Text(event.title)
+                        .font(NotchFont.body)
+                        .lineLimit(1)
                 }
-                .padding(.top, 7)
+                .frame(height: 16)
+                .help(event.title)
             }
-            .frame(minHeight: Self.row + 7, maxHeight: Self.row * 3 + Self.spacing * 2 + 7)
         }
     }
 }

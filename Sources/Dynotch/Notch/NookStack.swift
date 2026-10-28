@@ -1,16 +1,24 @@
+import AppKit
+import Combine
 import SwiftUI
 
 /// The widgets beside the player, one at a time like a stack of cards. It turns by itself to
 /// whichever matters now: the calendar shortly before an event, the weather before rain, the
-/// batteries when one runs low. The dots on its edge turn it by hand.
+/// batteries when one runs low. A swipe up or down over it turns it by hand, and so do the dots on
+/// its edge.
 struct NookStack: View {
     let widgets: [HomeWidget]
+    /// Swipes over the stack, from the window controller: true for the next card.
+    let turns: PassthroughSubject<Bool, Never>
     @ObservedObject private var calendar = CalendarService.shared
     @ObservedObject private var weather = WeatherService.shared
     @ObservedObject private var power = PowerMonitor.shared
     @ObservedObject private var devices = DeviceBatteryMonitor.shared
+    @Environment(\.isSnapshot) private var isSnapshot
     /// Turned to by hand, or by something that needed the room. Stays until the next turn.
     @ViewState private var picked: HomeWidget?
+    /// The last turn went to a later card, so the new one comes up from below.
+    @ViewState private var forward = true
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 60)) { context in
@@ -18,7 +26,7 @@ struct NookStack: View {
             let shown = picked.flatMap { widgets.contains($0) ? $0 : nil } ?? urgent ?? widgets[0]
             HomeWidgetView(widget: shown)
                 .id(shown)
-                .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 10)),
+                .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: forward ? 12 : -12)),
                                         removal: .opacity.animation(.easeOut(duration: 0.1))))
                 .overlay(alignment: .trailing) {
                     if widgets.count > 1 {
@@ -28,9 +36,24 @@ struct NookStack: View {
                 }
                 .onChange(of: urgent) { _, widget in
                     guard let widget else { return }
-                    withAnimation(.notchTab) { picked = widget }
+                    turn(to: widget, from: shown)
+                }
+                .onReceive(turns) { next in
+                    guard let index = widgets.firstIndex(of: shown) else { return }
+                    let target = index + (next ? 1 : -1)
+                    guard widgets.indices.contains(target) else { return }
+                    Haptics.tap()
+                    turn(to: widgets[target], from: shown)
                 }
         }
+        .background {
+            if widgets.count > 1, !isSnapshot { StackSwipeArea() }
+        }
+    }
+
+    private func turn(to widget: HomeWidget, from shown: HomeWidget) {
+        forward = (widgets.firstIndex(of: widget) ?? 0) >= (widgets.firstIndex(of: shown) ?? 0)
+        withAnimation(.notchTab) { picked = widget }
     }
 
     /// One dot a widget; the one showing is longer.
@@ -39,7 +62,7 @@ struct NookStack: View {
             ForEach(widgets, id: \.self) { widget in
                 let isShown = widget == shown
                 Button {
-                    withAnimation(.notchTab) { picked = widget }
+                    turn(to: widget, from: shown)
                 } label: {
                     Capsule()
                         .fill(Color.white.opacity(isShown ? 0.75 : 0.25))
@@ -73,4 +96,32 @@ struct NookStack: View {
             }
         }
     }
+}
+
+/// Marks where the stack is, so the window controller turns it when a vertical swipe lands there.
+private struct StackSwipeArea: NSViewRepresentable {
+    func makeNSView(context: Context) -> StackSwipeAreaView { StackSwipeAreaView() }
+    func updateNSView(_ view: StackSwipeAreaView, context: Context) {}
+}
+
+/// Takes no events: it's only there to be found.
+final class StackSwipeAreaView: NSView {
+    private static let all = NSHashTable<StackSwipeAreaView>.weakObjects()
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        Self.all.add(self)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    /// A stack is on screen at `point` in `window`.
+    static func covers(_ point: CGPoint, in window: NSWindow) -> Bool {
+        all.allObjects.contains { view in
+            view.window === window && !view.isHiddenOrHasHiddenAncestor
+                && window.convertToScreen(view.convert(view.bounds, to: nil)).contains(point)
+        }
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

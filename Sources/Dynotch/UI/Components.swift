@@ -70,8 +70,12 @@ struct Scroller<Content: View>: View {
             .compositingGroup()
             .clipped()
         } else {
-            content
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // Like a scroll view, it takes the room it's offered and lays its content out at full
+            // length along the axis, so content that runs over gets cut off rather than widening it.
+            Color.clear
+                .overlay(alignment: .topLeading) {
+                    content.fixedSize(horizontal: axis.contains(.horizontal), vertical: axis.contains(.vertical))
+                }
                 .clipped()
         }
     }

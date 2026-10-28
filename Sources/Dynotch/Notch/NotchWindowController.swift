@@ -25,6 +25,9 @@ final class NotchWindowController {
     /// Up and down or sideways, settled once the fingers have moved a little.
     private var swipeAxis: Axis?
     private var hasSkipped = false
+    /// Over the Nook's stack, whether this swipe turns it rather than scrolling the card under the
+    /// pointer. Settled as the swipe starts, so a list that reaches its end mid-swipe doesn't turn it too.
+    private var swipeTurnsStack: Bool?
     private var lastScroll = Date.distantPast
     private var cancellables = Set<AnyCancellable>()
 
@@ -194,7 +197,10 @@ final class NotchWindowController {
             resetSwipe()
             return
         }
-        guard AppSettings.shared.swipeGestures else { return }
+        // Turning the Nook's stack is scrolling its content, so it works with the notch's swipes off too.
+        let overStack = viewModel.isOpen && !viewModel.isCommandMode && StackSwipeAreaView.covers(point, in: panel)
+        let gestures = AppSettings.shared.swipeGestures
+        guard gestures || overStack else { return }
         guard hitRect().contains(point) else {
             resetSwipe()
             return
@@ -218,7 +224,18 @@ final class NotchWindowController {
 
         switch swipeAxis {
         case .vertical:
-            if !viewModel.isOpen, scrollTotal > 14 {
+            if overStack {
+                // Over the stack a swipe turns it the way its content would scroll: toward the end
+                // for the next card. A card with more than it shows scrolls first.
+                let towardEnd = (inverted ? scrollTotal : -scrollTotal) < 0
+                if swipeTurnsStack == nil { swipeTurnsStack = !scrollsVertically(at: point, towardEnd: towardEnd) }
+                if swipeTurnsStack == true, !hasSkipped, abs(scrollTotal) > (event.hasPreciseScrollingDeltas ? 30 : 8) {
+                    hasSkipped = true
+                    viewModel.stackTurns.send(towardEnd)
+                }
+            } else if !gestures {
+                break
+            } else if !viewModel.isOpen, scrollTotal > 14 {
                 scrollTotal = 0
                 hoverTask?.cancel()
                 Haptics.tap()
@@ -231,7 +248,7 @@ final class NotchWindowController {
                 dismiss()
             }
         case .horizontal:
-            guard !hasSkipped, abs(swipeAcross) > 40 else { break }
+            guard gestures, !hasSkipped, abs(swipeAcross) > 40 else { break }
             hasSkipped = true
             if viewModel.isOpen, !isOverHeader(point) {
                 // Over the open notch's content the swipe moves between tabs, unless what's under the
@@ -335,10 +352,11 @@ final class NotchWindowController {
         if !isInside { scheduleClose(after: 0.4) }
     }
 
-    /// The Focus tab has scrolling lists, so there only a swipe over the header closes the notch.
+    /// A swipe up over a list with more than it shows scrolls the list, so only a swipe elsewhere closes
+    /// the notch. The Focus tab is all lists, so there only a swipe over the header does.
     private func swipeClosesNotch(at point: CGPoint) -> Bool {
-        guard viewModel.visibleTab == .focus else { return true }
-        return isOverHeader(point)
+        if isOverHeader(point) { return true }
+        return viewModel.visibleTab != .focus && verticalScroller(at: point) == nil
     }
 
     /// The open notch's top row, beside the camera.
@@ -352,6 +370,7 @@ final class NotchWindowController {
         swipeAcross = 0
         swipeAxis = nil
         hasSkipped = false
+        swipeTurnsStack = nil
     }
 
     /// Two fingers sideways over the open notch: to the left for the next tab, to the right for the one before.
@@ -378,6 +397,30 @@ final class NotchWindowController {
             view = current.superview
         }
         return false
+    }
+
+    /// The list under `point` with more than it shows, if there is one.
+    private func verticalScroller(at point: CGPoint) -> NSScrollView? {
+        guard let content = panel.contentView else { return nil }
+        var view = content.hitTest(panel.convertPoint(fromScreen: point))
+        while let current = view {
+            if let scrollView = current as? NSScrollView, let document = scrollView.documentView,
+               document.frame.height > scrollView.contentView.bounds.height + 1 {
+                return scrollView
+            }
+            view = current.superview
+        }
+        return nil
+    }
+
+    /// Whether the list under `point` can still scroll toward its end, or toward its start.
+    private func scrollsVertically(at point: CGPoint, towardEnd: Bool) -> Bool {
+        guard let scrollView = verticalScroller(at: point), let document = scrollView.documentView else { return false }
+        let visible = scrollView.contentView.bounds
+        // A flipped document starts at the top, where y is 0.
+        let fromStart = document.isFlipped ? visible.minY : document.frame.height - visible.maxY
+        let toEnd = document.frame.height - visible.height - fromStart
+        return towardEnd ? toEnd > 0.5 : fromStart > 0.5
     }
 
     /// Two fingers sideways over the notch: to the left for the next track, to the right for the previous one.
