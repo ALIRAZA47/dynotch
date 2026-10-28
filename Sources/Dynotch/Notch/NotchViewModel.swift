@@ -124,6 +124,8 @@ final class NotchViewModel: ObservableObject {
     /// Something was dragged out of the tray and the drag hasn't ended yet.
     var isDraggingOut = false
     var onOpen: (() -> Void)?
+    /// A swipe over the Nook's stack of widgets: true for the next card, false for the one before.
+    let stackTurns = PassthroughSubject<Bool, Never>()
 
     private var cancellables = Set<AnyCancellable>()
 

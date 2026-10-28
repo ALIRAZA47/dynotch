@@ -27,15 +27,11 @@ private struct TrayContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             toolbar
-            Scroller(.horizontal) {
-                HStack(spacing: 6) {
-                    ForEach(tray.items) { item in
-                        TrayItemView(item: item, isSelected: tray.selection == item.id, viewModel: viewModel)
-                            .transition(.scale(scale: 0.6).combined(with: .opacity))
-                    }
-                    AddFilesTile(isTargeted: isTargeted, isAlone: tray.items.isEmpty)
-                }
-                .frame(maxHeight: .infinity)
+            // With room to spare, the last tile takes all of it, so an empty tray is one big place to
+            // drop files. More files than fit scroll sideways.
+            ViewThatFits(in: .horizontal) {
+                strip
+                Scroller(.horizontal) { strip }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -48,6 +44,18 @@ private struct TrayContentView: View {
         .background {
             if !isSnapshot { QuickLookAnchor(viewModel: viewModel) }
         }
+    }
+
+    /// The files, then the tile that adds more.
+    private var strip: some View {
+        HStack(spacing: 6) {
+            ForEach(tray.items) { item in
+                TrayItemView(item: item, isSelected: tray.selection == item.id, viewModel: viewModel)
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+            }
+            AddFilesTile(isTargeted: isTargeted, isAlone: tray.items.isEmpty)
+        }
+        .frame(maxHeight: .infinity)
     }
 
     /// What's in the tray, and AirDrop, Share and Clear for all of it.
@@ -125,7 +133,8 @@ private struct ToolbarButtonLabel: View {
     }
 }
 
-/// The last tile: drop files on the tray, or click to pick some. Alone in an empty tray, it takes the room.
+/// The last tile: drop files on the tray, or click to pick some. It takes whatever room the files
+/// leave, all of it in an empty tray.
 private struct AddFilesTile: View {
     let isTargeted: Bool
     let isAlone: Bool
@@ -149,8 +158,7 @@ private struct AddFilesTile: View {
             }
             .foregroundStyle(isTargeted ? theme.accent : hovering ? theme.secondary : theme.tertiary)
             .padding(.horizontal, 10)
-            .frame(minWidth: isAlone ? nil : 100, maxWidth: isAlone ? .infinity : 150)
-            .frame(maxHeight: .infinity)
+            .frame(minWidth: 100, maxWidth: .infinity, maxHeight: .infinity)
             .background(shape.fill(isTargeted ? theme.selectionFill : hovering ? theme.card : .clear))
             .overlay(shape.strokeBorder(isTargeted ? theme.accent : theme.primary.opacity(hovering ? 0.24 : 0.16),
                                         style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))

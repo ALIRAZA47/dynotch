@@ -387,6 +387,10 @@ private struct NoticeGlance: View {
                 .foregroundStyle(notice.tint)
                 .frame(width: 46, height: 46)
                 .background(Circle().fill(notice.tint.opacity(0.16)))
+                // A script's notice keeps its terminal badge, so it can't pass for one of Dynotch's own.
+                .overlay(alignment: .bottomTrailing) {
+                    if notice.fromScript { ScriptBadge().scaleEffect(1.6, anchor: .bottomTrailing) }
+                }
         } trailing: {
             EmptyView()
         } center: {

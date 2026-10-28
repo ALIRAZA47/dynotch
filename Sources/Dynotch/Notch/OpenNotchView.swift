@@ -29,7 +29,7 @@ struct OpenNotchView: View {
             CommandView(viewModel: viewModel)
         } else {
             switch viewModel.visibleTab {
-            case .home: HomeTabView()
+            case .home: HomeTabView(viewModel: viewModel)
             case .tray: TrayTabView(viewModel: viewModel)
             case .focus: FocusTabView()
             case .stats: ControlTabView()
@@ -220,6 +220,7 @@ private struct MoreMenu: View {
 
 /// The player, and beside it the stack of widgets.
 struct HomeTabView: View {
+    @ObservedObject var viewModel: NotchViewModel
     @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
@@ -229,7 +230,7 @@ struct HomeTabView: View {
                 MediaPlayerView()
                     .frame(width: widgets.isEmpty ? proxy.size.width : (proxy.size.width * 0.525).rounded())
                 if !widgets.isEmpty {
-                    NookStack(widgets: widgets)
+                    NookStack(widgets: widgets, turns: viewModel.stackTurns)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
@@ -327,9 +328,9 @@ struct ControlTabView: View {
         GeometryReader { proxy in
             HStack(spacing: NotchTheme.gap) {
                 ControlToggleGrid()
-                    .frame(width: (proxy.size.width * 0.33).rounded())
+                    .frame(width: (proxy.size.width * 0.34).rounded())
                 LevelControls()
-                    .frame(width: (proxy.size.width * 0.32).rounded())
+                    .frame(width: (proxy.size.width * 0.29).rounded())
                 DevicesWidget(showsSystem: true)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }

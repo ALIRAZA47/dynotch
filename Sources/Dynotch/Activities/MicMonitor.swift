@@ -44,6 +44,10 @@ final class MicMonitor: ObservableObject {
         mSelector: kAudioProcessPropertyPID,
         mScope: kAudioObjectPropertyScopeGlobal,
         mElement: kAudioObjectPropertyElementMain)
+    private static let processInputDevicesAddress = AudioObjectPropertyAddress(
+        mSelector: kAudioProcessPropertyDevices,
+        mScope: kAudioObjectPropertyScopeInput,
+        mElement: kAudioObjectPropertyElementMain)
     private static let deviceRunningAddress = AudioObjectPropertyAddress(
         mSelector: kAudioDevicePropertyDeviceIsRunningSomewhere,
         mScope: kAudioObjectPropertyScopeGlobal,
@@ -138,16 +142,19 @@ final class MicMonitor: ObservableObject {
 
     private func bindProcesses() {
         for process in processes {
-            var address = Self.runningInputAddress
-            AudioObjectRemovePropertyListenerBlock(process, &address, .main, refreshListener)
+            for var address in [Self.runningInputAddress, Self.processInputDevicesAddress] {
+                AudioObjectRemovePropertyListenerBlock(process, &address, .main, refreshListener)
+            }
         }
         // Dynotch itself never counts.
         let ownID = UInt32(bitPattern: getpid())
         processes = Self.objectList(system, Self.processListAddress)
             .filter { Self.readUInt32($0, Self.processIDAddress) != ownID }
         for process in processes {
-            var address = Self.runningInputAddress
-            AudioObjectAddPropertyListenerBlock(process, &address, .main, refreshListener)
+            for var address in [Self.runningInputAddress, Self.processInputDevicesAddress] {
+                guard AudioObjectHasProperty(process, &address) else { continue }
+                AudioObjectAddPropertyListenerBlock(process, &address, .main, refreshListener)
+            }
         }
         refresh()
     }
@@ -157,7 +164,9 @@ final class MicMonitor: ObservableObject {
         let inUse: Bool
         if AudioObjectHasProperty(system, &address) {
             // Per process, so a headset that's only playing doesn't count.
-            inUse = processes.contains { (Self.readUInt32($0, Self.runningInputAddress) ?? 0) != 0 }
+            inUse = processes.contains {
+                (Self.readUInt32($0, Self.runningInputAddress) ?? 0) != 0 && Self.recordsFromDevice($0)
+            }
         } else {
             inUse = (Self.readUInt32(input, Self.deviceRunningAddress) ?? 0) != 0
         }
@@ -292,6 +301,14 @@ final class MicMonitor: ObservableObject {
         var list = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
         guard AudioObjectGetPropertyData(object, &address, 0, nil, &size, &list) == noErr else { return [] }
         return Array(list.prefix(Int(size) / MemoryLayout<AudioObjectID>.size))
+    }
+
+    /// Whether `process` records from an input device. Siri's listener (corespeechd) and audio taps
+    /// run input on no device, and macOS's own microphone indicator leaves them out too.
+    private static func recordsFromDevice(_ process: AudioObjectID) -> Bool {
+        var address = processInputDevicesAddress
+        guard AudioObjectHasProperty(process, &address) else { return true }
+        return !objectList(process, processInputDevicesAddress).isEmpty
     }
 
     private static func uid(of device: AudioObjectID) -> String? {
