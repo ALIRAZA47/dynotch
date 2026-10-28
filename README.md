@@ -33,7 +33,7 @@ dependencies.
 | **Audio and keys** | **Live equalizer** (opt-in, macOS 14.2 or later) makes the equalizer bars follow the music: a Core Audio process tap listens to Music or Spotify, only while it plays and some bars are on screen, and splits the sound into four bands. **Replace system HUD** (opt-in) takes over the volume, mute and brightness keys so only Dynotch's meter shows, in steps of a sixteenth (a sixty-fourth with ⇧⌥), even at either end of the range. Keys Dynotch can't handle, like an output without a volume control or an external display, go to macOS as usual. Swipe two fingers sideways over the closed notch, or over the open notch's header, to skip tracks (left for next, right for previous); over the rest of the open notch the same swipe moves between tabs. Scroll over the artwork in the Nook to change the volume. The output button beside the player lists the Mac's outputs (speakers, headphones, displays, Bluetooth) and switches the default output; AirPlay speakers and TVs come from AVKit's AirPlay picker in the same list. |
 | **Calendar** | Up next: the next event in full, with "in 12m" or "until 11:00", its times and call service, a Join button for Zoom, Meet, Teams, Webex and FaceTime links, and Open in Calendar; the rest of the day underneath. After the day's last event, tomorrow's first. |
 | **Profiles** | Saved setups such as Work, Home and Presenting. A profile keeps what the notch shows and how it opens: tabs, widgets, live activities (and which apps' notifications peek), size, theme and displays. Switch from the menu bar's **Profiles** menu, **Settings → General → Profiles**, or `dynotch profile Work`. The profile that's on keeps the changes you make. A profile can switch on by itself when a Focus turns on (a particular one, or any) or when an external display connects; when that Focus ends or the display goes, the notch goes back to how it was, unless you switched profiles by hand in between. Focus rules need Full Disk Access, like the Focus activity. |
-| **App** | Menu bar icon, Settings window (General, Appearance, Live Activities, Nook & Widgets, Tray, Focus Timer, Permissions, About), launch at login, and a check for updates against the latest GitHub release. Runs as an agent app with no Dock icon. |
+| **App** | Menu bar icon, Settings window (General, Appearance, Live Activities, Nook & Widgets, Tray, Focus Timer, Permissions, About), launch at login, and a check for updates against the latest GitHub release that installs the new version in place and reopens Dynotch. Runs as an agent app with no Dock icon. |
 | **Welcome tour** | On first launch, four short steps: how to open the notch and what shows beside the camera, what's new, the permissions worth allowing (each with its status and an Allow or Open System Settings button), and where things are. **Settings → About** and **Welcome Tour…** in the menu bar menu bring it back. |
 
 ## Install
@@ -71,10 +71,14 @@ To use the `dynotch` command from Terminal, see [Scripting](#scripting).
 **Settings → About**, asks GitHub for the newest release and says whether you have it. With
 **Check automatically** on (it is, unless you turn it off), Dynotch asks once a day, a little
 after launch, and a new version is announced in the notch. The check is one request to
-`api.github.com` that carries nothing but the app's version. **Download** opens the new disk
-image in your browser; then quit Dynotch from its menu bar icon and replace the app in
-Applications with the new one. Settings, notes and Tray files stay. So do the permissions you
-gave it: releases are signed with the same certificate, so macOS sees the same app.
+`api.github.com` that carries nothing but the app's version. **Install and Relaunch** downloads the
+release's zip, checks that the app inside is Dynotch, the version announced and newer, and
+signed with the same certificate as the copy you have, puts it in place and reopens Dynotch,
+which says so in the notch. Only the key that signs Dynotch's releases can make an app that
+passes, so a tampered download is refused. Settings, notes, Tray files and the permissions you
+gave it stay, as macOS sees the same app. A copy that can't replace itself, like one run
+straight from the disk image, offers **Download** instead: it opens the new disk image in your
+browser; then quit Dynotch from its menu bar icon and replace the app in Applications.
 
 **Uninstalling.**
 

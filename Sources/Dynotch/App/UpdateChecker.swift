@@ -3,8 +3,8 @@ import Combine
 
 /// Looks up Dynotch's newest release on GitHub and compares it with this build. It checks by
 /// itself once a day while "Check automatically" is on, and on request from Settings → About or
-/// the menu bar menu. Nothing is installed from here: Download opens the release's disk image in
-/// the browser, and the README says how to swap the app.
+/// the menu bar menu. `UpdateInstaller` puts a release in place; where it can't, Download opens the
+/// release's disk image in the browser, and the README says how to swap the app.
 @MainActor
 final class UpdateChecker: ObservableObject {
     static let shared = UpdateChecker()
@@ -13,7 +13,7 @@ final class UpdateChecker: ObservableObject {
     static let repository = "ALIRAZA47/dynotch"
     static let releasesPage = URL(string: "https://github.com/\(repository)/releases/latest")!
     /// This build's version, from Info.plist. A bare `swift build` binary has none and passes as 1.0.
-    static let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+    nonisolated static let currentVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
 
     struct Release: Equatable {
         /// "1.1.0": the tag without its "v".
@@ -25,6 +25,8 @@ final class UpdateChecker: ObservableObject {
         var page: URL
         /// The disk image, when the release has one.
         var download: URL?
+        /// The app in a zip, which `UpdateInstaller` puts in place.
+        var archive: URL?
         var publishedAt: Date?
     }
 
@@ -57,6 +59,15 @@ final class UpdateChecker: ObservableObject {
             .removeDuplicates()
             .sink { [weak self] on in self?.setAutomatic(on) }
             .store(in: &cancellables)
+        // Opened by UpdateInstaller after it put this version in place: say so, once the notch is up.
+        if CommandLine.arguments.contains("--updated") {
+            Task {
+                try? await Task.sleep(for: .seconds(1.5))
+                LiveActivityCenter.shared.post(LiveNotice(key: "update", symbol: "checkmark.circle.fill",
+                                                          tint: NotchAccent.lavender.color, text: "Updated",
+                                                          detail: "Dynotch \(Self.currentVersion)"), for: 4)
+            }
+        }
     }
 
     /// Asks GitHub now. A check already under way is waited for instead of starting another.
@@ -98,9 +109,10 @@ final class UpdateChecker: ObservableObject {
             guard case .available(let release) = status, noticedVersion != release.version else { return }
             noticedVersion = release.version
             UserDefaults.dynotch.set(release.version, forKey: "updateNoticedVersion")
+            let ready = release.archive != nil && UpdateInstaller.shared.canInstall ? "install" : "download"
             LiveActivityCenter.shared.post(LiveNotice(key: "update", symbol: "arrow.down.circle.fill",
                                                       tint: NotchAccent.lavender.color, text: "Update",
-                                                      detail: "Dynotch \(release.version) is ready to download"), for: 5)
+                                                      detail: "Dynotch \(release.version) is ready to \(ready)"), for: 5)
         }
     }
 
@@ -162,6 +174,7 @@ final class UpdateChecker: ObservableObject {
                        page: payload.htmlUrl,
                        download: payload.assets.first { $0.name.lowercased().hasSuffix(".dmg") }?.browserDownloadUrl
                            ?? payload.assets.first { $0.name.lowercased().hasSuffix(".zip") }?.browserDownloadUrl,
+                       archive: payload.assets.first { $0.name.lowercased().hasSuffix(".zip") }?.browserDownloadUrl,
                        publishedAt: payload.publishedAt)
     }
 
