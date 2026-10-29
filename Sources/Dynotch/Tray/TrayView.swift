@@ -27,12 +27,7 @@ private struct TrayContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             toolbar
-            // With room to spare, the last tile takes all of it, so an empty tray is one big place to
-            // drop files. More files than fit scroll sideways.
-            ViewThatFits(in: .horizontal) {
-                strip
-                Scroller(.horizontal) { strip }
-            }
+            shelf
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .contentShape(Rectangle())
@@ -40,17 +35,33 @@ private struct TrayContentView: View {
             Task { TrayStore.shared.add(await TrayDrop.urls(from: providers)) }
             return true
         }
-        .animation(.notchHighlight, value: isTargeted)
+        .animation(.notchToggle, value: isTargeted)
         .background {
             if !isSnapshot { QuickLookAnchor(viewModel: viewModel) }
         }
     }
 
+    /// The files stand on a pane of glass, a shelf in the notch, and round off with `controlRadius`
+    /// inside it, like the rows inside a card. A shelf too short for a whole file shows them compact.
+    private var shelf: some View {
+        GeometryReader { proxy in
+            let fit = TrayItemView.Fit(height: proxy.size.height)
+            // With room to spare, the last tile takes all of it, so an empty tray is one big place to
+            // drop files. More files than fit scroll sideways.
+            ViewThatFits(in: .horizontal) {
+                strip(fit)
+                Scroller(.horizontal) { strip(fit) }
+            }
+        }
+        .padding(theme.controlRadius)
+        .background(CardSurface())
+    }
+
     /// The files, then the tile that adds more.
-    private var strip: some View {
+    private func strip(_ fit: TrayItemView.Fit) -> some View {
         HStack(spacing: 6) {
             ForEach(tray.items) { item in
-                TrayItemView(item: item, isSelected: tray.selection == item.id, viewModel: viewModel)
+                TrayItemView(item: item, isSelected: tray.selection == item.id, viewModel: viewModel, fit: fit)
                     .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
             AddFilesTile(isTargeted: isTargeted, isAlone: tray.items.isEmpty)
@@ -64,15 +75,18 @@ private struct TrayContentView: View {
             HStack(spacing: 6) {
                 Text("Files")
                     .font(NotchFont.bodyStrong)
+                    .foregroundStyle(theme.primary)
                 if !tray.items.isEmpty {
+                    // Secondary, like a count on a segment's thumb: in tertiary, on this glass over
+                    // Liquid Glass, it reads under 4.5:1.
                     Text("\(tray.items.count)")
                         .font(NotchFont.numeric(10.5))
-                        .foregroundStyle(theme.tertiary)
+                        .foregroundStyle(theme.secondary)
                 }
             }
-            .padding(.horizontal, 10)
-            .frame(height: 24)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(theme.control))
+            .padding(.horizontal, 11)
+            .frame(height: 25)
+            .glass(.control, in: Capsule())
             Spacer(minLength: 0)
             if isWorking {
                 ProgressView().controlSize(.mini)
@@ -116,6 +130,7 @@ private struct ToolbarButton: View {
     }
 }
 
+/// A toolbar symbol; under the pointer a capsule of glass rises behind it.
 private struct ToolbarButtonLabel: View {
     let symbol: String
     @Environment(\.notchTheme) private var theme
@@ -125,8 +140,10 @@ private struct ToolbarButtonLabel: View {
         Image(systemName: symbol)
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(hovering ? theme.primary : theme.secondary)
-            .frame(width: 28, height: 24)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(hovering ? theme.control : .clear))
+            .frame(width: 28, height: 25)
+            .background {
+                if hovering { GlassSurface(depth: .control, shape: Capsule()) }
+            }
             .contentShape(Rectangle())
             .onHover { hovering = $0 }
             .animation(.notchHighlight, value: hovering)
@@ -134,7 +151,8 @@ private struct ToolbarButtonLabel: View {
 }
 
 /// The last tile: drop files on the tray, or click to pick some. It takes whatever room the files
-/// leave, all of it in an empty tray.
+/// leave, all of it in an empty tray. A well in the shelf with a dashed rim and a + key, it turns
+/// into the accent's jewel while files are over it.
 private struct AddFilesTile: View {
     let isTargeted: Bool
     let isAlone: Bool
@@ -142,26 +160,25 @@ private struct AddFilesTile: View {
     @ViewState private var hovering = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: theme.cardRadius - 2, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: theme.controlRadius, style: .continuous)
         Button {
             let urls = FileActions.chooseFiles(prompt: "Add to Tray")
             if !urls.isEmpty { TrayStore.shared.add(urls) }
         } label: {
             VStack(spacing: 6) {
-                Image(systemName: isTargeted ? "tray.and.arrow.down.fill" : "plus")
-                    .font(.system(size: isAlone ? 18 : 15, weight: .medium))
-                    .contentTransition(.symbolEffect(.replace))
+                DropKey(symbol: isTargeted ? "tray.and.arrow.down.fill" : "plus", side: isAlone ? 32 : 26,
+                        glyph: .system(size: isAlone ? 13 : 11, weight: .bold), isOnLens: isTargeted, isLit: hovering)
                 Text(isAlone ? "Drop files here to keep them handy, or click to add some" : "Drop or add files")
                     .font(NotchFont.caption)
+                    .foregroundStyle(isTargeted ? theme.onAccent : hovering ? theme.secondary : theme.tertiary)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .foregroundStyle(isTargeted ? theme.accent : hovering ? theme.secondary : theme.tertiary)
             .padding(.horizontal, 10)
             .frame(minWidth: 100, maxWidth: .infinity, maxHeight: .infinity)
-            .background(shape.fill(isTargeted ? theme.selectionFill : hovering ? theme.card : .clear))
-            .overlay(shape.strokeBorder(isTargeted ? theme.accent : theme.primary.opacity(hovering ? 0.24 : 0.16),
-                                        style: StrokeStyle(lineWidth: 1.5, dash: [6, 5])))
+            .background(DropWell(cornerRadius: theme.controlRadius, isTargeted: isTargeted, isLit: hovering))
+            // One layer, so the notch's shadow falls behind the tile rather than from its ink onto its face.
+            .compositingGroup()
             .contentShape(shape)
         }
         .buttonStyle(PressableButtonStyle(scale: 0.97))
@@ -176,6 +193,7 @@ private struct TrayItemView: View {
     /// Selected like a file in Finder: the space bar previews it.
     let isSelected: Bool
     let viewModel: NotchViewModel
+    let fit: Fit
     @ObservedObject private var thumbnails = ThumbnailCache.shared
     @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
@@ -183,29 +201,41 @@ private struct TrayItemView: View {
     @ViewState private var detail: String?
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: theme.cardRadius - 2, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: theme.controlRadius, style: .continuous)
         VStack(spacing: 5) {
             Image(nsImage: thumbnails.image(for: item.url))
                 .resizable()
                 .aspectRatio(contentMode: .fit)
-                .frame(width: 56, height: 50)
+                .frame(width: 56, height: fit.thumbnailHeight)
                 .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
             Text(item.url.lastPathComponent)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(theme.primary.opacity(0.92))
+                .foregroundStyle(theme.primary)
                 .multilineTextAlignment(.center)
                 .lineLimit(2)
                 .truncationMode(.middle)
                 .frame(width: 88, height: 28, alignment: .top)
-            Text(detail ?? " ")
-                .font(NotchFont.numeric(10, .medium))
-                .foregroundStyle(theme.tertiary)
-                .lineLimit(1)
+            if !fit.isCompact {
+                // On the accent's light, tertiary reads under 4.5:1 (yellow over Liquid Glass), so the
+                // size steps up to secondary there.
+                Text(detail ?? " ")
+                    .font(NotchFont.caption)
+                    .foregroundStyle(isSelected ? theme.secondary : theme.tertiary)
+                    .lineLimit(1)
+            }
         }
         .padding(.vertical, 6)
         .frame(width: 100)
-        .background(shape.fill(isSelected ? theme.selectionFill : hovering ? theme.control : .clear))
-        .overlay(shape.strokeBorder(isSelected ? theme.selectionRing : .clear, lineWidth: 1.5))
+        .background {
+            // A pane rises under the pointer. The selected file holds the accent's light inside a ring
+            // of it, so the selection never rests on color alone.
+            if isSelected {
+                GlassSurface(depth: .tint(theme.accent), shape: shape, isLit: hovering)
+                    .overlay(shape.strokeBorder(theme.accent.opacity(0.8), lineWidth: 1.5))
+            } else if hovering {
+                GlassSurface(depth: .pane, shape: shape)
+            }
+        }
         .task(id: item.url) { detail = await Self.detail(for: item.url) }
         .overlay(alignment: .topTrailing) {
             if hovering {
@@ -238,6 +268,21 @@ private struct TrayItemView: View {
 }
 
 extension TrayItemView {
+    /// How the files fit the shelf. A whole tile is 112 points tall; on a shorter shelf, as in the
+    /// smallest notch, the thumbnail shrinks and the size goes, so every name still shows in full.
+    struct Fit {
+        let isCompact: Bool
+        let thumbnailHeight: CGFloat
+
+        init(height: CGFloat) {
+            isCompact = height < 112
+            // A compact tile is its thumbnail and 45 points more, 89 in all. The roundest corners pad
+            // the smallest notch's shelf down to 85, so there the thumbnail gives up the difference
+            // rather than the tile being cut off.
+            thumbnailHeight = isCompact ? min(44, max(32, (height - 45).rounded(.down))) : 50
+        }
+    }
+
     /// The file's size, or that it's a folder, read off the main thread. Nothing for packages,
     /// whose size would take a walk through them.
     fileprivate static func detail(for url: URL) async -> String? {
@@ -337,6 +382,8 @@ private struct TrayDropZones: View {
     }
 }
 
+/// A well to drop the files in, with a badge, a name and what it does. Under the files it turns into
+/// the accent's jewel and rises to meet them.
 private struct DropZone: View {
     let title: String
     var subtitle: String?
@@ -345,6 +392,7 @@ private struct DropZone: View {
     let viewModel: NotchViewModel
     let perform: @MainActor ([URL]) async -> Void
     @Environment(\.notchTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ViewState private var isTargeted = false
 
     init(title: String, subtitle: String? = nil, symbol: String, isWide: Bool = false,
@@ -358,36 +406,30 @@ private struct DropZone: View {
     }
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous)
         VStack(spacing: 5) {
-            Image(systemName: symbol)
-                .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(isTargeted ? theme.accent : theme.primary.opacity(0.85))
+            DropKey(symbol: symbol, side: 38, glyph: .system(size: 17, weight: .semibold), isOnLens: isTargeted)
                 .symbolEffect(.bounce, value: isTargeted)
-                .frame(height: 28)
                 .padding(.bottom, 2)
             Text(title)
                 .font(NotchFont.headline)
+                .foregroundStyle(isTargeted ? theme.onAccent : theme.primary)
                 .lineLimit(1)
             if let subtitle {
                 Text(subtitle)
                     .font(NotchFont.caption)
-                    .foregroundStyle(isTargeted ? theme.secondary : theme.tertiary)
+                    .foregroundStyle(isTargeted ? theme.onAccent.opacity(0.8) : theme.secondary)
                     .lineLimit(1)
             }
         }
         .padding(.horizontal, 8)
         .frame(maxWidth: isWide ? .infinity : 124, maxHeight: .infinity)
-        .background(shape.fill(isTargeted ? theme.selectionFill : .clear))
-        .overlay {
-            if isTargeted {
-                shape.strokeBorder(theme.accent, lineWidth: 1.5)
-            } else {
-                shape.strokeBorder(theme.primary.opacity(0.18), style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
-            }
-        }
-        .scaleEffect(isTargeted ? 1.03 : 1)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isTargeted)
+        .background(DropWell(cornerRadius: theme.cardRadius, isTargeted: isTargeted))
+        // One layer, so the notch's shadow falls behind the zone rather than from its ink onto its face.
+        .compositingGroup()
+        .animation(.notchToggle, value: isTargeted)
+        // With Reduce Motion it doesn't rise; it just turns into the jewel.
+        .scaleEffect(isTargeted && !reduceMotion ? 1.03 : 1)
+        .animation(.notchLift(reduceMotion: reduceMotion), value: isTargeted)
         .trayDropTarget(isTargeted: $isTargeted) { providers in
             let viewModel = viewModel
             let perform = perform
@@ -399,5 +441,60 @@ private struct DropZone: View {
             }
             return true
         }
+    }
+}
+
+/// A place to drop files: a well pressed into the glass, ringed 4 points in by a dashed line lit from
+/// above. While files are over it, it becomes the accent's jewel, its light spilling onto the glass.
+private struct DropWell: View {
+    let cornerRadius: CGFloat
+    let isTargeted: Bool
+    var isLit = false
+    @Environment(\.notchTheme) private var theme
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        // The dashes are brightest along the top, where the light falls, and come up with the pointer
+        // or Increase Contrast.
+        let top = (isLit ? 0.4 : 0.3) + (theme.isHighContrast ? 0.15 : 0)
+        ZStack {
+            GlassSurface(depth: .well, shape: shape, isLit: isLit)
+            shape.inset(by: 4)
+                .strokeBorder(LinearGradient(colors: [.white.opacity(top), .white.opacity(isLit ? 0.2 : 0.14)],
+                                             startPoint: .top, endPoint: .bottom),
+                              style: StrokeStyle(lineWidth: 1.5, dash: [6, 5]))
+                .opacity(isTargeted ? 0 : 1)
+            if isTargeted {
+                GlassSurface(depth: .lens(theme.accent), shape: shape, spills: true)
+                    .transition(.opacity)
+            }
+        }
+    }
+}
+
+/// A disc of glass holding a symbol: the + key on the add tile, a drop zone's badge. On the accent's
+/// jewel it's pressed into the face instead, in ink.
+private struct DropKey: View {
+    let symbol: String
+    let side: CGFloat
+    let glyph: Font
+    var isOnLens = false
+    var isLit = false
+    @Environment(\.notchTheme) private var theme
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(glyph)
+            .foregroundStyle(isOnLens ? theme.onAccent : theme.primary)
+            .contentTransition(.symbolEffect(.replace))
+            .frame(width: side, height: side)
+            .background {
+                if isOnLens {
+                    Circle().fill(theme.onAccent.opacity(0.12))
+                        .overlay(Circle().strokeBorder(theme.onAccent.opacity(0.18)))
+                } else {
+                    GlassSurface(depth: .control, shape: Circle(), isLit: isLit)
+                }
+            }
     }
 }
