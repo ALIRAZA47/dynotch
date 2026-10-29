@@ -84,7 +84,8 @@ struct QuickTogglesWidget: View {
 }
 
 /// Six tiles: Dark Mode, Keep Awake and the microphone, which stay on, then the color picker, a
-/// screenshot and sleeping the display, which happen once. A tile that's on fills with the accent.
+/// screenshot and sleeping the display, which happen once. A tile that's on turns into a solid
+/// jewel of the accent, with ink on it.
 struct ControlToggleGrid: View {
     var spacing: CGFloat = 8
     @ObservedObject private var toggles = QuickToggles.shared
@@ -117,7 +118,8 @@ struct ControlToggleGrid: View {
     }
 }
 
-/// A rounded tile: a symbol at the top, its name and state at the bottom.
+/// A pane of glass standing on the slab: a symbol at the top, its name and state at the bottom.
+/// One that's on is the accent's lens, with its words in ink.
 private struct ControlTile: View {
     /// How a tile fits its room: a short one leaves out the state, a narrow one pulls its padding in.
     struct Fit {
@@ -148,29 +150,34 @@ private struct ControlTile: View {
                     .font(.system(size: 15, weight: .semibold))
                     .contentTransition(.symbolEffect(.replace))
                 Spacer(minLength: 2)
+                // Each line keeps its full height (SwiftUI sets these sizes 14 and 13 points tall)
+                // when it shrinks to fit, so a long state like "Screenshot" doesn't drop its title
+                // below its neighbours'.
                 Text(title)
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
+                    .frame(height: 14, alignment: .bottomLeading)
                 if fit.showsState {
                     Text(state)
                         .font(.system(size: 10, weight: .medium))
-                        .opacity(isOn ? 0.75 : 0.6)
+                        .opacity(isOn ? 0.8 : 0.6)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
+                        .frame(height: 13, alignment: .bottomLeading)
                 }
             }
             .foregroundStyle(isOn ? theme.onAccent : theme.primary)
             .padding(fit.padding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(shape.fill(isOn ? AnyShapeStyle(theme.accent) : AnyShapeStyle(hovering ? theme.controlHover : theme.control)))
+            .glass(isOn ? .lens(theme.accent) : .pane, in: shape, isLit: hovering)
             .contentShape(shape)
             .opacity(isEnabled ? 1 : 0.45)
         }
         .buttonStyle(PressableButtonStyle(scale: 0.95))
         .onHover { hovering = $0 }
         .animation(.notchHighlight, value: hovering)
-        .animation(.easeOut(duration: 0.15), value: isOn)
+        .animation(.notchToggle, value: isOn)
         .help("\(title): \(state)")
         .accessibilityLabel(title)
         .accessibilityValue(state)

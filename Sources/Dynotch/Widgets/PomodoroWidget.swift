@@ -28,19 +28,26 @@ struct PomodoroWidget: View {
     }
 }
 
-/// The Pomodoro's ring, with the time left, the phase and the round's sessions inside it.
+/// The Pomodoro's ring of light, with the time left, the phase and the round's sessions inside it.
+/// A large dial has a minute's tick for each of its sixty, just inside the ring, like a watch's bezel.
 struct PomodoroDial: View {
     var side: CGFloat
     @ObservedObject private var timer = PomodoroTimer.shared
     @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         let large = side >= 100
+        let lineWidth: CGFloat = large ? 7 : 5
         ZStack {
-            ProgressRing(progress: timer.progress, color: timer.phase.color, lineWidth: large ? 7 : 5)
+            if large {
+                MinuteTicks(inset: lineWidth / 2 + 1.5)
+            }
+            ProgressRing(progress: timer.progress, color: timer.phase.color, lineWidth: lineWidth, halo: true)
             VStack(spacing: 1) {
                 Text(Format.duration(timer.remaining))
-                    .font(NotchFont.numeric(large ? 26 : 19))
+                    .font(NotchFont.figure(large ? 27 : 19))
+                    .foregroundStyle(theme.primary)
                     .contentTransition(.numericText(countsDown: true))
                 Text(timer.phase.title)
                     .font(.system(size: large ? 10.5 : 9.5, weight: .semibold))
@@ -71,7 +78,48 @@ struct PomodoroDial: View {
     }
 }
 
-/// Reset, start or pause in the phase's color, and skip.
+/// Sixty ticks round the inside of a dial, one a minute, every fifth longer and brighter. They're
+/// printed once and never move: only the ring over them runs.
+private struct MinuteTicks: View {
+    /// How far in from the dial's edge the ticks begin.
+    var inset: CGFloat
+
+    var body: some View {
+        ZStack {
+            Ticks(inset: inset, length: 3, every: 1, skipping: 5)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            Ticks(inset: inset, length: 5, every: 5)
+                .stroke(Color.white.opacity(0.24), lineWidth: 1.5)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+
+    /// Every `every`th of sixty marks from twelve o'clock, leaving out every `skipping`th: each
+    /// `length` long, reaching in from `inset` inside the edge.
+    private struct Ticks: Shape {
+        var inset: CGFloat
+        var length: CGFloat
+        var every: Int
+        var skipping: Int?
+
+        func path(in rect: CGRect) -> Path {
+            var path = Path()
+            let center = CGPoint(x: rect.midX, y: rect.midY)
+            let outer = min(rect.width, rect.height) / 2 - inset
+            let inner = outer - length
+            for minute in stride(from: 0, to: 60, by: every) where skipping.map({ minute % $0 != 0 }) ?? true {
+                let angle = Double(minute) / 60 * 2 * .pi - .pi / 2
+                let (dx, dy) = (cos(angle), sin(angle))
+                path.move(to: CGPoint(x: center.x + dx * inner, y: center.y + dy * inner))
+                path.addLine(to: CGPoint(x: center.x + dx * outer, y: center.y + dy * outer))
+            }
+            return path
+        }
+    }
+}
+
+/// Reset, start or pause on a disc of glass with the phase's light in it, and skip.
 struct PomodoroControls: View {
     @ObservedObject private var timer = PomodoroTimer.shared
     @ViewState private var hovering = false
@@ -81,11 +129,11 @@ struct PomodoroControls: View {
             IconButton(symbol: "arrow.counterclockwise", size: 11, idleOpacity: 0.55, help: "Reset", action: timer.reset)
             Button(action: timer.toggle) {
                 Image(systemName: timer.isRunning ? "pause.fill" : "play.fill")
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(timer.phase.color)
                     .contentTransition(.symbolEffect(.replace))
                     .frame(width: 34, height: 34)
-                    .background(Circle().fill(timer.phase.color.opacity(hovering ? 0.3 : 0.22)))
+                    .glass(.tint(timer.phase.color), in: Circle(), isLit: hovering)
                     .contentShape(Circle())
             }
             .buttonStyle(PressableButtonStyle())
