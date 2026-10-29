@@ -332,7 +332,7 @@ struct SwitchMark: View {
         }
         .frame(width: 34, height: 20)
         // The pearl overshoots a little as it lands, unless motion is reduced.
-        .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.7), value: isOn)
+        .animation(.notchLift(reduceMotion: reduceMotion), value: isOn)
         .accessibilityHidden(true)
     }
 }

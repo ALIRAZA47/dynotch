@@ -614,7 +614,7 @@ struct Keycap: View {
                 .overlay(shape.strokeBorder(theme.onAccent.opacity(0.18)))
         case .window:
             shape.fill(Palette.wash)
-                .overlay(shape.strokeBorder(Palette.stroke))
+                .overlay(shape.strokeBorder(Palette.rimGradient))
         }
     }
 }
