@@ -14,6 +14,19 @@ func gradient(_ colors: [NSColor]) -> CGGradient {
     CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: colors.map(\.cgColor) as CFArray, locations: nil)!
 }
 
+/// Fills a band `width` wide along `path`, centered on it, with a vertical gradient from `from` at
+/// `top` to `to` at `bottom`. Nothing is drawn past either end.
+func strokeLit(_ ctx: CGContext, _ path: CGPath, width: CGFloat, _ from: NSColor, _ to: NSColor, top: CGFloat, bottom: CGFloat) {
+    ctx.saveGState()
+    ctx.addPath(path)
+    ctx.setLineWidth(width)
+    ctx.replacePathWithStrokedPath()
+    ctx.clip()
+    ctx.drawLinearGradient(gradient([from, to]), start: CGPoint(x: 512, y: top), end: CGPoint(x: 512, y: bottom),
+                           options: [.drawsBeforeStartLocation])
+    ctx.restoreGState()
+}
+
 func drawIcon(in ctx: CGContext) {
     // macOS icon grid: an 824pt body centered on a 1024pt canvas. CG's y axis points up.
     let body = CGRect(x: 100, y: 100, width: 824, height: 824)
@@ -27,12 +40,16 @@ func drawIcon(in ctx: CGContext) {
     ctx.saveGState()
     ctx.addPath(bodyPath)
     ctx.clip()
+    // Graphite glass, lit from above.
     ctx.drawLinearGradient(
-        gradient([NSColor(red: 0.20, green: 0.22, blue: 0.48, alpha: 1), NSColor(red: 0.05, green: 0.05, blue: 0.12, alpha: 1)]),
+        gradient([NSColor(red: 0.17, green: 0.17, blue: 0.19, alpha: 1), NSColor(red: 0.055, green: 0.055, blue: 0.065, alpha: 1)]),
         start: CGPoint(x: 512, y: body.maxY), end: CGPoint(x: 512, y: body.minY), options: [])
     ctx.drawRadialGradient(
-        gradient([NSColor(red: 0.55, green: 0.45, blue: 1.0, alpha: 0.55), NSColor(red: 0.55, green: 0.45, blue: 1.0, alpha: 0)]),
+        gradient([NSColor(red: 0.55, green: 0.45, blue: 1.0, alpha: 0.40), NSColor(red: 0.55, green: 0.45, blue: 1.0, alpha: 0)]),
         startCenter: CGPoint(x: 512, y: 700), startRadius: 0, endCenter: CGPoint(x: 512, y: 700), endRadius: 430, options: [])
+    // The rim: the glass's edge catching the light, 6 wide just inside it, gone by 45% of the way down.
+    strokeLit(ctx, CGPath(roundedRect: body.insetBy(dx: 3, dy: 3), cornerWidth: 182, cornerHeight: 182, transform: nil), width: 6,
+              NSColor(white: 1, alpha: 0.28), NSColor(white: 1, alpha: 0), top: body.maxY, bottom: body.maxY - body.height * 0.45)
 
     // The notch hangs from the top edge, with the same flared corners as the real one.
     let width: CGFloat = 580, height: CGFloat = 230, flare: CGFloat = 34, radius: CGFloat = 92
@@ -57,6 +74,9 @@ func drawIcon(in ctx: CGContext) {
     ctx.drawLinearGradient(
         gradient([NSColor(red: 1.0, green: 0.58, blue: 0.30, alpha: 1), NSColor(red: 0.93, green: 0.25, blue: 0.56, alpha: 1)]),
         start: CGPoint(x: art.minX, y: art.maxY), end: CGPoint(x: art.maxX, y: art.minY), options: [])
+    // The art's sheet of glass, 4 wide inside its edge, lit along the top.
+    strokeLit(ctx, CGPath(roundedRect: art.insetBy(dx: 2, dy: 2), cornerWidth: 28, cornerHeight: 28, transform: nil), width: 4,
+              NSColor(white: 1, alpha: 0.45), NSColor(white: 1, alpha: 0.05), top: art.maxY, bottom: art.minY)
     ctx.restoreGState()
 
     let barWidth: CGFloat = 22, gap: CGFloat = 16

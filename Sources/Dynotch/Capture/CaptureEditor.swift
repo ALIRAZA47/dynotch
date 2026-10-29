@@ -454,7 +454,8 @@ struct SelectionChrome: View {
             .foregroundStyle(.white)
             .padding(.horizontal, 7)
             .frame(height: 20)
-            .background(Capsule().fill(Color.black.opacity(0.75)))
+            // Inside the selection it sits on the capture at full brightness, so it darkens more.
+            .background(CaptureGlass(shape: Capsule(), isOverCapture: !fitsAbove))
             .fixedSize()
             .offset(x: max(4, selection.minX + (fitsAbove ? 0 : 6)), y: fitsAbove ? selection.minY - 24 : selection.minY + 6)
             .accessibilityLabel("Selection \(Int(selection.width)) by \(Int(selection.height))")
@@ -524,23 +525,65 @@ struct SelectionHint: View {
     var body: some View {
         Text("Drag to select a region  ·  Click for the whole display  ·  Esc to cancel")
             .font(NotchFont.body)
-            .foregroundStyle(.white.opacity(0.9))
+            .foregroundStyle(.white)
             .padding(.horizontal, 14)
             .frame(height: 30)
-            .background(Capsule().fill(Color.black.opacity(0.7)))
+            .background(CaptureGlass(shape: Capsule()))
             .allowsHitTesting(false)
+    }
+}
+
+/// The glass the capture's chrome floats on: Liquid Glass on macOS 26 and later and a thin material
+/// before that, each under a layer of black, and a dark stand-in in snapshots. Its edge catches the
+/// light along the top.
+///
+/// The black lies over the glass rather than tinting it. Tinted black, Liquid Glass frosts toward a
+/// light grey, lighter the more black it's given, and white on it measured 4.2:1 over the dimmed
+/// screen and 2.5:1 over a white window. Under black 0.4 the "4 pt" readout, white 0.6, measures
+/// 4.9:1 over the dimmed screen with the window key, where the glass is lightest. Over the capture
+/// itself, at full brightness, the black is deeper: 5.4:1 over a white window.
+private struct CaptureGlass<S: InsettableShape>: View {
+    let shape: S
+    var isOverCapture = false
+    @Environment(\.isSnapshot) private var isSnapshot
+
+    var body: some View {
+        ZStack {
+            if isSnapshot {
+                shape.fill(Color.black.opacity(0.85))
+            } else {
+                if #available(macOS 26, *) {
+                    Rectangle().fill(.clear).glassEffect(.regular, in: shape)
+                } else {
+                    shape.fill(.ultraThinMaterial)
+                }
+                shape.fill(Color.black.opacity(isOverCapture ? 0.6 : 0.4))
+            }
+            shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.35), .white.opacity(0.06)], startPoint: .top, endPoint: .bottom))
+        }
     }
 }
 
 // MARK: Toolbar
 
 /// The tools, colors and width, with undo and the actions, beside the selection. It's a fixed
-/// size so the editor can place it and know where it is.
+/// size so the editor can place it and know where it is. It floats on glass, its tools pieces of
+/// the notch's glass, the one in hand a jewel of the accent.
 struct CaptureToolbar: View {
     static let size = CGSize(width: 596, height: 84)
 
     @ObservedObject var editor: CaptureEditor
     @ObservedObject var document: AnnotationDocument
+    /// When there's no room beside the selection, the toolbar sits on it, over the capture at full brightness.
+    var isOverCapture = false
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    /// The notch's glass in the user's accent, its lit edges a step brighter with Increase Contrast.
+    private var theme: NotchTheme {
+        var theme = AppSettings.shared.theme
+        theme.isHighContrast = contrast == .increased
+        return theme
+    }
 
     var body: some View {
         VStack(spacing: 8) {
@@ -587,11 +630,11 @@ struct CaptureToolbar: View {
         .padding(.vertical, 8)
         .frame(width: Self.size.width, height: Self.size.height)
         .background {
-            let shape = RoundedRectangle(cornerRadius: 14, style: .continuous)
-            shape.fill(Color.black.opacity(0.92))
-                .overlay(shape.strokeBorder(Color.white.opacity(0.1)))
-                .shadow(color: .black.opacity(0.35), radius: 14, y: 6)
+            CaptureGlass(shape: RoundedRectangle(cornerRadius: 14, style: .continuous), isOverCapture: isOverCapture)
+                .shadow(color: .black.opacity(0.35), radius: 16, y: 8)
         }
+        // The tools are the notch's glass, in the user's accent.
+        .environment(\.notchTheme, theme)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Capture tools")
     }
@@ -606,22 +649,30 @@ private struct ToolbarButton: View {
     let editor: CaptureEditor
     let action: () -> Void
     @ViewState private var hovering = false
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
-        let accent = editor.accent
+        let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(isSelected ? accent : Color.white.opacity(isEnabled ? 0.88 : 0.3))
+                // Ink on the jewel, as on every accent face.
+                .foregroundStyle(isSelected ? theme.onAccent : Color.white.opacity(isEnabled ? 0.88 : 0.3))
                 .frame(width: 30, height: 30)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isSelected ? accent.opacity(0.26) : hovering && isEnabled ? Color.white.opacity(0.12) : .clear))
-                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .background {
+                    if isSelected {
+                        GlassSurface(depth: .lens(editor.accent), shape: shape, isLit: hovering)
+                    } else if hovering && isEnabled {
+                        GlassSurface(depth: .control, shape: shape)
+                    }
+                }
+                .contentShape(shape)
         }
         .buttonStyle(PressableButtonStyle(scale: 0.92))
         .disabled(!isEnabled)
         .onHover { hovering = $0 }
         .animation(.notchHighlight, value: hovering)
+        .animation(.notchToggle, value: isSelected)
         .help(key.map { "\(title) (\($0))" } ?? title)
         .accessibilityLabel(title)
         .accessibilityIdentifier("capture.\(title)")
@@ -642,13 +693,17 @@ private extension View {
     }
 }
 
+/// A groove cut into the glass between groups, like `EtchedDivider` on its side: a dark line, and
+/// beside it the groove's edge catching the light. Each a whole point, so both stay crisp at 1x.
 private struct ToolbarDivider: View {
     var body: some View {
-        Rectangle()
-            .fill(Color.white.opacity(0.14))
-            .frame(width: 1, height: 20)
-            .padding(.horizontal, 6)
-            .accessibilityHidden(true)
+        HStack(spacing: 0) {
+            Color.black.opacity(0.5).frame(width: 1)
+            Color.white.opacity(0.08).frame(width: 1)
+        }
+        .frame(height: 20)
+        .padding(.horizontal, 6)
+        .accessibilityHidden(true)
     }
 }
 
@@ -660,9 +715,11 @@ private struct ColorSwatch: View {
 
     var body: some View {
         Button(action: action) {
+            // A pearl of the color, lit from above, its edge catching the light.
             Circle()
-                .fill(color.color)
-                .overlay(Circle().strokeBorder(Color.white.opacity(0.3)))
+                .fill(color.color.gradient)
+                .overlay(Circle().strokeBorder(LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.1)],
+                                                              startPoint: .top, endPoint: .bottom)))
                 .overlay(Circle().strokeBorder(.white, lineWidth: isSelected ? 2 : 0).padding(-2.5))
                 .frame(width: 18, height: 18)
                 .padding(3)
@@ -677,7 +734,8 @@ private struct ColorSwatch: View {
     }
 }
 
-/// The stroke width, 1 to 16 points, in the toolbar's colors.
+/// The stroke width, 1 to 16 points: a fader in the toolbar's colors, a groove that fills with
+/// white and a pearl to drag, like the sliders in Settings.
 private struct WidthSlider: View {
     @Binding var value: CGFloat
     private let range: ClosedRange<CGFloat> = 1...16
@@ -688,12 +746,12 @@ private struct WidthSlider: View {
             let travel = max(1, proxy.size.width - knob)
             let fraction = (value - range.lowerBound) / (range.upperBound - range.lowerBound)
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.18)).frame(height: 4)
-                Capsule().fill(Color.white.opacity(0.7)).frame(width: knob / 2 + travel * fraction, height: 4)
+                Capsule().fill(Color.white.opacity(0.18)).frame(height: 5)
+                Capsule().fill(Color.white.opacity(0.7)).frame(width: knob / 2 + travel * fraction, height: 5)
                 Circle()
-                    .fill(.white)
+                    .fill(LinearGradient(colors: [.white, Color(white: 0.9)], startPoint: .top, endPoint: .bottom))
                     .frame(width: knob, height: knob)
-                    .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+                    .shadow(color: .black.opacity(0.3), radius: 2.5, y: 1.5)
                     .offset(x: travel * fraction)
             }
             .frame(maxHeight: .infinity)

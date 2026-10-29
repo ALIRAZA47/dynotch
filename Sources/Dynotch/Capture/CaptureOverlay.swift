@@ -18,7 +18,8 @@ final class CaptureOverlayWindow: NSPanel {
     /// Where the drag in progress began, so it stays with that until the mouse goes up.
     private var dragTarget: DragTarget?
 
-    init(display: CaptureDisplay, editor: CaptureEditor) {
+    /// `isSnapshot` draws the chrome's glass as a plain dark stand-in, for `--snapshot`.
+    init(display: CaptureDisplay, editor: CaptureEditor, isSnapshot: Bool = false) {
         self.display = display
         self.editor = editor
         super.init(contentRect: display.frame, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -33,7 +34,8 @@ final class CaptureOverlayWindow: NSPanel {
         hidesOnDeactivate = false
         animationBehavior = .none
         acceptsMouseMovedEvents = true
-        let host = CaptureHostingView(rootView: CaptureOverlayView(display: display, editor: editor))
+        let host = CaptureHostingView(rootView: CaptureOverlayView(display: display, editor: editor)
+            .environment(\.isSnapshot, isSnapshot))
         host.sizingOptions = []
         contentView = host
     }
@@ -138,7 +140,7 @@ struct CaptureOverlayView: View {
             if let selection {
                 SelectionChrome(selection: selection, accent: editor.accent, displaySize: display.size)
                 if let frame = editor.toolbarFrame(on: display.id) {
-                    CaptureToolbar(editor: editor, document: editor.document)
+                    CaptureToolbar(editor: editor, document: editor.document, isOverCapture: frame.intersects(selection))
                         .offset(x: frame.minX, y: frame.minY)
                 }
                 if editor.isEditingText, let draft = editor.draft, case .text(let origin, _) = draft.kind {
