@@ -46,8 +46,28 @@ enum Format {
 extension NSImage {
     /// The average color of the image, brightened so it reads well on black.
     func vibrantAverageColor() -> NSColor? {
+        sampledPixels().flatMap { Self.vibrantAverage(of: $0, brightest: 1) { _, _ in true } }
+    }
+
+    /// A few of the image's colors for the light behind it, brightened like `vibrantAverageColor`
+    /// but never glaring: its top-left half, its bottom-right half and the whole, so a cover that
+    /// runs from one color to another lights the notch with both.
+    func vibrantPalette() -> [NSColor] {
+        guard let pixels = sampledPixels() else { return [] }
+        let side = Self.sampleSide
+        return [
+            Self.vibrantAverage(of: pixels, brightest: 0.9) { x, y in x + y < side },
+            Self.vibrantAverage(of: pixels, brightest: 0.9) { x, y in x + y >= side },
+            Self.vibrantAverage(of: pixels, brightest: 0.9) { _, _ in true },
+        ].compactMap { $0 }
+    }
+
+    private static let sampleSide = 12
+
+    /// The image scaled down to `sampleSide` pixels square, as RGBA bytes from the top row down.
+    private func sampledPixels() -> [UInt8]? {
         guard let cgImage = cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
-        let side = 12
+        let side = Self.sampleSide
         var pixels = [UInt8](repeating: 0, count: side * side * 4)
         let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
             guard let context = CGContext(data: buffer.baseAddress, width: side, height: side, bitsPerComponent: 8,
@@ -57,10 +77,15 @@ extension NSImage {
             context.draw(cgImage, in: CGRect(x: 0, y: 0, width: side, height: side))
             return true
         }
-        guard drawn else { return nil }
+        return drawn ? pixels : nil
+    }
 
+    /// The average of the pixels at the columns and rows `includes` picks, brightened for black,
+    /// with its HSB brightness no higher than `brightest`.
+    private static func vibrantAverage(of pixels: [UInt8], brightest: CGFloat,
+                                       includes: (_ x: Int, _ y: Int) -> Bool) -> NSColor? {
         var red = 0.0, green = 0.0, blue = 0.0, weight = 0.0
-        for index in stride(from: 0, to: pixels.count, by: 4) {
+        for index in stride(from: 0, to: pixels.count, by: 4) where includes(index / 4 % sampleSide, index / 4 / sampleSide) {
             let r = Double(pixels[index]) / 255, g = Double(pixels[index + 1]) / 255, b = Double(pixels[index + 2]) / 255
             // Favor saturated pixels so a colorful cover doesn't average out to gray.
             let saturation = max(r, g, b) - min(r, g, b)
@@ -71,8 +96,9 @@ extension NSImage {
         let average = NSColor(srgbRed: red / weight, green: green / weight, blue: blue / weight, alpha: 1)
         var hue: CGFloat = 0, saturation: CGFloat = 0, brightness: CGFloat = 0, alpha: CGFloat = 0
         average.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
-        if saturation < 0.12 { return NSColor(white: 0.92, alpha: 1) }
-        return NSColor(hue: hue, saturation: min(1, saturation * 1.15 + 0.1), brightness: max(0.75, brightness), alpha: 1)
+        if saturation < 0.12 { return NSColor(white: min(0.92, brightest), alpha: 1) }
+        return NSColor(hue: hue, saturation: min(1, saturation * 1.15 + 0.1),
+                       brightness: min(brightest, max(0.75, brightness)), alpha: 1)
     }
 }
 
@@ -117,6 +143,14 @@ extension Animation {
     static let notchTab = Animation.spring(response: 0.32, dampingFraction: 0.82)
     /// A highlight under the pointer coming and going.
     static let notchHighlight = Animation.easeOut(duration: 0.12)
+    /// A tile or a lens turning on or off: plain glass and the accent's jewel cross-fade.
+    static let notchToggle = Animation.easeOut(duration: 0.15)
+
+    /// Something rising to meet the pointer or a drag, like a targeted drop zone or a switch's knob,
+    /// with a little overshoot. With Reduce Motion it just eases there.
+    static func notchLift(reduceMotion: Bool) -> Animation {
+        reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.7)
+    }
 }
 
 enum Shell {

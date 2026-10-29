@@ -44,6 +44,8 @@ enum SnapshotRenderer {
         var secondary: CompactActivity?
         var tab: NotchTab = .home
         var draggingFiles = false
+        /// One drop target has the files over it. See `snapshotDrop`.
+        var targetsDrop = false
         var hasTrack = true
         var micMuted = false
         var micInUse = false
@@ -75,6 +77,9 @@ enum SnapshotRenderer {
     }
 
     static func render(into folder: URL, only prefixes: [String] = []) {
+        #if DEBUG
+        NotchAccent.checkContrast()
+        #endif
         only = prefixes
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         PowerMonitor.shared.start()
@@ -142,6 +147,7 @@ enum SnapshotRenderer {
             Scene(name: "19-open-tray-teal-square", phase: .open, tab: .tray,
                   theme: NotchTheme(accent: .teal, topRadius: 8, bottomRadius: 18),
                   setUp: { TrayStore.shared.select(TrayStore.shared.items[1]) }),
+        ] + accentScenes() + [
             Scene(name: "20-closed-timer-and-music", phase: .closed, activity: .timer, secondary: .music),
             Scene(name: "21-closed-volume-and-timer", phase: .closed, activity: .notice(volume), secondary: .timer),
             Scene(name: "22-closed-track-peek-and-timer", phase: .closed, activity: .trackPeek, secondary: .timer),
@@ -278,9 +284,12 @@ enum SnapshotRenderer {
             }
             .frame(width: size.width, height: height)
             .environment(\.isSnapshot, true)
+            .environment(\.snapshotDrop, scene.targetsDrop ? SnapshotDrop() : nil)
 
             let renderer = ImageRenderer(content: content)
             renderer.scale = 2
+            // A drop target takes the drop as it appears, so it shows targeted from the second frame on.
+            if scene.targetsDrop { _ = renderer.cgImage }
             guard let image = renderer.cgImage,
                   let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else { continue }
             if (try? png.write(to: folder.appendingPathComponent(scene.name + ".png"))) != nil { written += 1 }
@@ -681,6 +690,21 @@ enum SnapshotRenderer {
                 .init(id: "c", title: "Water the plants", dueDate: nil, color: .green),
                 .init(id: "e", title: "Renew the passport", dueDate: nil, color: .purple),
             ])
+    }
+
+    /// Ink on each accent: the Control tab, its jewel and the Dark tile, which is on while the Mac is
+    /// in dark mode; on glass for the lightest and the greyest accent; and a drop zone with files over it.
+    private static func accentScenes() -> [Scene] {
+        NotchAccent.allCases.map { accent in
+            Scene(name: "accent-\(accent.rawValue)-control", phase: .open, tab: .stats, theme: NotchTheme(accent: accent))
+        } + [
+            Scene(name: "accent-yellow-control-glass", phase: .open, tab: .stats,
+                  theme: NotchTheme(material: .glass, accent: .yellow)),
+            Scene(name: "accent-graphite-control-glass", phase: .open, tab: .stats,
+                  theme: NotchTheme(material: .glass, accent: .graphite)),
+            Scene(name: "accent-yellow-tray-dropping", phase: .open, tab: .tray, draggingFiles: true, targetsDrop: true,
+                  theme: NotchTheme(accent: .yellow)),
+        ]
     }
 
     /// Each tab at the smallest and the largest open size the settings allow, with more in every

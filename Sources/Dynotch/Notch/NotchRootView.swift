@@ -8,10 +8,17 @@ struct NotchRootView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The system's appearance, read before the notch sets its own: the menu bar follows it.
     @Environment(\.colorScheme) private var menuBarScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    /// The user's look, with the system's Increase Contrast.
+    private var theme: NotchTheme {
+        var theme = settings.theme
+        theme.isHighContrast = contrast == .increased
+        return theme
+    }
 
     var body: some View {
         let metrics = viewModel.metrics
-        let theme = settings.theme
         let isLine = viewModel.isLine
         VStack(spacing: 0) {
             ZStack(alignment: .top) {
@@ -38,7 +45,8 @@ struct NotchRootView: View {
             .padding(.horizontal, metrics.topRadius)
             .background {
                 NotchSurface(isGlass: viewModel.isOpen && theme.isGlass, topRadius: metrics.topRadius,
-                             bottomRadius: metrics.bottomRadius, bandHeight: viewModel.geometry.closedSize.height)
+                             bottomRadius: metrics.bottomRadius, bandHeight: viewModel.geometry.closedSize.height,
+                             chamfer: viewModel.isOpen)
                 // Black fades into a light menu bar; a dark one needs the line a shade lighter than itself.
                 if isLine, menuBarScheme == .dark {
                     Color.white.opacity(0.55)
