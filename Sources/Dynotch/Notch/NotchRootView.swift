@@ -107,6 +107,7 @@ struct ClosedNotchView: View {
     @ObservedObject private var timer = PomodoroTimer.shared
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.notchTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let layout = viewModel.closedLayout
@@ -121,7 +122,7 @@ struct ClosedNotchView: View {
                     if let secondary = viewModel.secondary {
                         CompactActivityView(activity: secondary)
                             .frame(width: ClosedLayout.glyphSize, height: ClosedLayout.glyphSize)
-                            .transition(.scale(scale: 0.5).combined(with: .opacity))
+                            .transition(arrival(from: 0.5))
                     }
                 }
                 .padding(.trailing, 11)
@@ -129,7 +130,10 @@ struct ClosedNotchView: View {
             }
             if layout.rowHeight > 0 {
                 detailRow
-                    .padding(.horizontal, 16)
+                    // The peek's title is semibold, a few points wider than a medium line, so its
+                    // row gets 2 points more each side and cuts off no sooner. `ClosedLayout`
+                    // widens a notice's row for 16.
+                    .padding(.horizontal, viewModel.activity == .trackPeek ? 14 : 16)
                     .frame(height: layout.rowHeight, alignment: .top)
             }
         }
@@ -143,6 +147,12 @@ struct ClosedNotchView: View {
         settings.artworkTint ? Color(nsColor: media.accent) : theme.accent
     }
 
+    /// How a glyph comes into an ear: growing from `scale` as it fades in, or only fading with
+    /// Reduce Motion, as the notch itself does.
+    private func arrival(from scale: CGFloat) -> AnyTransition {
+        reduceMotion ? .opacity : .scale(scale: scale).combined(with: .opacity)
+    }
+
     @ViewBuilder
     private var leading: some View {
         switch viewModel.activity {
@@ -150,7 +160,7 @@ struct ClosedNotchView: View {
             EmptyView()
         case .music, .trackPeek:
             ArtworkView(image: media.artwork, size: viewModel.geometry.closedSize.height - 12, cornerRadius: 6)
-                .transition(.scale(scale: 0.6).combined(with: .opacity))
+                .transition(arrival(from: 0.6))
         case .timer:
             ProgressRing(progress: timer.progress, color: timer.phase.color, lineWidth: 2.6)
                 .frame(width: 17, height: 17)
@@ -184,8 +194,7 @@ struct ClosedNotchView: View {
                 .frame(width: 20, height: 14)
         case .timer:
             Text(Format.duration(timer.remaining))
-                .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+                .font(NotchFont.numeric(12.5))
                 .foregroundStyle(timer.phase.color)
         case .notice(let notice):
             switch notice.kind {
@@ -193,11 +202,7 @@ struct ClosedNotchView: View {
                 LevelBar(level: level)
                     .frame(width: 62, height: 5)
             case .info:
-                Text(notice.text)
-                    .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(notice.tint)
-                    .lineLimit(1)
+                NoticeText(text: notice.text, tint: notice.tint)
             }
         case .countdown(let countdown):
             CountdownTime(countdown: countdown)
@@ -213,13 +218,11 @@ struct ClosedNotchView: View {
         switch viewModel.activity {
         case .trackPeek:
             if let track = media.track {
-                Text(track.artist.isEmpty ? track.title : "\(track.title) · \(track.artist)")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.85))
-                    .lineLimit(1)
+                TrackPeekLine(title: track.title, artist: track.artist)
             }
         case .notice(let notice):
             if let detail = notice.detail {
+                // `ClosedLayout` widens the notch for this face, up to `maxRowWidth`.
                 Text(detail)
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(.white.opacity(0.85))
@@ -228,6 +231,69 @@ struct ClosedNotchView: View {
         default:
             EmptyView()
         }
+    }
+}
+
+/// The track peek's line under the camera: the title carries it, and the artist sits back a step.
+/// One line, cut off at the end when the row runs out of room. The settings stage draws it too,
+/// at its `scale`.
+struct TrackPeekLine: View {
+    let title: String
+    let artist: String
+    var scale: CGFloat = 1
+    @Environment(\.notchTheme) private var theme
+
+    var body: some View {
+        let titleRun = Text(title)
+            .font(.system(size: 12 * scale, weight: .semibold))
+            .foregroundStyle(theme.primary)
+        let artistRun = Text(artist.isEmpty ? "" : " · \(artist)")
+            .font(.system(size: 12 * scale, weight: .medium))
+            .foregroundStyle(.white.opacity(0.55))
+        // One text, so VoiceOver reads the line as before and it truncates as a whole.
+        Text("\(titleRun)\(artistRun)")
+            .lineLimit(1)
+    }
+}
+
+/// A notice's word in the right ear, in the notice's color. A color too dark to read on the black,
+/// like a deep calendar color, a picked color or a script's tint, is lifted toward white just far
+/// enough to reach 4.5:1; the symbol beside the camera keeps it exactly. A view of its own, so the
+/// lift is worked out when the notice changes, not each time the notch redraws.
+private struct NoticeText: View {
+    let text: String
+    let tint: Color
+    @Environment(\.self) private var environment
+
+    /// 4.6:1 on black, (L + 0.05) / 0.05: a little over WCAG's 4.5, so rounding can't drop under it.
+    private static let minimumLuminance = 0.18
+
+    var body: some View {
+        // `ClosedLayout` sizes the ear for this face, at 7.5 points a character.
+        Text(text)
+            .font(NotchFont.numeric(12.5))
+            .foregroundStyle(legibleTint)
+            .lineLimit(1)
+    }
+
+    private var legibleTint: Color {
+        let resolved = tint.resolve(in: environment)
+        // As it shows on the black: sRGB values seen through the tint's own opacity.
+        let shown = [resolved.red, resolved.green, resolved.blue].map { Double(min(max($0, 0), 1) * resolved.opacity) }
+        guard Self.luminance(shown) < Self.minimumLuminance else { return tint }
+        var low = 0.0, high = 1.0
+        for _ in 0..<12 {
+            let mix = (low + high) / 2
+            if Self.luminance(shown.map { $0 + (1 - $0) * mix }) < Self.minimumLuminance { low = mix } else { high = mix }
+        }
+        let lifted = shown.map { $0 + (1 - $0) * high }
+        return Color(.sRGB, red: lifted[0], green: lifted[1], blue: lifted[2])
+    }
+
+    /// WCAG's relative luminance of sRGB values.
+    private static func luminance(_ rgb: [Double]) -> Double {
+        let linear = rgb.map { $0 <= 0.04045 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
     }
 }
 

@@ -1,17 +1,20 @@
 import SwiftUI
 
-/// The left ear while a named timer has the notch: its ring and its name.
+/// The left ear while a named timer has the notch: its ring and its name. The name is white, so
+/// the amber stays the timer's own: its ring and its time.
 struct CountdownLabel: View {
     let countdown: Countdown
     @ObservedObject private var store = TimerStore.shared
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         HStack(spacing: 6) {
             ProgressRing(progress: countdown.progress(at: store.now), color: TimerStore.tint, lineWidth: 2.6)
                 .frame(width: 17, height: 17)
+            // `ClosedLayout` sizes the ear for this face, at 7 points a letter.
             Text(countdown.name)
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.85))
+                .foregroundStyle(theme.primary)
                 .lineLimit(1)
         }
     }
@@ -24,8 +27,7 @@ struct CountdownTime: View {
 
     var body: some View {
         Text(Format.duration(countdown.remaining(at: store.now).rounded(.up)))
-            .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-            .monospacedDigit()
+            .font(NotchFont.numeric(12.5))
             .foregroundStyle(TimerStore.tint)
     }
 }
@@ -36,8 +38,7 @@ struct StopwatchTime: View {
 
     var body: some View {
         Text(Format.duration(store.stopwatch.elapsed(at: store.now)))
-            .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-            .monospacedDigit()
+            .font(NotchFont.numeric(12.5))
             .foregroundStyle(TimerStore.stopwatchTint)
     }
 }

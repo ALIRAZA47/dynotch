@@ -1,40 +1,26 @@
 import SwiftUI
 
-/// A download's ring: how much has arrived, or a turning arc while the size isn't known.
+/// A download's ring: how much has arrived, or an arc turning round it while the size isn't known.
+/// The arc turns in Core Animation, so the app doesn't wake for each frame.
 struct DownloadRing: View {
     var fraction: Double?
     var lineWidth: CGFloat = 2.6
     var arrowSize: CGFloat = 7
+    /// A faint, wider copy of the arc under it (`ProgressRing.halo`), for the glance's ring. The
+    /// closed notch's rings stay plain. The turning arc has none.
+    var halo = false
 
     var body: some View {
         ZStack {
             if let fraction {
-                ProgressRing(progress: fraction, color: DownloadMonitor.tint, lineWidth: lineWidth)
+                ProgressRing(progress: fraction, color: DownloadMonitor.tint, lineWidth: lineWidth, halo: halo)
             } else {
-                TurningArc(color: DownloadMonitor.tint, lineWidth: lineWidth)
+                SpinningArc(color: DownloadMonitor.tint, lineWidth: lineWidth)
             }
             Image(systemName: "arrow.down")
                 .font(.system(size: arrowSize, weight: .black))
                 .foregroundStyle(DownloadMonitor.tint)
         }
-    }
-}
-
-private struct TurningArc: View {
-    let color: Color
-    let lineWidth: CGFloat
-    @ViewState private var turning = false
-
-    var body: some View {
-        ZStack {
-            Circle().stroke(color.opacity(0.22), lineWidth: lineWidth)
-            Circle()
-                .trim(from: 0, to: 0.28)
-                .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                .rotationEffect(.degrees(turning ? 360 : 0))
-                .animation(.linear(duration: 1.2).repeatForever(autoreverses: false), value: turning)
-        }
-        .onAppear { turning = true }
     }
 }
 
@@ -54,8 +40,7 @@ struct DownloadAmount: View {
 
     var body: some View {
         Text(Self.text(fraction: monitor.fraction, received: monitor.received))
-            .font(.system(size: 12.5, weight: .semibold, design: .rounded))
-            .monospacedDigit()
+            .font(NotchFont.numeric(12.5))
             .foregroundStyle(DownloadMonitor.tint)
     }
 
