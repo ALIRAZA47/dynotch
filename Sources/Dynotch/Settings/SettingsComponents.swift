@@ -796,7 +796,8 @@ struct CapsuleButton: View {
             .overlay(Capsule().strokeBorder(rim))
             // In dark mode a prominent button glows with the accent, like a switch that's on.
             .shadow(color: accent.color.opacity(look == .prominent && isDark ? 0.3 : 0), radius: 8)
-            .brightness(hovering && isEnabled ? 0.04 : 0)
+            // A light-mode prominent button darkens under the pointer instead, so its white label keeps 4.5:1.
+            .brightness(hovering && isEnabled ? (look == .prominent && !isDark ? -0.04 : 0.04) : 0)
             .contentShape(Capsule())
         }
         .buttonStyle(PressableButtonStyle())
