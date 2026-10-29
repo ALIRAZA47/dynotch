@@ -200,27 +200,27 @@ enum SnapshotRenderer {
             // Widgets and the Tray
             Scene(name: "90-closed-screenshot", phase: .closed, activity: .notice(LiveNotice(
                 key: "screenshot", symbol: "camera.viewfinder", tint: .white, detail: "Screenshot added to the Tray"))),
-            Scene(name: "91-open-control-bluetooth", phase: .open, tab: .stats) {
+            Scene(name: "91-open-control-bluetooth", phase: .open, tab: .stats, prepare: {
                 DeviceBatteryMonitor.shared.loadSample([], paired: samplePairedDevices,
                                                        connections: ["beats": .connecting, "speaker": .failed("Not in range")])
-            },
-            Scene(name: "92-open-tray-selected", phase: .open, tab: .tray) {
+            }),
+            Scene(name: "92-open-tray-selected", phase: .open, tab: .tray, prepare: {
                 TrayStore.shared.select(TrayStore.shared.items[1])
-            },
+            }),
             // The Tray on glass, in the palest accent: its dimmest text, and a file name on the tint.
             Scene(name: "92-open-tray-selected-glass", phase: .open, tab: .tray,
                   theme: NotchTheme(material: .glass, accent: .yellow),
                   setUp: { TrayStore.shared.select(TrayStore.shared.items[1]) }),
-            Scene(name: "93-open-nook-weather-notes", phase: .open, tab: .home) {
+            Scene(name: "93-open-nook-weather-notes", phase: .open, tab: .home, prepare: {
                 (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.weather, .notes)
                 WeatherService.shared.loadSample(place: "Lisbon", conditions: .init(
                     temperature: 18.4, high: 21.2, low: 12.6, code: 2, isDay: true, isRaining: false,
                     rainStart: .now.addingTimeInterval(20 * 60), isHeavyRain: false))
-            },
-            Scene(name: "94-open-nook-weather-setup", phase: .open, tab: .home) {
+            }),
+            Scene(name: "94-open-nook-weather-setup", phase: .open, tab: .home, prepare: {
                 (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.weather, .devices)
                 WeatherService.shared.loadSample(place: "", conditions: nil)
-            },
+            }),
             Scene(name: "95-closed-rain", phase: .closed, activity: .notice(LiveNotice(
                 key: "rain", symbol: "cloud.rain.fill", tint: .cyan, text: "in 15m", detail: "Rain starting soon"))),
             // The command field, empty and with something typed.

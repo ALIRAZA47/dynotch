@@ -185,6 +185,9 @@ private struct AddFilesTile: View {
         .onHover { hovering = $0 }
         .animation(.notchHighlight, value: hovering)
         .help("Add files to the Tray")
+        // VoiceOver reads it last, after every file's size. A compact tile's size, read but not drawn,
+        // sits below the tile, so going by position alone VoiceOver would read it after this one.
+        .accessibilitySortPriority(-1)
     }
 }
 
@@ -203,25 +206,16 @@ private struct TrayItemView: View {
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: theme.controlRadius, style: .continuous)
         VStack(spacing: 5) {
-            Image(nsImage: thumbnails.image(for: item.url))
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: 56, height: fit.thumbnailHeight)
-                .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
-            Text(item.url.lastPathComponent)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(theme.primary)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
-                .truncationMode(.middle)
-                .frame(width: 88, height: 28, alignment: .top)
-            if !fit.isCompact {
-                // On the accent's light, tertiary reads under 4.5:1 (yellow over Liquid Glass), so the
-                // size steps up to secondary there.
-                Text(detail ?? " ")
-                    .font(NotchFont.caption)
-                    .foregroundStyle(isSelected ? theme.secondary : theme.tertiary)
-                    .lineLimit(1)
+            thumbnail
+            name
+            if !fit.isCompact { size }
+        }
+        // A compact tile has no room for the size, but VoiceOver reads it there as on a whole tile.
+        .accessibilityRepresentation {
+            VStack(spacing: 5) {
+                thumbnail
+                name
+                size
             }
         }
         .padding(.vertical, 6)
@@ -264,6 +258,33 @@ private struct TrayItemView: View {
         }
         .contextMenu { TrayItemMenu(item: item) }
         .help(item.url.path)
+    }
+
+    private var thumbnail: some View {
+        Image(nsImage: thumbnails.image(for: item.url))
+            .resizable()
+            .aspectRatio(contentMode: .fit)
+            .frame(width: 56, height: fit.thumbnailHeight)
+            .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
+    }
+
+    private var name: some View {
+        Text(item.url.lastPathComponent)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(theme.primary)
+            .multilineTextAlignment(.center)
+            .lineLimit(2)
+            .truncationMode(.middle)
+            .frame(width: 88, height: 28, alignment: .top)
+    }
+
+    /// The file's size, or that it's a folder. On the accent's light, tertiary reads under 4.5:1
+    /// (yellow over Liquid Glass), so the size steps up to secondary there.
+    private var size: some View {
+        Text(detail ?? " ")
+            .font(NotchFont.caption)
+            .foregroundStyle(isSelected ? theme.secondary : theme.tertiary)
+            .lineLimit(1)
     }
 }
 
