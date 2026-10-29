@@ -55,6 +55,17 @@ enum Palette {
                                                     .init(color: rimShade, location: 1)],
                                             startPoint: .top, endPoint: .bottom)
 
+    /// Second-level text: details, footers, readouts. Dark mode keeps the system's secondary label
+    /// color. In light mode the system's, black at half strength, reads under 4.5:1 on the cards and
+    /// the sidebar, so it's a firmer black, firmer still with Increase Contrast. Give it to the text
+    /// itself: on macOS a `Text`'s `.secondary` ignores a second level set higher up.
+    static let secondaryText = Color(nsColor: NSColor(name: nil) { appearance in
+        let match = appearance.bestMatch(from: [.aqua, .darkAqua, .accessibilityHighContrastAqua,
+                                                .accessibilityHighContrastDarkAqua])
+        if match == .darkAqua || match == .accessibilityHighContrastDarkAqua { return .secondaryLabelColor }
+        return NSColor(white: 0, alpha: match == .accessibilityHighContrastAqua ? 0.75 : 0.62)
+    })
+
     // MARK: Stage
 
     /// The sky of the header above every page and the welcome tour, top to bottom. It's light or dark
@@ -192,7 +203,7 @@ struct SettingsSection<Content: View>: View {
                 if let trailing {
                     Text(trailing)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.secondaryText)
                         .monospacedDigit()
                 }
             }
@@ -201,7 +212,7 @@ struct SettingsSection<Content: View>: View {
             if let footer {
                 Text(footer)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 4)
             }
@@ -428,7 +439,7 @@ struct SwitchTile: View {
                         .foregroundStyle(.primary)
                     Text(detail)
                         .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
@@ -464,7 +475,7 @@ struct ActionTile: View {
                         .foregroundStyle(.primary)
                     Text(detail)
                         .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.secondaryText)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
@@ -503,7 +514,7 @@ struct SwitchRow: View {
                     if let detail {
                         Text(detail)
                             .font(.system(size: 11.5))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -542,7 +553,7 @@ struct ChoiceTile<Art: View>: View {
                     if let detail {
                         Text(detail)
                             .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.secondaryText)
                     }
                 }
                 .multilineTextAlignment(.center)
@@ -710,7 +721,7 @@ struct NumberDial: View {
                 Circle().fill(tint ?? accent.color).frame(width: 7, height: 7)
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                     .lineLimit(1)
             }
             HStack(alignment: .firstTextBaseline, spacing: 4) {
@@ -720,7 +731,7 @@ struct NumberDial: View {
                     .contentTransition(.numericText(value: Double(value)))
                 Text(unit)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
             }
             HStack(spacing: 6) {
                 DialButton(symbol: "minus", isEnabled: value > range.lowerBound) { change(by: -step) }

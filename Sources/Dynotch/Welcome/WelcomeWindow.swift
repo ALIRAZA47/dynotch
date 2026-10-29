@@ -261,7 +261,7 @@ private struct InfoTileView: View {
                     .font(.system(size: 13, weight: .semibold))
                 Text(tile.detail)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
@@ -408,7 +408,7 @@ private struct DoneStep: View {
                             .font(.system(size: 13, weight: .medium))
                         Text("Move away, or press Esc, and it closes again.")
                             .font(.system(size: 11.5))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.secondaryText)
                     }
                     .accessibilityElement(children: .combine)
                     Spacer(minLength: 12)
@@ -431,7 +431,7 @@ private struct DoneStep: View {
                     .font(.system(size: 13, weight: .medium))
                 Text(detail)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
             }
             .accessibilityElement(children: .combine)
             Spacer(minLength: 12)

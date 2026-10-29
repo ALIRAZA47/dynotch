@@ -190,7 +190,7 @@ private struct SettingsSidebar: View {
                         .font(.system(size: 15, weight: .bold))
                     Text("Settings")
                         .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.secondaryText)
                 }
             }
             .padding(.horizontal, 8)

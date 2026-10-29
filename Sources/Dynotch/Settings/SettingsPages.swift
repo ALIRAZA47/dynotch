@@ -69,7 +69,7 @@ private struct SliderRow: View {
             Text(format(value))
                 .font(.system(size: 12.5, weight: .semibold, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.secondaryText)
                 .frame(width: 56, alignment: .trailing)
                 .accessibilityHidden(true)
         }
@@ -804,7 +804,7 @@ private struct NotesFolderCard: View {
                         .font(.system(size: 13, weight: .medium))
                     Text(Self.describe(store.folder))
                         .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.secondaryText)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -812,7 +812,7 @@ private struct NotesFolderCard: View {
                 Spacer(minLength: 12)
                 Text(store.notes.filter(\.isOnDisk).count == 1 ? "1 note" : "\(store.notes.filter(\.isOnDisk).count) notes")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                     .monospacedDigit()
             }
             .padding(.horizontal, 14)
@@ -880,7 +880,7 @@ private struct WeatherSettings: View {
                         CardDivider()
                         Text("No places found")
                             .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.secondaryText)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
                     }
@@ -912,7 +912,7 @@ private struct WeatherSettings: View {
                     .font(.system(size: 13, weight: .medium))
                 Text(settings.weatherPlace.isEmpty ? "None yet" : settings.weatherPlace)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                     .lineLimit(1)
             }
             .accessibilityElement(children: .combine)
@@ -1016,7 +1016,7 @@ private struct PlaceRow: View {
                     if !place.region.isEmpty {
                         Text(place.region)
                             .font(.system(size: 11.5))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.secondaryText)
                     }
                 }
                 Spacer(minLength: 12)
@@ -1077,7 +1077,7 @@ private struct ShortcutPins: View {
             if names.isEmpty {
                 Text("No shortcuts found.")
                     .font(.system(size: 12.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                     .frame(maxWidth: .infinity, minHeight: 44)
             } else {
                 FlowLayout(spacing: 7) {
@@ -1205,7 +1205,7 @@ struct TraySettings: View {
                             .contentTransition(.numericText(value: Double(tray.items.count)))
                         Text(tray.items.isEmpty ? "Drop files on the notch to park them here." : "Parked in the notch for later.")
                             .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.secondaryText)
                     }
                     .accessibilityElement(children: .combine)
                     Spacer(minLength: 10)
@@ -1232,7 +1232,7 @@ private struct CaptureActionRow: View {
                     .font(.system(size: 13, weight: .medium))
                 Text("What Return does once a region is selected")
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
             }
             .accessibilityElement(children: .combine)
             Spacer(minLength: 12)
@@ -1332,7 +1332,7 @@ struct AboutSettings: View {
                         .font(.system(size: 26, weight: .bold))
                     Text("Version \(UpdateChecker.currentVersion)")
                         .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.secondaryText)
                 }
                 Text("Music, files, your calendar, a focus timer and more, one hover away.")
                     .font(.system(size: 13))
@@ -1340,7 +1340,7 @@ struct AboutSettings: View {
                     .frame(maxWidth: 360)
                 Text("Inspired by NotchNook and MacNotch.")
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                 CapsuleButton(title: "Welcome Tour", symbol: "sparkles") { WelcomeWindowController.shared.show() }
                     .padding(.top, 4)
             }
@@ -1383,7 +1383,7 @@ struct AboutSettings: View {
                         Text(focus.access == .denied ? "Needs Full Disk Access, under Permissions"
                              : "What the Focus settings hold, and which Focus Dynotch makes of them")
                             .font(.system(size: 11.5))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .accessibilityElement(children: .combine)
@@ -1415,7 +1415,7 @@ private struct ShortcutRow: View {
             .frame(width: 104, alignment: .leading)
             Text(action)
                 .font(.system(size: 12.5))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.secondaryText)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)

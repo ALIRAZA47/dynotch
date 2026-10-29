@@ -50,7 +50,7 @@ private struct IntroRow: View {
                     .font(.system(size: 13, weight: .medium))
                 Text("Work, Home, Presenting: a profile switches the notch's tabs, widgets and live activities together, from the menu bar, a dynotch:// link, or by itself when a Focus turns on or a display connects.")
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .combine)
@@ -82,7 +82,7 @@ private struct ProfileRow: View {
                 }
                 Text(detail)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(needsDiskAccess ? AnyShapeStyle(Self.warning) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(needsDiskAccess ? AnyShapeStyle(Self.warning) : AnyShapeStyle(Palette.secondaryText))
                     .lineLimit(1)
             }
             .accessibilityElement(children: .combine)

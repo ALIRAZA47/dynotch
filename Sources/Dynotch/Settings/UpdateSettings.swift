@@ -36,7 +36,7 @@ private struct UpdateRow: View {
                     .foregroundStyle(.primary)
                 Text(detail)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                 if case .available = status, case .downloading(let fraction) = installer.state {
                     // The accent's groove once the size is known; until then, the system's small bar.

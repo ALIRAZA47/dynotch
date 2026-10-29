@@ -246,7 +246,7 @@ struct PermissionRow: View {
                     .font(.system(size: 13, weight: .medium))
                 Text(item.purpose)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
             }
             .accessibilityElement(children: .combine)
             Spacer(minLength: 12)
@@ -264,7 +264,7 @@ struct PermissionRow: View {
             case .unavailable(let reason):
                 Text(reason)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
             }
         }
         .padding(.horizontal, 14)

@@ -44,7 +44,7 @@ private struct AccessCard: View {
                      ? "This version of macOS keeps them somewhere Dynotch doesn't know."
                      : "Notification Center's list is only open to apps with Full Disk Access. Add Dynotch there, then come back.")
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .combine)
