@@ -453,7 +453,7 @@ enum SnapshotRenderer {
                                          styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
             let navigation = SettingsNavigation()
             navigation.page = .general
-            SettingsWindowController.configure(window, navigation: navigation)
+            SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
             window.appearance = NSAppearance(named: appearance)
             window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -40_000))
             window.orderFrontRegardless()
@@ -481,7 +481,7 @@ enum SnapshotRenderer {
                                              styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
                 let navigation = SettingsNavigation()
                 navigation.page = page
-                SettingsWindowController.configure(window, navigation: navigation)
+                SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
                 window.appearance = NSAppearance(named: appearance)
                 // A fresh spot for every window, so the window server never shows a stale one.
                 window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(count) * 1_000, y: -20_000))
@@ -524,7 +524,7 @@ enum SnapshotRenderer {
             let navigation = SettingsNavigation()
             navigation.page = .activities
             navigation.spotlight = kind
-            SettingsWindowController.configure(window, navigation: navigation)
+            SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
             window.appearance = NSAppearance(named: .darkAqua)
             window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -30_000))
             window.orderFrontRegardless()
@@ -551,7 +551,7 @@ enum SnapshotRenderer {
                                          styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
             let navigation = SettingsNavigation()
             navigation.page = .appearance
-            SettingsWindowController.configure(window, navigation: navigation)
+            SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
             window.appearance = NSAppearance(named: look.appearance)
             window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -40_000))
             window.orderFrontRegardless()
