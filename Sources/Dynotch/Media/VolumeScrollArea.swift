@@ -58,11 +58,16 @@ struct ArtworkVolumeOverlay: View {
     @ObservedObject private var volume = VolumeMonitor.shared
 
     var body: some View {
+        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         ZStack {
             if volume.isChanging {
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                shape
                     .fill(.ultraThinMaterial)
-                    .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(Color.black.opacity(0.45)))
+                    .overlay(shape.fill(Color.black.opacity(0.45)))
+                    // The art's glass rim stays lit over the frosting, so the volume reads as the
+                    // same pane of glass, frosted for a moment.
+                    .overlay(shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.4), .white.opacity(0.05)],
+                                                               startPoint: .top, endPoint: .bottom), lineWidth: 1))
                 VStack(spacing: 9) {
                     Image(systemName: volume.symbol)
                         .font(.system(size: 21, weight: .semibold))
