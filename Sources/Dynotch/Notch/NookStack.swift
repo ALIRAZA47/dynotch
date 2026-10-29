@@ -29,9 +29,9 @@ struct NookStack: View {
                 .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: forward ? 12 : -12)),
                                         removal: .opacity.animation(.easeOut(duration: 0.1))))
                 .overlay(alignment: .trailing) {
+                    // Centered in the card's trailing padding, so the dots never touch what's in the card.
                     if widgets.count > 1 {
                         pager(shown: shown)
-                            .padding(.trailing, 4)
                     }
                 }
                 .onChange(of: urgent) { _, widget in

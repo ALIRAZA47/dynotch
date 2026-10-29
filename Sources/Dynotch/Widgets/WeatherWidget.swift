@@ -51,7 +51,8 @@ private struct ConditionsView: View {
                     .font(.system(size: 26))
                     .frame(width: 34)
                 Text(WeatherService.format(conditions.temperature, units: units))
-                    .font(NotchFont.numeric(30))
+                    .font(NotchFont.figure(30))
+                    .foregroundStyle(theme.primary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }

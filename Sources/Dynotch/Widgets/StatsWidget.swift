@@ -7,8 +7,9 @@ struct SystemFooter: View {
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
-        VStack(spacing: 7) {
-            theme.divider.frame(height: 1)
+        // The etched line is a point taller than a hairline, so the gap under it is a point less.
+        VStack(spacing: 6) {
+            EtchedDivider()
             HStack(spacing: 0) {
                 Text("CPU \(Int((monitor.cpu * 100).rounded()))%")
                     .foregroundStyle(monitor.cpu > 0.85 ? Color.orange : theme.tertiary)
@@ -20,7 +21,7 @@ struct SystemFooter: View {
                     .foregroundStyle(theme.tertiary)
                     .layoutPriority(1)
             }
-            .font(NotchFont.numeric(10))
+            .font(NotchFont.numeric(10.5))
             .minimumScaleFactor(0.85)
             .labelStyle(CompactLabelStyle())
             .lineLimit(1)
