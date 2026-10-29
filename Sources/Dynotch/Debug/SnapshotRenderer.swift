@@ -207,6 +207,10 @@ enum SnapshotRenderer {
             Scene(name: "92-open-tray-selected", phase: .open, tab: .tray) {
                 TrayStore.shared.select(TrayStore.shared.items[1])
             },
+            // The Tray on glass, in the palest accent: its dimmest text, and a file name on the tint.
+            Scene(name: "92-open-tray-selected-glass", phase: .open, tab: .tray,
+                  theme: NotchTheme(material: .glass, accent: .yellow),
+                  setUp: { TrayStore.shared.select(TrayStore.shared.items[1]) }),
             Scene(name: "93-open-nook-weather-notes", phase: .open, tab: .home) {
                 (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.weather, .notes)
                 WeatherService.shared.loadSample(place: "Lisbon", conditions: .init(
@@ -238,6 +242,7 @@ enum SnapshotRenderer {
                 let lunch = CalendarService.shared.events.filter { $0.title == "Lunch with Sam" }
                 CalendarService.shared.loadSample(events: lunch, reminders: CalendarService.shared.reminders)
             }),
+        ] + widgetScenes() + [
             // The other widgets beside the player, busy cards and empty ones. These change the samples, so they go last.
             Scene(name: "96-open-nook-timer-toggles", phase: .open, tab: .home, prepare: {
                 (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.timer, .toggles)
@@ -318,7 +323,8 @@ enum SnapshotRenderer {
         let editor = CaptureEditor(displays: [display], accent: AppSettings.shared.theme.accent)
         let selection = CGRect(x: 118, y: 150, width: 700, height: 430)
         editor.stage(selection: selection, on: display.id)
-        let window = CaptureOverlayWindow(display: display, editor: editor)
+        // The chrome's glass as its black 0.85 stand-in, so the images don't depend on the glass.
+        let window = CaptureOverlayWindow(display: display, editor: editor, isSnapshot: true)
         window.setFrameOrigin(NSPoint(x: -20_000, y: -60_000))
         window.orderFrontRegardless()
         RunLoop.main.run(until: .now + 1.2)
@@ -707,6 +713,22 @@ enum SnapshotRenderer {
             Scene(name: "accent-yellow-tray-dropping", phase: .open, tab: .tray, draggingFiles: true, targetsDrop: true,
                   theme: NotchTheme(accent: .yellow)),
         ]
+    }
+
+    /// The widgets no other scene brings to the top of the Nook's stack, each first in it beside one
+    /// that never asks for the room, on black and on glass. They leave the widgets set, so they come
+    /// just before 96, which sets its own.
+    private static func widgetScenes() -> [Scene] {
+        let stacks: [(name: String, first: HomeWidget, second: HomeWidget)] = [
+            ("notes", .notes, .mirror), ("shortcuts", .shortcuts, .mirror),
+            ("mirror", .mirror, .notes), ("toggles", .toggles, .mirror),
+        ]
+        return stacks.flatMap { stack in
+            [nil, NotchTheme(material: .glass)].map { theme in
+                Scene(name: "widget-\(stack.name)" + (theme == nil ? "" : "-glass"), phase: .open, tab: .home, theme: theme,
+                      setUp: { (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (stack.first, stack.second) })
+            }
+        }
     }
 
     /// Each tab at the smallest and the largest open size the settings allow, with more in every

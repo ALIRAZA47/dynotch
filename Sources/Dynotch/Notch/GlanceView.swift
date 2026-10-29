@@ -390,7 +390,7 @@ private struct DownloadGlance: View {
 
     var body: some View {
         GlanceLayout(band: band) {
-            DownloadRing(fraction: monitor.fraction, lineWidth: 4, arrowSize: 15)
+            DownloadRing(fraction: monitor.fraction, lineWidth: 4, arrowSize: 15, halo: true)
                 .padding(2)
         } trailing: {
             DownloadAmount()

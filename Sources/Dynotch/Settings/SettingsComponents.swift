@@ -807,6 +807,10 @@ struct CapsuleButton: View {
 
     private var isDark: Bool { colorScheme == .dark }
 
+    /// A destructive button's red: the window's shade of it, deep in light mode, so its label reads
+    /// 4.5:1 on its own faint fill, where the system red read about 3:1 light and 4:1 dark.
+    private static let red = WindowAccent(choice: .red).color
+
     /// A prominent button that's disabled looks plain, the way macOS greys out a default button:
     /// faded along with the accent's fill, its label would all but disappear.
     private var look: Kind { kind == .prominent && !isEnabled ? .plain : kind }
@@ -815,7 +819,7 @@ struct CapsuleButton: View {
         switch look {
         case .plain: .primary
         case .prominent: accent.onFill
-        case .destructive: .red
+        case .destructive: Self.red
         case .glass: isDark ? .white : .primary
         }
     }
@@ -824,7 +828,8 @@ struct CapsuleButton: View {
         switch look {
         case .plain: AnyShapeStyle(Palette.wash)
         case .prominent: AnyShapeStyle(accent.gradient)
-        case .destructive: AnyShapeStyle(Color.red.opacity(0.12))
+        // Fainter in light mode, as a selected choice chip is: at 0.12 the red label fell under 4.5:1.
+        case .destructive: AnyShapeStyle(Self.red.opacity(isDark ? 0.12 : 0.06))
         case .glass where isDark:
             AnyShapeStyle(LinearGradient(colors: [.white.opacity(hovering ? 0.22 : 0.16), .white.opacity(hovering ? 0.12 : 0.07)],
                                          startPoint: .top, endPoint: .bottom))
@@ -836,7 +841,7 @@ struct CapsuleButton: View {
         switch look {
         case .plain: Palette.rimGradient
         case .prominent: Self.lit(.white.opacity(0.45))
-        case .destructive: Self.lit(.red.opacity(0.2))
+        case .destructive: Self.lit(Self.red.opacity(0.2))
         case .glass where isDark: Self.lit(.white.opacity(0.4))
         case .glass: LinearGradient(colors: [.white, .black.opacity(0.1)], startPoint: .top, endPoint: .bottom)
         }

@@ -314,7 +314,8 @@ private struct ClosedPreview: View {
                     .font(.system(size: 12 * scale, weight: .medium))
                     .foregroundStyle(.white.opacity(0.85))
                     .lineLimit(1)
-                    .padding(.horizontal, 16 * scale)
+                    // As in `ClosedNotchView`: the peek's semibold title gets 2 points more each side.
+                    .padding(.horizontal, (activity == .trackPeek ? 14 : 16) * scale)
                     .frame(height: layout.rowHeight * scale, alignment: .top)
             }
         }
@@ -344,7 +345,7 @@ private struct ClosedPreview: View {
                     .frame(width: 17 * scale, height: 17 * scale)
                 Text(countdown.name)
                     .font(.system(size: 12 * scale, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(theme.primary)
                     .lineLimit(1)
             }
         case .stopwatch:
@@ -367,8 +368,7 @@ private struct ClosedPreview: View {
                 .frame(width: 20 * scale, height: 14 * scale)
         case .timer:
             Text(timerText)
-                .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+                .font(NotchFont.numeric(12.5 * scale))
                 .foregroundStyle(PomodoroTimer.Phase.focus.color)
         case .notice(let notice):
             switch notice.kind {
@@ -377,25 +377,21 @@ private struct ClosedPreview: View {
                     .frame(width: 62 * scale, height: 5 * scale)
             case .info:
                 Text(notice.text)
-                    .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
+                    .font(NotchFont.numeric(12.5 * scale))
                     .foregroundStyle(notice.tint)
                     .lineLimit(1)
             }
         case .countdown(let countdown):
             Text(Format.duration(countdown.remaining(at: .now).rounded(.up)))
-                .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+                .font(NotchFont.numeric(12.5 * scale))
                 .foregroundStyle(TimerStore.tint)
         case .stopwatch:
             Text("12:34")
-                .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+                .font(NotchFont.numeric(12.5 * scale))
                 .foregroundStyle(TimerStore.stopwatchTint)
         case .download:
             Text("45%")
-                .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+                .font(NotchFont.numeric(12.5 * scale))
                 .foregroundStyle(DownloadMonitor.tint)
         }
     }
@@ -404,7 +400,7 @@ private struct ClosedPreview: View {
     private var detail: some View {
         switch activity {
         case .trackPeek:
-            Text("Midnight City · M83")
+            TrackPeekLine(title: "Midnight City", artist: "M83", scale: scale)
         case .notice(let notice):
             if let detail = notice.detail { Text(detail) }
         default:
