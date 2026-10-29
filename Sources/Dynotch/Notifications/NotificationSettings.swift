@@ -111,12 +111,15 @@ private struct AppPicker: View {
     }
 }
 
-/// An app that's on or off, with its icon in color while it's on.
+/// An app that's on or off, with its icon in color while it's on. On, it's a selected chip in the
+/// accent; off, a chip of plain glass.
 private struct AppChip<Icon: View>: View {
     let title: String
     let isOn: Bool
     let action: () -> Void
     @ViewBuilder var icon: Icon
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.windowAccent) private var accent
 
     var body: some View {
         Button(action: action) {
@@ -129,14 +132,20 @@ private struct AppChip<Icon: View>: View {
                     .font(.system(size: 12, weight: isOn ? .semibold : .medium))
                     .lineLimit(1)
             }
-            .foregroundStyle(isOn ? Palette.accent : Color.primary.opacity(0.6))
+            .foregroundStyle(isOn ? accent.color : Color.primary.opacity(0.78))
             .padding(.leading, 7)
             .padding(.trailing, 11)
             .frame(height: 28)
             .background {
                 let shape = Capsule()
-                shape.fill(isOn ? AnyShapeStyle(Palette.accent.opacity(0.13)) : AnyShapeStyle(Palette.wash))
-                    .overlay(shape.strokeBorder(Palette.accent.opacity(isOn ? 0.5 : 0), lineWidth: 1.1))
+                if isOn {
+                    // As faint as a selected chip's in light mode, where the accent's text has little room above 4.5:1.
+                    shape.fill(accent.color.opacity(colorScheme == .dark ? 0.12 : 0.06))
+                        .overlay(shape.strokeBorder(accent.color.opacity(0.55), lineWidth: 1.2))
+                } else {
+                    shape.fill(Palette.wash)
+                        .overlay(shape.strokeBorder(Palette.rimGradient))
+                }
             }
             .contentShape(Capsule())
         }
