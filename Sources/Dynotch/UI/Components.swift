@@ -424,7 +424,9 @@ struct CardField: View {
                     .foregroundStyle(theme.tertiary)
                     .lineLimit(1)
             } else {
-                TextField(placeholder, text: $text)
+                // The prompt brings its own color: the system's placeholder color is far fainter on
+                // older versions of macOS. The title stays the field's label.
+                TextField(placeholder, text: $text, prompt: Text(placeholder).foregroundStyle(theme.tertiary))
                     .textFieldStyle(.plain)
                     .font(NotchFont.body)
                     .focused($isFocused)
@@ -537,7 +539,8 @@ struct CardButtonLabel: View {
     }
 }
 
-/// A small capsule of glass with the accent's light in it, or a tint's, and a label in that color.
+/// A small capsule of glass with the accent's light in it, or a tint's. Its label is white, like all
+/// text on glass: in the tint, over that glass, it would read under 4.5:1.
 struct PillButton: View {
     let title: String
     var symbol: String?
@@ -555,7 +558,7 @@ struct PillButton: View {
                 }
                 Text(title).font(NotchFont.bodyStrong).lineLimit(1)
             }
-            .foregroundStyle(tint)
+            .foregroundStyle(theme.primary)
             .padding(.horizontal, 11)
             .frame(height: 24)
             .glass(.tint(tint), in: Capsule(), isLit: hovering)

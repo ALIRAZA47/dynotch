@@ -692,15 +692,17 @@ enum SnapshotRenderer {
             ])
     }
 
-    /// Ink on each accent: the Control tab, its jewel and the Dark tile, which is on while the Mac is
-    /// in dark mode; on glass for the lightest and the greyest accent; and a drop zone with files over it.
+    /// Ink on each accent: the Control tab, its jewel and the Mute mic tile, which is on in every
+    /// probe (the Dark tile follows the Mac's own appearance); on glass for the lightest and the
+    /// greyest accent; and a drop zone with files over it.
     private static func accentScenes() -> [Scene] {
         NotchAccent.allCases.map { accent in
-            Scene(name: "accent-\(accent.rawValue)-control", phase: .open, tab: .stats, theme: NotchTheme(accent: accent))
+            Scene(name: "accent-\(accent.rawValue)-control", phase: .open, tab: .stats, micMuted: true,
+                  theme: NotchTheme(accent: accent))
         } + [
-            Scene(name: "accent-yellow-control-glass", phase: .open, tab: .stats,
+            Scene(name: "accent-yellow-control-glass", phase: .open, tab: .stats, micMuted: true,
                   theme: NotchTheme(material: .glass, accent: .yellow)),
-            Scene(name: "accent-graphite-control-glass", phase: .open, tab: .stats,
+            Scene(name: "accent-graphite-control-glass", phase: .open, tab: .stats, micMuted: true,
                   theme: NotchTheme(material: .glass, accent: .graphite)),
             Scene(name: "accent-yellow-tray-dropping", phase: .open, tab: .tray, draggingFiles: true, targetsDrop: true,
                   theme: NotchTheme(accent: .yellow)),

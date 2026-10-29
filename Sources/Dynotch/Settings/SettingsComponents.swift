@@ -117,7 +117,8 @@ extension NotchAccent {
 struct WindowAccent {
     /// Switch grooves, slider fills, prominent buttons, selected rims and accent text on the page.
     let color: Color
-    /// The top of a fill: `color` with 18% white, as if lit from above.
+    /// The top of a fill, as if lit from above: `color` with 18% white in dark mode, and 6% in light
+    /// mode, where more would take the white text on a prominent button under 4.5:1.
     let top: Color
     /// Text and symbols on a fill of the accent.
     let onFill: Color
@@ -139,7 +140,7 @@ struct WindowAccent {
         let light = choice.windowDeep
         let dark = (red: Double(own.red), green: Double(own.green), blue: Double(own.blue))
         color = Color(light: Self.srgb(light), dark: Self.srgb(dark))
-        top = Color(light: Self.srgb(light, white: 0.18), dark: Self.srgb(dark, white: 0.18))
+        top = Color(light: Self.srgb(light, white: 0.06), dark: Self.srgb(dark, white: 0.18))
         onFill = Color(light: .white, dark: NSColor(NotchTheme.standard.onAccent))
     }
 
@@ -341,7 +342,8 @@ struct SwitchMark: View {
 /// lit along the top like an app icon.
 struct SymbolBadge: View {
     let symbol: String
-    /// Without one, the window accent.
+    /// Without one, the window accent, with its symbol in the accent's onFill. Pass nil rather than
+    /// the accent's color.
     var tint: Color?
     var isActive = true
     var size: CGFloat = 30
@@ -573,6 +575,7 @@ struct ChoiceChip: View {
     let symbol: String
     let isSelected: Bool
     let action: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.windowAccent) private var accent
 
     var body: some View {
@@ -591,7 +594,9 @@ struct ChoiceChip: View {
             .frame(height: 30)
             .background {
                 let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
-                shape.fill(isSelected ? AnyShapeStyle(accent.color.opacity(0.12)) : AnyShapeStyle(Palette.wash))
+                // Fainter in light mode, where the accent's text on it has little room above 4.5:1.
+                let selectedFill = accent.color.opacity(colorScheme == .dark ? 0.12 : 0.06)
+                shape.fill(isSelected ? AnyShapeStyle(selectedFill) : AnyShapeStyle(Palette.wash))
                     .overlay(shape.strokeBorder(accent.color.opacity(isSelected ? 0.55 : 0), lineWidth: 1.2))
             }
             .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
@@ -790,7 +795,7 @@ struct CapsuleButton: View {
             // Every kind is a capsule of glass whose top edge catches the light.
             .overlay(Capsule().strokeBorder(rim))
             // In dark mode a prominent button glows with the accent, like a switch that's on.
-            .shadow(color: accent.color.opacity(kind == .prominent && isDark ? 0.3 : 0), radius: 8)
+            .shadow(color: accent.color.opacity(look == .prominent && isDark ? 0.3 : 0), radius: 8)
             .brightness(hovering && isEnabled ? 0.04 : 0)
             .contentShape(Capsule())
         }
@@ -801,8 +806,12 @@ struct CapsuleButton: View {
 
     private var isDark: Bool { colorScheme == .dark }
 
+    /// A prominent button that's disabled looks plain, the way macOS greys out a default button:
+    /// faded along with the accent's fill, its label would all but disappear.
+    private var look: Kind { kind == .prominent && !isEnabled ? .plain : kind }
+
     private var foreground: Color {
-        switch kind {
+        switch look {
         case .plain: .primary
         case .prominent: accent.onFill
         case .destructive: .red
@@ -811,7 +820,7 @@ struct CapsuleButton: View {
     }
 
     private var background: AnyShapeStyle {
-        switch kind {
+        switch look {
         case .plain: AnyShapeStyle(Palette.wash)
         case .prominent: AnyShapeStyle(accent.gradient)
         case .destructive: AnyShapeStyle(Color.red.opacity(0.12))
@@ -823,7 +832,7 @@ struct CapsuleButton: View {
     }
 
     private var rim: LinearGradient {
-        switch kind {
+        switch look {
         case .plain: Palette.rimGradient
         case .prominent: Self.lit(.white.opacity(0.45))
         case .destructive: Self.lit(.red.opacity(0.2))
