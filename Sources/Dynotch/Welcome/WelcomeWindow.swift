@@ -105,8 +105,10 @@ final class WelcomeTour: ObservableObject {
 }
 
 /// A header with the model notch acting out the step, the step underneath, and a footer to move on.
+/// Everything in it draws in the user's accent, as Settings does.
 struct WelcomeView: View {
     @ObservedObject var tour: WelcomeTour
+    @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -125,6 +127,7 @@ struct WelcomeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.window)
         .ignoresSafeArea()
+        .windowAccent(WindowAccent(choice: settings.notchAccent))
     }
 
     @ViewBuilder
@@ -145,11 +148,14 @@ private struct WelcomeStage: View {
     @ObservedObject private var permissions = PermissionStatus.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isSnapshot) private var isSnapshot
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
 
     private static let cycle: TimeInterval = 2.2
 
     var body: some View {
         let step = tour.step
+        let ink = StageInk(colorScheme: colorScheme, contrast: contrast)
         ZStack(alignment: .bottom) {
             StageSky()
             TimelineView(.periodic(from: .now, by: cycles ? Self.cycle : 3600)) { context in
@@ -157,10 +163,7 @@ private struct WelcomeStage: View {
                 let scene = scene(tick: tick)
                 VStack(spacing: 13) {
                     ModelNotch(pose: scene.pose)
-                    Text(scene.caption)
-                        .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.7))
-                        .contentTransition(.opacity)
+                    CaptionText(scene.caption, isNumeric: false)
                 }
                 .animation(.notchOpen, value: scene.pose)
             }
@@ -171,11 +174,11 @@ private struct WelcomeStage: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(step.title)
                         .font(.system(size: 26, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(ink.primary)
                         .accessibilityAddTraits(.isHeader)
                     Text(step.subtitle)
                         .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.62))
+                        .foregroundStyle(ink.secondary)
                 }
                 .id(step)
                 .transition(.opacity)
@@ -191,7 +194,6 @@ private struct WelcomeStage: View {
         .frame(height: SettingsStage.height)
         .frame(maxWidth: .infinity)
         .clipped()
-        .environment(\.colorScheme, .dark)
     }
 
     /// The first two steps play a little loop; the others hold still.
@@ -242,7 +244,8 @@ private struct InfoTile: Identifiable {
     let symbol: String
     let title: String
     let detail: String
-    var tint: Color = Palette.accent
+    /// The badge's color. Without one, the window accent.
+    var tint: Color?
 
     var id: String { title }
 }
@@ -258,7 +261,7 @@ private struct InfoTileView: View {
                     .font(.system(size: 13, weight: .semibold))
                 Text(tile.detail)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
@@ -306,9 +309,10 @@ private struct NotchStep: View {
                             Text(activity.title)
                                 .font(.system(size: 12, weight: .medium))
                         }
-                        .padding(.horizontal, 10)
+                        .padding(.horizontal, 11)
                         .frame(height: 28)
                         .background(Capsule().fill(Palette.wash))
+                        .overlay(Capsule().strokeBorder(Palette.rimGradient))
                     }
                 }
                 .padding(12)
@@ -404,7 +408,7 @@ private struct DoneStep: View {
                             .font(.system(size: 13, weight: .medium))
                         Text("Move away, or press Esc, and it closes again.")
                             .font(.system(size: 11.5))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.secondaryText)
                     }
                     .accessibilityElement(children: .combine)
                     Spacer(minLength: 12)
@@ -427,7 +431,7 @@ private struct DoneStep: View {
                     .font(.system(size: 13, weight: .medium))
                 Text(detail)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
             }
             .accessibilityElement(children: .combine)
             Spacer(minLength: 12)
@@ -442,13 +446,14 @@ private struct DoneStep: View {
 
 private struct WelcomeFooter: View {
     @ObservedObject var tour: WelcomeTour
+    @Environment(\.windowAccent) private var accent
 
     var body: some View {
         HStack(spacing: 10) {
             HStack(spacing: 6) {
                 ForEach(WelcomeTour.Step.allCases) { step in
                     Capsule()
-                        .fill(step == tour.step ? AnyShapeStyle(Palette.accentGradient) : AnyShapeStyle(Palette.track))
+                        .fill(step == tour.step ? AnyShapeStyle(accent.gradient) : AnyShapeStyle(Palette.track))
                         .frame(width: step == tour.step ? 20 : 7, height: 7)
                 }
             }

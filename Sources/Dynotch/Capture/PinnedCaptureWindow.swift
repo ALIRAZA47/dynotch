@@ -78,23 +78,41 @@ private final class PinnedHostingView<Content: View>: NSHostingView<Content> {
     override var mouseDownCanMoveWindow: Bool { true }
 }
 
-/// The capture with a hairline around it and, under the pointer, a close glyph in its corner.
+/// The capture with square corners, which keep all of it, and an edge that catches the light along
+/// the top. Under the pointer, a close button sits in its corner: a disc of dark glass.
 private struct PinnedCaptureView: View {
     let image: NSImage
     let close: () -> Void
     @ViewState private var hovering = false
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    /// The notch's light, for the close button's glass, its lit edge a step brighter with Increase Contrast.
+    private var theme: NotchTheme {
+        var theme = NotchTheme.standard
+        theme.isHighContrast = contrast == .increased
+        return theme
+    }
 
     var body: some View {
         Image(nsImage: image)
             .resizable()
             .aspectRatio(contentMode: .fit)
-            .overlay(Rectangle().strokeBorder(Color.white.opacity(0.35)))
+            .overlay(Rectangle().strokeBorder(LinearGradient(colors: [.white.opacity(0.35), .white.opacity(0.06)],
+                                                             startPoint: .top, endPoint: .bottom)))
             .overlay(alignment: .topTrailing) {
                 Button(action: close) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.white, .black.opacity(0.7))
-                        .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9.5, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 22, height: 22)
+                        .background {
+                            // Dark enough for the white glyph over any capture, lit like the notch's controls.
+                            Circle().fill(Color.black.opacity(0.6))
+                                .overlay(Circle().fill(LinearGradient(colors: [.white.opacity(theme.sheen(.control)), .clear],
+                                                                      startPoint: .top, endPoint: .center)))
+                                .overlay(Circle().strokeBorder(theme.rim(.control)))
+                        }
+                        .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
                         .padding(6)
                         .contentShape(Circle())
                 }

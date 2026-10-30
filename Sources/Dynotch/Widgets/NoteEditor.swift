@@ -31,7 +31,6 @@ struct NoteEditor: NSViewRepresentable {
         textView.importsGraphics = false
         textView.allowsUndo = true
         textView.drawsBackground = false
-        textView.insertionPointColor = .white
         textView.textContainerInset = .zero
         textView.textContainer?.lineFragmentPadding = 0
         textView.textContainer?.widthTracksTextView = true
@@ -53,6 +52,7 @@ struct NoteEditor: NSViewRepresentable {
 
         handle.textView = textView
         context.coordinator.noteID = noteID
+        textView.follow(context.environment.notchTheme)
         textView.setText(text)
         return scrollView
     }
@@ -60,6 +60,7 @@ struct NoteEditor: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NoteTextView else { return }
         handle.textView = textView
+        textView.follow(context.environment.notchTheme)
         context.coordinator.onChange = onChange
         if context.coordinator.noteID != noteID {
             context.coordinator.noteID = noteID
@@ -106,16 +107,31 @@ final class NoteTextView: NSTextView {
     private static let font = NSFont.systemFont(ofSize: 11.5)
     private static let headingFont = NSFont.systemFont(ofSize: 12.5, weight: .bold)
     private static let base: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
-    private static let dim = NSColor.white.withAlphaComponent(0.36)
     /// For the hidden "- [ ] ": small, so the text starts just past the checkbox, and monospaced, so
     /// "[x]" takes as much room as "[ ]" and ticked items line up with the rest.
     private static let markerFont = NSFont.monospacedSystemFont(ofSize: 6, weight: .regular)
+
+    /// Ticked items, list markers and empty checkboxes: the theme's tertiary white, so they stay
+    /// readable on black and on glass.
+    private var dim = NSColor.white.withAlphaComponent(0.5)
+    /// The theme `dim` and the insertion point were last set from.
+    private var theme: NotchTheme?
 
     /// The "- [ ]" of each checklist item, and whether it's ticked.
     private var boxes: [(range: NSRange, checked: Bool)] = []
 
     /// The notch never activates the app, so the first click has to count.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    /// Takes its colors from the notch's theme: the insertion point in the accent, and quieter
+    /// parts in tertiary. Restyles only when the theme changed.
+    func follow(_ theme: NotchTheme) {
+        guard theme != self.theme else { return }
+        self.theme = theme
+        insertionPointColor = NSColor(theme.accent)
+        dim = NSColor(theme.tertiary)
+        restyle()
+    }
 
     func setText(_ text: String, keepingSelection: Bool = false) {
         let selection = selectedRange()
@@ -149,14 +165,14 @@ final class NoteTextView: NSTextView {
                 storage.addAttributes([.foregroundColor: NSColor.clear, .font: Self.markerFont], range: marker)
                 boxes.append((NSRange(location: marker.location, length: min(5, marker.length)), checked))
                 if checked {
-                    storage.addAttributes([.foregroundColor: Self.dim, .strikethroughStyle: NSUnderlineStyle.single.rawValue,
-                                           .strikethroughColor: Self.dim], range: content)
+                    storage.addAttributes([.foregroundColor: dim, .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+                                           .strikethroughColor: dim], range: content)
                 }
             case .heading:
                 storage.addAttribute(.font, value: Self.headingFont, range: NSRange(location: start, length: contentsEnd - start))
-                storage.addAttribute(.foregroundColor, value: Self.dim, range: marker)
+                storage.addAttribute(.foregroundColor, value: dim, range: marker)
             case .bullet:
-                storage.addAttribute(.foregroundColor, value: Self.dim, range: marker)
+                storage.addAttribute(.foregroundColor, value: dim, range: marker)
             case .text:
                 break
             }
@@ -261,7 +277,7 @@ final class NoteTextView: NSTextView {
 
     private func drawCheckbox(checked: Bool, in rect: NSRect) {
         // A dark tick on a yellow disc, like Notes; an empty ring otherwise.
-        let colors = checked ? [NSColor.black, NSColor.systemYellow] : [NSColor.white.withAlphaComponent(0.5)]
+        let colors = checked ? [NSColor.black, NSColor.systemYellow] : [dim]
         let configuration = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
             .applying(NSImage.SymbolConfiguration(paletteColors: colors))
         guard let image = NSImage(systemSymbolName: checked ? "checkmark.circle.fill" : "circle", accessibilityDescription: nil)?

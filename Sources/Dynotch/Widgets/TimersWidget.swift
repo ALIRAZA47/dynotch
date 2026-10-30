@@ -14,6 +14,7 @@ struct TimersList: View {
                 if !store.countdowns.isEmpty {
                     Text("\(store.countdowns.count)")
                         .font(NotchFont.numeric(10.5))
+                        .foregroundStyle(theme.tertiary)
                 }
             }
             if store.countdowns.isEmpty {
@@ -66,7 +67,7 @@ struct TimersList: View {
                             .foregroundStyle(theme.secondary)
                     }
                 }
-                .frame(width: 13, height: 13)
+                .frame(width: 14, height: 14)
             }
             Text(countdown.name)
                 .font(NotchFont.body)
@@ -75,7 +76,7 @@ struct TimersList: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .help(countdown.name)
             Text(Format.duration(countdown.remaining(at: store.now).rounded(.up)))
-                .font(NotchFont.numeric(12))
+                .font(NotchFont.numeric(12.5))
                 .foregroundStyle(running ? TimerStore.tint : theme.secondary)
                 .layoutPriority(1)
             SmallButton(help: "Cancel", action: {
@@ -114,26 +115,29 @@ struct TimersList: View {
                     .foregroundStyle(TimerStore.stopwatchTint)
             }
         }
-        .padding(.horizontal, 1)
+        .padding(.leading, 3)
+        .padding(.trailing, 2)
         .frame(height: 20)
-        .background(RoundedRectangle(cornerRadius: theme.controlRadius, style: .continuous).fill(theme.control))
+        .glass(.well, in: Capsule())
     }
 }
 
-/// A borderless glyph button for the rows, with room around it to hit.
+/// A borderless glyph button for the rows, with room around it to hit. Under the pointer a disc of
+/// glass rises behind it, as behind an `IconButton`.
 private struct SmallButton<Label: View>: View {
     let help: String
     var side: CGFloat = 16
     let action: () -> Void
     @ViewBuilder let label: Label
-    @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
 
     var body: some View {
         Button(action: action) {
             label
                 .frame(width: side, height: side)
-                .background(Circle().fill(hovering ? theme.controlHover : .clear))
+                .background {
+                    if hovering { GlassSurface(depth: .control, shape: Circle()) }
+                }
                 .contentShape(Circle().inset(by: -2))
         }
         .buttonStyle(PressableButtonStyle())

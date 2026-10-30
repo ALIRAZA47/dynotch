@@ -49,7 +49,7 @@ struct DevicesWidget: View {
             if connected.isEmpty, !power.hasBattery, monitor.paired.isEmpty {
                 Text("No Bluetooth devices connected")
                     .font(NotchFont.footnote)
-                    .foregroundStyle(theme.tertiary)
+                    .foregroundStyle(theme.secondary)
             }
             ForEach(monitor.paired) { device in
                 PairedRow(device: device, connection: monitor.connections[device.id], compact: compact, isSnapshot: isSnapshot) {
@@ -129,6 +129,7 @@ private struct DeviceRow: View {
             VStack(alignment: .leading, spacing: 1) {
                 Text(name)
                     .font(NotchFont.body)
+                    .foregroundStyle(theme.primary)
                     .lineLimit(1)
                     .help(name)
                 if let detail {
@@ -241,6 +242,8 @@ private struct PairedRow: View {
     }
 }
 
+/// Connect, or Retry: a pill button's glass with the accent's light in it and a white label, as
+/// short as the row's first line, so the rows keep their height.
 private struct ConnectButton: View {
     let title: String
     let symbol: String
@@ -262,9 +265,9 @@ private struct ConnectButton: View {
                         .padding(.horizontal, 8)
                 }
             }
-            .foregroundStyle(theme.accent)
+            .foregroundStyle(theme.primary)
             .frame(height: 18)
-            .background(Capsule().fill(theme.accent.opacity(hovering ? 0.26 : 0.16)))
+            .glass(.tint(theme.accent), in: Capsule(), isLit: hovering)
             .contentShape(Capsule())
             .fixedSize()
         }

@@ -17,11 +17,12 @@ struct CommandView: View {
             field(results)
             Text(viewModel.commandQuery.trimmingCharacters(in: .whitespaces).isEmpty ? "Try" : "Results")
                 .font(NotchFont.label)
-                .foregroundStyle(theme.tertiary)
+                .foregroundStyle(theme.secondary)
                 .frame(height: 16)
-                .padding(.leading, 6)
+                .padding(.leading, 8)
                 .padding(.top, 10)
                 .padding(.bottom, 6)
+            // Rows 30 tall and 2 apart, one every 32 points, as `NotchViewModel.commandHeight` counts them.
             VStack(spacing: 2) {
                 ForEach(Array(results.enumerated()), id: \.element.id) { index, result in
                     CommandRow(result: result, isSelected: index == min(selection, results.count - 1)) {
@@ -41,8 +42,10 @@ struct CommandView: View {
         }
     }
 
+    /// A capsule pressed into the glass, ringed with the accent's light, as it has the keyboard
+    /// whenever it shows.
     private func field(_ results: [CommandResult]) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 12, style: .continuous)
+        let shape = Capsule()
         return HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 13, weight: .semibold))
@@ -54,7 +57,10 @@ struct CommandView: View {
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                TextField(Self.placeholder, text: $viewModel.commandQuery)
+                // The prompt brings its own color: the system's placeholder color is far fainter on
+                // older versions of macOS. The title stays the field's label.
+                TextField(Self.placeholder, text: $viewModel.commandQuery,
+                          prompt: Text(Self.placeholder).foregroundStyle(theme.tertiary))
                     .textFieldStyle(.plain)
                     .font(.system(size: 13.5))
                     .focused($isFocused)
@@ -69,10 +75,14 @@ struct CommandView: View {
                     }
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 15)
         .frame(height: 38)
-        .background(shape.fill(theme.control))
-        .overlay(shape.strokeBorder(theme.accent.opacity(0.7), lineWidth: 1.5))
+        .glass(.well, in: shape)
+        .overlay {
+            // A soft halo of the accent under a crisp ring. Nothing in it moves, so it's drawn once.
+            shape.strokeBorder(theme.accent.opacity(0.5), lineWidth: 3).blur(radius: 4)
+            shape.strokeBorder(theme.accent.opacity(0.8), lineWidth: 1.5)
+        }
         .contentShape(shape)
         .onTapGesture { isFocused = true }
     }
@@ -83,7 +93,8 @@ struct CommandView: View {
     }
 }
 
-/// A result: its symbol on a tinted tile, what it does, then what to type for it or its value.
+/// A result: its symbol on a disc of tinted glass, what it does, then what to type for it or its
+/// value. The picked one stands on a pane, with Return on a keycap when it can run.
 private struct CommandRow: View {
     let result: CommandResult
     let isSelected: Bool
@@ -98,7 +109,7 @@ private struct CommandRow: View {
                     .font(.system(size: 11.5, weight: .semibold))
                     .foregroundStyle(result.tint)
                     .frame(width: 24, height: 24)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(result.tint.opacity(0.18)))
+                    .glass(.tint(result.tint), in: Circle())
                 Text(result.title)
                     .font(.system(size: 12.5, weight: .medium))
                     .foregroundStyle(result.action == nil ? theme.secondary : theme.primary)
@@ -106,27 +117,30 @@ private struct CommandRow: View {
                     .truncationMode(.middle)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let hint = result.hint {
+                    // What to type for it, or its value, set like typed input: one of the few places for mono.
                     Text(hint)
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .font(NotchFont.mono)
                         .foregroundStyle(theme.secondary)
                         .lineLimit(1)
-                        .padding(.horizontal, 7)
+                        .padding(.horizontal, 8)
                         .frame(height: 20)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(theme.control))
+                        .glass(.well, in: Capsule())
                 }
-                Image(systemName: "return")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(theme.tertiary)
+                Keycap(label: "↩")
                     .opacity(isSelected && result.action != nil ? 1 : 0)
             }
-            .padding(.horizontal, 8)
+            .padding(.leading, 6)
+            .padding(.trailing, 12)
             .frame(height: 30)
-            .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(isSelected ? theme.control : .clear))
+            .background {
+                if isSelected { GlassSurface(depth: .pane, shape: Capsule()) }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableButtonStyle(scale: 0.98))
         .disabled(result.action == nil)
         .onHover { if $0 { onHover() } }
+        .animation(.notchHighlight, value: isSelected)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 }

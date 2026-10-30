@@ -12,7 +12,7 @@ enum DynotchApp {
             // capture self-test runs the whole app, so it works against the scratch defaults too.
             if let index = CommandLine.arguments.firstIndex(of: "--snapshot") {
                 guard CommandLine.arguments.count > index + 1 else {
-                    FileHandle.standardError.write(Data("Usage: Dynotch --snapshot <folder>\n".utf8))
+                    FileHandle.standardError.write(Data("Usage: Dynotch --snapshot <folder> [--only <prefix>,<prefix>…]\n".utf8))
                     exit(2)
                 }
                 SnapshotRenderer.useScratchDefaults()
@@ -41,7 +41,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let arguments = CommandLine.arguments
         if let index = arguments.firstIndex(of: "--snapshot"), arguments.count > index + 1 {
-            SnapshotRenderer.render(into: URL(fileURLWithPath: arguments[index + 1]))
+            // `--only 10-open,settings-1` renders just the images whose names start with one of those.
+            let only = arguments.firstIndex(of: "--only").flatMap { arguments.indices.contains($0 + 1) ? arguments[$0 + 1] : nil }
+            SnapshotRenderer.render(into: URL(fileURLWithPath: arguments[index + 1]),
+                                    only: only?.split(separator: ",").map(String.init) ?? [])
             SnapshotRenderer.discardScratchDefaults()
             NSApp.terminate(nil)
             return

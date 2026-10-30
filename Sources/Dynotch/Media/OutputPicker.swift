@@ -18,6 +18,12 @@ struct OutputButton: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(outputs.isPickerShown ? tint : hovering ? theme.primary : theme.tertiary)
                 .contentTransition(.symbolEffect(.replace))
+                // Under the pointer a disc of glass rises behind it, as behind the other buttons in the
+                // row. The disc reaches past the symbol instead of widening the row, which would move
+                // the play button.
+                .background {
+                    if hovering { GlassSurface(depth: .control, shape: Circle()).frame(width: 28, height: 26) }
+                }
         }
         .buttonStyle(PressableButtonStyle())
         .onHover { hovering = $0 }
@@ -98,10 +104,16 @@ private struct OutputRow: View {
                         .foregroundStyle(tint)
                 }
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 9)
             .frame(height: 26)
-            .background(RoundedRectangle(cornerRadius: theme.controlRadius, style: .continuous)
-                .fill(isCurrent ? theme.controlHover : hovering ? theme.control : .clear))
+            .background {
+                // The output in use stands on a pane, like the picked row in the command field.
+                if isCurrent {
+                    GlassSurface(depth: .pane, shape: Capsule(), isLit: hovering)
+                } else if hovering {
+                    Capsule().fill(theme.control)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(PressableButtonStyle(scale: 0.98))
@@ -123,7 +135,7 @@ private struct CloseButton: View {
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(hovering ? theme.primary : theme.secondary)
                 .frame(width: 20, height: 20)
-                .background(Circle().fill(hovering ? theme.controlHover : theme.control))
+                .glass(.control, in: Circle(), isLit: hovering)
                 .contentShape(Circle())
         }
         .buttonStyle(PressableButtonStyle())
@@ -150,7 +162,8 @@ private struct AirPlayButton: View {
                         .font(.system(size: 11, weight: .semibold))
                         .foregroundStyle(theme.secondary)
                 } else {
-                    RoutePicker(handle: handle, tint: NSColor(tint))
+                    // The symbol follows its label: secondary, white under the pointer.
+                    RoutePicker(handle: handle, tint: NSColor(tint), idle: NSColor(hovering ? theme.primary : theme.secondary))
                 }
             }
             .frame(width: 20, height: 20)
@@ -161,7 +174,7 @@ private struct AirPlayButton: View {
         .padding(.leading, 2)
         .padding(.trailing, 9)
         .frame(height: 20)
-        .background(Capsule().fill(hovering ? theme.controlHover : theme.control))
+        .glass(.control, in: Capsule(), isLit: hovering)
         .contentShape(Capsule())
         .onTapGesture { handle.present() }
         .onHover { hovering = $0 }
@@ -187,6 +200,8 @@ private final class RoutePickerHandle {
 private struct RoutePicker: NSViewRepresentable {
     let handle: RoutePickerHandle
     let tint: NSColor
+    /// The symbol while no AirPlay route is active.
+    let idle: NSColor
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -198,7 +213,7 @@ private struct RoutePicker: NSViewRepresentable {
     }
 
     func updateNSView(_ picker: AVRoutePickerView, context: Context) {
-        picker.setRoutePickerButtonColor(NSColor.white.withAlphaComponent(0.58), for: .normal)
+        picker.setRoutePickerButtonColor(idle, for: .normal)
         picker.setRoutePickerButtonColor(.white, for: .normalHighlighted)
         picker.setRoutePickerButtonColor(tint, for: .active)
         picker.setRoutePickerButtonColor(tint, for: .activeHighlighted)

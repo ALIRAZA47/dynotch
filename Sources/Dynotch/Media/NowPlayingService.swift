@@ -50,6 +50,9 @@ final class NowPlayingService: ObservableObject {
     @Published private(set) var isPlaying = false
     @Published private(set) var artwork: NSImage?
     @Published private(set) var accent: NSColor = .white
+    /// The artwork's light for the player: its top-left half, its bottom-right half and the whole
+    /// (`NSImage.vibrantPalette()`). Sampled with `accent`, once a cover; empty without artwork.
+    @Published private(set) var palette: [NSColor] = []
     @Published private(set) var shuffle = false
     @Published private(set) var repeatMode: RepeatMode = .off
     /// nil when Music didn't say, and always for Spotify, which can't favorite tracks over AppleScript.
@@ -252,6 +255,7 @@ final class NowPlayingService: ObservableObject {
         artwork = nil
         artworkKey = nil
         accent = .white
+        palette = []
         isFavorite = nil
         position = 0
     }
@@ -282,6 +286,7 @@ final class NowPlayingService: ObservableObject {
             guard artworkKey == key else { return }
             artwork = image
             accent = image?.vibrantAverageColor() ?? .white
+            palette = image?.vibrantPalette() ?? []
         }
     }
 
@@ -432,6 +437,7 @@ final class NowPlayingService: ObservableObject {
         isPlaying = playing
         self.artwork = artwork
         accent = artwork?.vibrantAverageColor() ?? .white
+        palette = artwork?.vibrantPalette() ?? []
         isFavorite = track == nil ? nil : true
         setPosition(elapsed)
     }

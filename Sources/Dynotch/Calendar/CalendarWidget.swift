@@ -68,9 +68,10 @@ private struct UpNextCard: View {
             VStack(alignment: .leading, spacing: 0) {
                 CardTitle(title: heading, symbol: "calendar") {
                     if let when {
+                        // Orange while it's soon, like the event's own glance; as bright as the label otherwise.
                         Text(when)
                             .font(NotchFont.numeric(11))
-                            .foregroundStyle(agenda.isSoon(at: now) ? Color.orange : theme.tertiary)
+                            .foregroundStyle(agenda.isSoon(at: now) ? Color.orange : theme.secondary)
                             .lineLimit(1)
                             .fixedSize()
                     }
@@ -126,6 +127,7 @@ private struct EventDetail: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(event.title)
                 .font(NotchFont.title)
+                .foregroundStyle(theme.primary)
                 .lineLimit(1)
                 .help(event.title)
             Text(details)
@@ -136,7 +138,7 @@ private struct EventDetail: View {
                 if let url = event.meetingURL {
                     JoinButton(url: url)
                 }
-                PillButton(title: "Open in Calendar", tint: .white) {
+                UpNextAction(title: "Open in Calendar") {
                     NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Calendar.app"))
                 }
             }
@@ -163,11 +165,42 @@ private struct EventDetail: View {
     }
 }
 
-/// Joins the call, in green like the call buttons in FaceTime.
+/// A plain action beside Join, like Open in Calendar: a capsule of the notch's neutral glass with a
+/// white label. The accent is kept for what's selected or on.
+private struct UpNextAction: View {
+    let title: String
+    let action: () -> Void
+    @Environment(\.notchTheme) private var theme
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Text(title)
+                .font(NotchFont.bodyStrong)
+                .foregroundStyle(theme.primary)
+                .lineLimit(1)
+                .padding(.horizontal, 11)
+                .frame(height: 24)
+                .glass(.control, in: Capsule(), isLit: hovering)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(PressableButtonStyle(scale: 0.94))
+        .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: hovering)
+    }
+}
+
+/// Joins the call, in green like the call buttons in FaceTime: a capsule of green glass, lit from
+/// above, with dark ink on it.
 struct JoinButton: View {
     let url: URL
     var height: CGFloat = 24
     @ViewState private var hovering = false
+
+    /// Join's own green, brightest under the light. It marks the call, so it stays green whatever the accent.
+    private static let face = LinearGradient(colors: [Color(red: 0.4, green: 0.92, blue: 0.53), Color(red: 0.15, green: 0.74, blue: 0.32)],
+                                             startPoint: .top, endPoint: .bottom)
+    private static let rim = LinearGradient(colors: [.white.opacity(0.6), .white.opacity(0.05)], startPoint: .top, endPoint: .bottom)
 
     var body: some View {
         Button {
@@ -182,24 +215,30 @@ struct JoinButton: View {
             .foregroundStyle(Color(red: 0.02, green: 0.15, blue: 0.06))
             .padding(.horizontal, 11)
             .frame(height: height)
-            .background(Capsule().fill(Color(red: 0.19, green: 0.82, blue: 0.35).opacity(hovering ? 1 : 0.92)))
+            .background {
+                Capsule()
+                    .fill(Self.face)
+                    .overlay(Capsule().strokeBorder(Self.rim, lineWidth: 1))
+                    .brightness(hovering ? 0.05 : 0)
+            }
             .contentShape(Capsule())
         }
         .buttonStyle(PressableButtonStyle(scale: 0.94))
         .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: hovering)
         .help(url.absoluteString)
     }
 }
 
-/// The rest of the day under a hairline, each event its time, calendar color and title.
+/// The rest of the day under an etched line, each event its time, calendar color and title.
 private struct LaterEvents: View {
     let events: [CalendarService.Event]
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            theme.divider.frame(height: 1)
-                .padding(.bottom, 3)
+            EtchedDivider()
+                .padding(.bottom, 2)
             ForEach(events) { event in
                 HStack(spacing: 8) {
                     Text(event.isAllDay ? "All day" : event.start.formatted(date: .omitted, time: .shortened))
@@ -212,6 +251,7 @@ private struct LaterEvents: View {
                         .frame(width: 3, height: 11)
                     Text(event.title)
                         .font(NotchFont.body)
+                        .foregroundStyle(theme.primary)
                         .lineLimit(1)
                 }
                 .frame(height: 16)

@@ -1,14 +1,21 @@
 import SwiftUI
 
+/// How tall every control in the header is: the tab track, the command pill and the ··· disc.
+private let headerControlHeight: CGFloat = 28
+
 /// The expanded notch: a header row beside the camera, then the selected tab, or the command field.
 struct OpenNotchView: View {
     @ObservedObject var viewModel: NotchViewModel
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let band = viewModel.geometry.closedSize.height
         VStack(spacing: 0) {
             OpenHeaderView(viewModel: viewModel)
-                .frame(height: viewModel.geometry.closedSize.height)
+                .frame(height: band)
+                // Beside a menu bar shorter than the controls, on a display without a notch, they
+                // hang from the top edge instead of losing their tops to it.
+                .offset(y: max(0, (headerControlHeight - band) / 2))
             content
                 .id(viewModel.isCommandMode ? "command" : viewModel.visibleTab.rawValue)
                 // The old tab fades out quickly, so the two don't muddle together on the way.
@@ -38,7 +45,8 @@ struct OpenNotchView: View {
     }
 }
 
-/// The tabs on the left of the camera; the command field and the ··· menu on the right.
+/// The tabs on the left of the camera; the command field and the ··· menu on the right. Every
+/// control in it is 28 points tall, centered in the band beside the camera.
 struct OpenHeaderView: View {
     @ObservedObject var viewModel: NotchViewModel
     @ObservedObject private var settings = AppSettings.shared
@@ -51,7 +59,7 @@ struct OpenHeaderView: View {
                 .frame(width: side, alignment: .leading)
             Spacer(minLength: 0)
             HStack(spacing: 4) {
-                CommandPill(viewModel: viewModel, showsTitle: side >= 196)
+                CommandPill(viewModel: viewModel)
                 MoreMenu(viewModel: viewModel)
             }
             .frame(width: side, alignment: .trailing)
@@ -59,11 +67,13 @@ struct OpenHeaderView: View {
     }
 }
 
-/// The tabs in a track. The selected one shows its name; in the command field none is picked out.
+/// The tabs in a track pressed into the slab. The selected one is a jewel of the accent with its
+/// name in ink, the one tab whose light spills onto the glass around it; in the command field it
+/// goes back to plain glass, so none is picked out.
 private struct TabSwitcher: View {
     @ObservedObject var viewModel: NotchViewModel
     @ObservedObject private var settings = AppSettings.shared
-    @Environment(\.notchTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selection
 
     var body: some View {
@@ -71,7 +81,8 @@ private struct TabSwitcher: View {
             ForEach(settings.enabledTabs) { tab in
                 TabButton(tab: tab, isSelected: viewModel.visibleTab == tab, isMuted: viewModel.isCommandMode,
                           namespace: selection) {
-                    withAnimation(.notchTab) {
+                    // The jewel slides to the tab; with Reduce Motion it eases there without the spring.
+                    withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .notchTab) {
                         viewModel.endCommand()
                         viewModel.tab = tab
                     }
@@ -79,7 +90,7 @@ private struct TabSwitcher: View {
             }
         }
         .padding(2)
-        .background(Capsule().fill(theme.control.opacity(0.85)))
+        .glass(.well, in: Capsule())
     }
 }
 
@@ -87,7 +98,7 @@ private struct TabSwitcher: View {
 private struct TabButton: View {
     let tab: NotchTab
     let isSelected: Bool
-    /// The command field covers the tabs, so the selected one goes grey.
+    /// The command field covers the tabs, so the selected one goes back to plain glass.
     let isMuted: Bool
     let namespace: Namespace.ID
     let action: () -> Void
@@ -95,6 +106,7 @@ private struct TabButton: View {
     @ViewState private var hovering = false
 
     var body: some View {
+        let depth: GlassDepth = isMuted ? .control : .lens(theme.accent)
         Button(action: action) {
             HStack(spacing: 5) {
                 Image(systemName: tab.symbol)
@@ -106,17 +118,18 @@ private struct TabButton: View {
                         .fixedSize()
                 }
             }
-            .foregroundStyle(isSelected || hovering ? theme.primary : theme.primary.opacity(0.55))
+            // Ink on the jewel, white on glass.
+            .foregroundStyle(isSelected ? theme.ink(on: depth) : hovering ? theme.primary : theme.primary.opacity(0.55))
             .padding(.horizontal, isSelected ? 10 : 8)
             .frame(minWidth: 30)
             .frame(height: 24)
             .background {
                 if isSelected {
-                    Capsule()
-                        .fill(isMuted ? theme.controlHover : theme.selection)
+                    // Lit under the pointer only in the command field, where clicking it goes back to the tab.
+                    GlassSurface(depth: depth, shape: Capsule(), isLit: isMuted && hovering, spills: !isMuted)
                         .matchedGeometryEffect(id: "selection", in: namespace)
                 } else if hovering {
-                    Capsule().fill(theme.control)
+                    GlassSurface(depth: .control, shape: Capsule())
                 }
             }
             .contentShape(Capsule())
@@ -130,47 +143,30 @@ private struct TabButton: View {
     }
 }
 
-/// Opens the command field, with its shortcut beside it. In the field it reads Command and esc, and closes it.
+/// Opens the command field, with its shortcut beside it on keycaps. In the field it turns into a
+/// jewel of the accent that reads Command and esc, and closes it.
 private struct CommandPill: View {
     @ObservedObject var viewModel: NotchViewModel
-    var showsTitle: Bool
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
 
     var body: some View {
         let isActive = viewModel.isCommandMode
-        let key = isActive ? "esc" : settings.commandShortcut ? "⌃⌥K" : nil
+        // Each key on its own keycap.
+        let keys = isActive ? ["esc"] : settings.commandShortcut ? "⌃⌥K".map(String.init) : []
         Button {
             withAnimation(.notchTab) {
                 if isActive { viewModel.endCommand() } else { viewModel.beginCommand() }
             }
         } label: {
-            HStack(spacing: 7) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 10.5, weight: .bold))
-                if showsTitle || isActive {
-                    Text(isActive ? "Command" : "Type a command")
-                        .font(isActive ? NotchFont.bodyStrong : NotchFont.body)
-                        .lineLimit(1)
-                }
-                if let key {
-                    Text(key)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(theme.primary.opacity(isActive ? 0.85 : 0.6))
-                        .padding(.horizontal, 5)
-                        .frame(height: 17)
-                        .background(RoundedRectangle(cornerRadius: 5, style: .continuous)
-                            .fill(theme.primary.opacity(isActive ? 0.14 : 0.09)))
-                        .padding(.leading, 2)
-                }
+            // As much as the room beside the ··· menu holds: the title and the keys, then the keys
+            // alone, then the magnifier alone.
+            ViewThatFits(in: .horizontal) {
+                face(isActive: isActive, showsTitle: true, keys: keys)
+                face(isActive: isActive, showsTitle: false, keys: keys)
+                face(isActive: isActive, showsTitle: false, keys: [])
             }
-            .foregroundStyle(isActive ? theme.primary : hovering ? theme.secondary : theme.tertiary)
-            .padding(.leading, 9)
-            .padding(.trailing, key == nil ? 9 : 4)
-            .frame(height: 24)
-            .background(Capsule().fill(isActive ? theme.selection : hovering ? theme.controlHover : theme.control))
-            .contentShape(Capsule())
         }
         .buttonStyle(PressableButtonStyle(scale: 0.95))
         .onHover { hovering = $0 }
@@ -178,9 +174,43 @@ private struct CommandPill: View {
         .help(isActive ? "Close the command field" : "Start a timer, add a note or a reminder, switch a profile…")
         .accessibilityLabel(isActive ? "Close the command field" : "Command field")
     }
+
+    /// A capsule of glass, or the accent's jewel while the field is open: the magnifier, maybe the
+    /// title, and the keys, each on its own keycap.
+    private func face(isActive: Bool, showsTitle: Bool, keys: [String]) -> some View {
+        // Set close, so the title and all three keys fit beside the ··· menu at the default width,
+        // beside a hardware notch or the default virtual one. The magnifier and the title bring a
+        // little room of their own, so the gaps look about 6 points wide.
+        HStack(spacing: 4) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 10.5, weight: .bold))
+            if showsTitle {
+                Text(isActive ? "Command" : "Type a command")
+                    .font(isActive ? NotchFont.bodyStrong : NotchFont.body)
+                    .lineLimit(1)
+            }
+            if !keys.isEmpty {
+                HStack(spacing: 2) {
+                    ForEach(keys, id: \.self) { key in
+                        Keycap(label: key, style: isActive ? .onLens : .notch)
+                    }
+                }
+                .padding(.leading, 1)
+            }
+        }
+        // Ink on the jewel; on glass it comes forward under the pointer.
+        .foregroundStyle(isActive ? theme.onAccent : hovering ? theme.secondary : theme.tertiary)
+        .padding(.leading, 10)
+        // The keys sit as far in from the end as from the top and bottom.
+        .padding(.trailing, keys.isEmpty ? 10 : 5)
+        // As tall as the tab track across the camera, so the header reads as one line.
+        .frame(height: headerControlHeight)
+        .glass(isActive ? .lens(theme.accent) : .control, in: Capsule(), isLit: hovering)
+        .contentShape(Capsule())
+    }
 }
 
-/// Settings, the layout and the profiles, behind ···.
+/// Settings, the layout and the profiles, behind ···, on a disc of glass while the pointer is on it.
 private struct MoreMenu: View {
     @ObservedObject var viewModel: NotchViewModel
     @ObservedObject private var profiles = ProfileStore.shared
@@ -191,8 +221,11 @@ private struct MoreMenu: View {
             Image(systemName: "ellipsis")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(hovering ? theme.primary : theme.secondary)
-                .frame(width: 26, height: 24)
-                .background(Capsule().fill(hovering ? theme.control : .clear))
+                .frame(width: headerControlHeight, height: headerControlHeight)
+                .background {
+                    if hovering { GlassSurface(depth: .control, shape: Circle()) }
+                }
+                .animation(.notchHighlight, value: hovering)
         } items: {
             entries
         }

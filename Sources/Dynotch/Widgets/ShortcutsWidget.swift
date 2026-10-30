@@ -60,25 +60,27 @@ private struct ShortcutButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 5) {
+                // The play symbol sits at the center of the capsule's rounded end.
                 if isRunning {
                     ProgressView().controlSize(.mini)
                         .frame(width: 12)
                 } else {
                     Image(systemName: "play.fill")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(theme.accent)
+                        .foregroundStyle(hovering ? theme.primary : theme.secondary)
                         .frame(width: 12)
                 }
                 Text(name)
                     .font(NotchFont.body)
+                    .foregroundStyle(theme.primary)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.horizontal, 6)
+            .padding(.leading, 6)
+            .padding(.trailing, 10)
             .frame(height: 24)
-            .background(RoundedRectangle(cornerRadius: theme.controlRadius, style: .continuous)
-                .fill(hovering ? theme.controlHover : theme.control))
-            .contentShape(Rectangle())
+            .glass(.control, in: Capsule(), isLit: hovering)
+            .contentShape(Capsule())
         }
         .buttonStyle(PressableButtonStyle(scale: 0.96))
         .onHover { hovering = $0 }

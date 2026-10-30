@@ -7,7 +7,8 @@ struct SwitchOption: Identifiable {
     let title: String
     let detail: String
     let symbol: String
-    var tint: Color = Palette.accent
+    /// The badge's color while it's on. Without one, the window accent.
+    var tint: Color?
     var spokenTitle: String?
     let setting: ReferenceWritableKeyPath<AppSettings, Bool>
 
@@ -68,7 +69,7 @@ private struct SliderRow: View {
             Text(format(value))
                 .font(.system(size: 12.5, weight: .semibold, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.secondaryText)
                 .frame(width: 56, alignment: .trailing)
                 .accessibilityHidden(true)
         }
@@ -79,6 +80,20 @@ private struct SliderRow: View {
 
 private func points(_ value: Double) -> String { "\(Int(value)) pt" }
 private func spokenPoints(_ value: Double) -> String { "\(Int(value)) points" }
+
+/// Behind a text field on a page: a capsule pressed into the card. Its rim is a control's turned
+/// over, shaded along the top and catching the light on its lower lip.
+struct FieldWell: View {
+    var body: some View {
+        Capsule().fill(Palette.wash)
+            .overlay(Capsule().strokeBorder(Self.rim))
+    }
+
+    private static let rim = LinearGradient(stops: [.init(color: Palette.rimShade, location: 0),
+                                                    .init(color: Palette.rimShade, location: 0.5),
+                                                    .init(color: Palette.rimLit, location: 1)],
+                                            startPoint: .top, endPoint: .bottom)
+}
 
 // MARK: General
 
@@ -199,13 +214,14 @@ private struct LaunchAtLoginRow: View {
 private struct DisplaysArt: View {
     let mode: DisplayMode
     let isSelected: Bool
+    @Environment(\.windowAccent) private var accent
 
     var body: some View {
         HStack(alignment: .bottom, spacing: 7) {
             Screen(width: 34, height: 22, hasNotch: mode != .main, isLaptop: true)
             Screen(width: 30, height: 20, hasNotch: mode != .notched, isLaptop: false)
         }
-        .foregroundStyle(isSelected ? Palette.accent : Color.secondary)
+        .foregroundStyle(isSelected ? accent.color : Color.secondary)
     }
 
     private struct Screen: View {
@@ -302,6 +318,7 @@ struct AppearanceSettings: View {
 private struct VirtualNotchArt: View {
     let style: VirtualNotchStyle
     let isSelected: Bool
+    @Environment(\.windowAccent) private var accent
 
     var body: some View {
         VStack(spacing: 0) {
@@ -322,7 +339,7 @@ private struct VirtualNotchArt: View {
             Rectangle().frame(width: 2, height: 4)
             Capsule().frame(width: 15, height: 2)
         }
-        .foregroundStyle(isSelected ? Palette.accent : Color.secondary)
+        .foregroundStyle(isSelected ? accent.color : Color.secondary)
     }
 }
 
@@ -787,7 +804,7 @@ private struct NotesFolderCard: View {
                         .font(.system(size: 13, weight: .medium))
                     Text(Self.describe(store.folder))
                         .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.secondaryText)
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
@@ -795,7 +812,7 @@ private struct NotesFolderCard: View {
                 Spacer(minLength: 12)
                 Text(store.notes.filter(\.isOnDisk).count == 1 ? "1 note" : "\(store.notes.filter(\.isOnDisk).count) notes")
                     .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                     .monospacedDigit()
             }
             .padding(.horizontal, 14)
@@ -863,7 +880,7 @@ private struct WeatherSettings: View {
                         CardDivider()
                         Text("No places found")
                             .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.secondaryText)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 10)
                     }
@@ -895,7 +912,7 @@ private struct WeatherSettings: View {
                     .font(.system(size: 13, weight: .medium))
                 Text(settings.weatherPlace.isEmpty ? "None yet" : settings.weatherPlace)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                     .lineLimit(1)
             }
             .accessibilityElement(children: .combine)
@@ -912,9 +929,9 @@ private struct WeatherSettings: View {
                     ProgressView().controlSize(.small)
                 }
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 11)
             .frame(width: 240, height: 28)
-            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.wash))
+            .background(FieldWell())
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
@@ -983,13 +1000,14 @@ private struct PlaceRow: View {
     let place: WeatherService.Place
     let action: () -> Void
     @ViewState private var hovering = false
+    @Environment(\.windowAccent) private var accent
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 12) {
                 Image(systemName: "mappin.circle.fill")
                     .font(.system(size: 17))
-                    .foregroundStyle(Palette.accent)
+                    .foregroundStyle(accent.color)
                     .frame(width: 26)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(place.name)
@@ -998,13 +1016,13 @@ private struct PlaceRow: View {
                     if !place.region.isEmpty {
                         Text(place.region)
                             .font(.system(size: 11.5))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.secondaryText)
                     }
                 }
                 Spacer(minLength: 12)
                 Text("Use")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Palette.accent)
+                    .foregroundStyle(accent.color)
                     .opacity(hovering ? 1 : 0)
             }
             .padding(.horizontal, 14)
@@ -1059,7 +1077,7 @@ private struct ShortcutPins: View {
             if names.isEmpty {
                 Text("No shortcuts found.")
                     .font(.system(size: 12.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                     .frame(maxWidth: .infinity, minHeight: 44)
             } else {
                 FlowLayout(spacing: 7) {
@@ -1089,6 +1107,11 @@ private struct PinChip: View {
     let isPinned: Bool
     let action: () -> Void
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.windowAccent) private var accent
+
+    /// A pinned chip is filled with the accent and lit along its top, like a prominent button.
+    private static let pinnedRim = LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.05)],
+                                                  startPoint: .top, endPoint: .bottom)
 
     var body: some View {
         Button(action: action) {
@@ -1096,13 +1119,20 @@ private struct PinChip: View {
                 Image(systemName: isPinned ? "pin.fill" : "pin")
                     .font(.system(size: 9.5, weight: .bold))
                 Text(title)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 12, weight: isPinned ? .semibold : .medium))
                     .lineLimit(1)
             }
-            .foregroundStyle(isPinned ? Color.white : Color.primary.opacity(0.8))
+            .foregroundStyle(isPinned ? accent.onFill : Color.primary.opacity(0.78))
             .padding(.horizontal, 10)
             .frame(height: 26)
-            .background(Capsule().fill(isPinned ? AnyShapeStyle(Palette.buttonGradient) : AnyShapeStyle(Palette.wash)))
+            .background {
+                if isPinned {
+                    Capsule().fill(accent.gradient)
+                        .overlay(Capsule().strokeBorder(Self.pinnedRim))
+                } else {
+                    Capsule().fill(Palette.wash)
+                }
+            }
             .contentShape(Capsule())
         }
         .buttonStyle(TileButtonStyle(cornerRadius: 13))
@@ -1170,11 +1200,12 @@ struct TraySettings: View {
                     FileStack(urls: Array(tray.urls.prefix(4)))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(tray.items.count == 1 ? "1 item" : "\(tray.items.count) items")
-                            .font(.system(size: 20, weight: .bold, design: .rounded))
+                            .font(.system(size: 20, weight: .medium, design: .rounded))
+                            .monospacedDigit()
                             .contentTransition(.numericText(value: Double(tray.items.count)))
                         Text(tray.items.isEmpty ? "Drop files on the notch to park them here." : "Parked in the notch for later.")
                             .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.secondaryText)
                     }
                     .accessibilityElement(children: .combine)
                     Spacer(minLength: 10)
@@ -1195,13 +1226,13 @@ private struct CaptureActionRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            SymbolBadge(symbol: "return", tint: Palette.accent, size: 26)
+            SymbolBadge(symbol: "return", size: 26)
             VStack(alignment: .leading, spacing: 2) {
                 Text("After capture")
                     .font(.system(size: 13, weight: .medium))
                 Text("What Return does once a region is selected")
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
             }
             .accessibilityElement(children: .combine)
             Spacer(minLength: 12)
@@ -1266,7 +1297,7 @@ struct FocusSettings: View {
                     NumberDial(title: "Long break", value: $settings.longBreakMinutes, range: 5...60, step: 5, unit: "min",
                                tint: PomodoroTimer.Phase.longBreak.color)
                     NumberDial(title: "Long break after", value: $settings.sessionsPerRound, range: 2...8,
-                               unit: "sessions", tint: Palette.accent)
+                               unit: "sessions")
                 }
             }
             SettingsSection(title: "Behavior") {
@@ -1294,14 +1325,14 @@ struct AboutSettings: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 26) {
             VStack(spacing: 14) {
-                DynotchLogo(size: 92)
+                DynotchLogo(size: 96)
                     .shadow(color: Palette.lavender.opacity(0.45), radius: 18, y: 6)
                 VStack(spacing: 3) {
                     Text("Dynotch")
                         .font(.system(size: 26, weight: .bold))
                     Text("Version \(UpdateChecker.currentVersion)")
                         .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Palette.secondaryText)
                 }
                 Text("Music, files, your calendar, a focus timer and more, one hover away.")
                     .font(.system(size: 13))
@@ -1309,7 +1340,7 @@ struct AboutSettings: View {
                     .frame(maxWidth: 360)
                 Text("Inspired by NotchNook and MacNotch.")
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                 CapsuleButton(title: "Welcome Tour", symbol: "sparkles") { WelcomeWindowController.shared.show() }
                     .padding(.top, 4)
             }
@@ -1352,7 +1383,7 @@ struct AboutSettings: View {
                         Text(focus.access == .denied ? "Needs Full Disk Access, under Permissions"
                              : "What the Focus settings hold, and which Focus Dynotch makes of them")
                             .font(.system(size: 11.5))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Palette.secondaryText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     .accessibilityElement(children: .combine)
@@ -1378,18 +1409,13 @@ private struct ShortcutRow: View {
         HStack(spacing: 14) {
             HStack(spacing: 4) {
                 ForEach(keys, id: \.self) { key in
-                    Text(key)
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .padding(.horizontal, 7)
-                        .frame(minWidth: 24, minHeight: 24)
-                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Palette.wash))
-                        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).strokeBorder(Palette.stroke))
+                    Keycap(label: key, style: .window)
                 }
             }
             .frame(width: 104, alignment: .leading)
             Text(action)
                 .font(.system(size: 12.5))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.secondaryText)
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 14)

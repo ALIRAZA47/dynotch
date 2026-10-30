@@ -37,8 +37,10 @@ struct LevelControls: View {
     }
 }
 
-/// A wide slider like Control Center's: drag along it or click anywhere on it. Its symbol sits on the fill.
-/// A compact one leaves its name out and keeps its accessory beside it.
+/// A wide slider like Control Center's: drag along it or click anywhere on it. A channel pressed
+/// into the glass, filled with white glass up to the level; its symbol sits on the fill, and the
+/// level is printed beside its name. A compact one leaves its name out, prints the level inside
+/// the channel and keeps its accessory beside it.
 private struct LevelSlider<Accessory: View>: View {
     let title: String
     let symbol: String
@@ -64,6 +66,14 @@ private struct LevelSlider<Accessory: View>: View {
 
     private static var step: Double { 1.0 / 16 }
 
+    /// White glass, lit from above, like the pearl buttons.
+    private static var fill: LinearGradient {
+        LinearGradient(colors: [.white, Color(white: 0.8)], startPoint: .top, endPoint: .bottom)
+    }
+
+    /// What the slider is set to, or where the pointer has it while dragging.
+    private var shown: Double { min(1, max(0, dragValue ?? value)) }
+
     var body: some View {
         if compact {
             HStack(spacing: 6) {
@@ -76,8 +86,10 @@ private struct LevelSlider<Accessory: View>: View {
                 HStack(spacing: 4) {
                     Text(title)
                         .font(NotchFont.label)
-                        .foregroundStyle(theme.tertiary)
+                        .foregroundStyle(theme.secondary)
                     Spacer(minLength: 0)
+                    readout
+                        .foregroundStyle(theme.secondary)
                     accessory
                 }
                 .frame(height: 16)
@@ -88,20 +100,49 @@ private struct LevelSlider<Accessory: View>: View {
         }
     }
 
+    /// The level as a number, "68%". The slider says it as its value, so VoiceOver skips it.
+    private var readout: some View {
+        Text("\(Int((shown * 100).rounded()))%")
+            .font(NotchFont.numeric(11))
+            .lineLimit(1)
+            .fixedSize()
+            .accessibilityHidden(true)
+    }
+
     private var slider: some View {
-        let shown = min(1, max(0, dragValue ?? value))
+        let shown = shown
         let shape = RoundedRectangle(cornerRadius: compact ? 10 : 12, style: .continuous)
         return GeometryReader { proxy in
+            let filled = proxy.size.width * shown
             ZStack(alignment: .leading) {
-                shape.fill(theme.control)
+                GlassSurface(depth: .well, shape: shape)
                 Rectangle()
-                    .fill(Color.white.opacity(0.94))
-                    .frame(width: proxy.size.width * shown)
+                    .fill(Self.fill)
+                    .frame(width: filled)
                 Image(systemName: symbol)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(shown * proxy.size.width > 30 ? Color.black.opacity(0.72) : theme.secondary)
+                    .foregroundStyle(filled > 30 ? Color.black.opacity(0.72) : theme.secondary)
                     .contentTransition(.symbolEffect(.replace))
                     .padding(.leading, 12)
+                if compact {
+                    // Dark where the fill has reached it, secondary on the empty channel beyond.
+                    let printed = readout
+                        .padding(.trailing, 10)
+                        .frame(width: proxy.size.width, height: proxy.size.height, alignment: .trailing)
+                    printed
+                        .foregroundStyle(theme.secondary)
+                        .mask(alignment: .leading) {
+                            HStack(spacing: 0) {
+                                Color.clear.frame(width: filled)
+                                Color.black
+                            }
+                        }
+                    printed
+                        .foregroundStyle(Color.black.opacity(0.6))
+                        .mask(alignment: .leading) {
+                            Color.black.frame(width: filled)
+                        }
+                }
             }
             .clipShape(shape)
             .contentShape(shape)
@@ -128,7 +169,7 @@ private struct LevelSlider<Accessory: View>: View {
     }
 }
 
-/// Where the sound goes, and a menu of the Mac's outputs to send it elsewhere.
+/// Where the sound goes, on a piece of glass, and a menu of the Mac's outputs to send it elsewhere.
 private struct OutputMenu: View {
     var height: CGFloat = 32
     @ObservedObject private var outputs = AudioOutputs.shared
@@ -151,7 +192,8 @@ private struct OutputMenu: View {
             .foregroundStyle(theme.primary)
             .padding(.horizontal, 10)
             .frame(height: height)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(hovering ? theme.controlHover : theme.control))
+            .glass(.control, in: RoundedRectangle(cornerRadius: 10, style: .continuous), isLit: hovering)
+            .animation(.notchHighlight, value: hovering)
         } items: {
             outputs.reload()
             return outputs.devices.map { device in

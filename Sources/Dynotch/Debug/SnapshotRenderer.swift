@@ -12,7 +12,8 @@ enum SnapshotRenderer {
 
     // MARK: Scratch defaults
 
-    private static let scratchDomain = "app.dynotch.snapshot"
+    /// One a run, so two runs side by side don't trade settings.
+    private static let scratchDomain = "app.dynotch.snapshot.\(ProcessInfo.processInfo.processIdentifier)"
 
     /// Points every setting at a scratch domain holding sample values. Called before anything
     /// reads a setting; `discardScratchDefaults` clears it again when the run is done.
@@ -30,6 +31,10 @@ enum SnapshotRenderer {
 
     static func discardScratchDefaults() {
         UserDefaults.dynotch.removePersistentDomain(forName: scratchDomain)
+        // An emptied domain still leaves its file behind, and every run has its own.
+        UserDefaults.dynotch.synchronize()
+        try? FileManager.default.removeItem(at: FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Preferences/\(scratchDomain).plist"))
     }
 
     private struct Scene {
@@ -39,6 +44,8 @@ enum SnapshotRenderer {
         var secondary: CompactActivity?
         var tab: NotchTab = .home
         var draggingFiles = false
+        /// One drop target has the files over it. See `snapshotDrop`.
+        var targetsDrop = false
         var hasTrack = true
         var micMuted = false
         var micInUse = false
@@ -62,7 +69,18 @@ enum SnapshotRenderer {
         var prepare: (@MainActor () -> Void)?
     }
 
-    static func render(into folder: URL) {
+    /// The images whose names start with one of these, or all of them when it's empty.
+    private static var only: [String] = []
+
+    private static func wanted(_ name: String) -> Bool {
+        only.isEmpty || only.contains { name.hasPrefix($0) }
+    }
+
+    static func render(into folder: URL, only prefixes: [String] = []) {
+        #if DEBUG
+        NotchAccent.checkContrast()
+        #endif
+        only = prefixes
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         PowerMonitor.shared.start()
         loadSamples(in: folder)
@@ -129,6 +147,7 @@ enum SnapshotRenderer {
             Scene(name: "19-open-tray-teal-square", phase: .open, tab: .tray,
                   theme: NotchTheme(accent: .teal, topRadius: 8, bottomRadius: 18),
                   setUp: { TrayStore.shared.select(TrayStore.shared.items[1]) }),
+        ] + accentScenes() + [
             Scene(name: "20-closed-timer-and-music", phase: .closed, activity: .timer, secondary: .music),
             Scene(name: "21-closed-volume-and-timer", phase: .closed, activity: .notice(volume), secondary: .timer),
             Scene(name: "22-closed-track-peek-and-timer", phase: .closed, activity: .trackPeek, secondary: .timer),
@@ -181,23 +200,27 @@ enum SnapshotRenderer {
             // Widgets and the Tray
             Scene(name: "90-closed-screenshot", phase: .closed, activity: .notice(LiveNotice(
                 key: "screenshot", symbol: "camera.viewfinder", tint: .white, detail: "Screenshot added to the Tray"))),
-            Scene(name: "91-open-control-bluetooth", phase: .open, tab: .stats) {
+            Scene(name: "91-open-control-bluetooth", phase: .open, tab: .stats, prepare: {
                 DeviceBatteryMonitor.shared.loadSample([], paired: samplePairedDevices,
                                                        connections: ["beats": .connecting, "speaker": .failed("Not in range")])
-            },
-            Scene(name: "92-open-tray-selected", phase: .open, tab: .tray) {
+            }),
+            Scene(name: "92-open-tray-selected", phase: .open, tab: .tray, prepare: {
                 TrayStore.shared.select(TrayStore.shared.items[1])
-            },
-            Scene(name: "93-open-nook-weather-notes", phase: .open, tab: .home) {
+            }),
+            // The Tray on glass, in the palest accent: its dimmest text, and a file name on the tint.
+            Scene(name: "92-open-tray-selected-glass", phase: .open, tab: .tray,
+                  theme: NotchTheme(material: .glass, accent: .yellow),
+                  setUp: { TrayStore.shared.select(TrayStore.shared.items[1]) }),
+            Scene(name: "93-open-nook-weather-notes", phase: .open, tab: .home, prepare: {
                 (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.weather, .notes)
                 WeatherService.shared.loadSample(place: "Lisbon", conditions: .init(
                     temperature: 18.4, high: 21.2, low: 12.6, code: 2, isDay: true, isRaining: false,
                     rainStart: .now.addingTimeInterval(20 * 60), isHeavyRain: false))
-            },
-            Scene(name: "94-open-nook-weather-setup", phase: .open, tab: .home) {
+            }),
+            Scene(name: "94-open-nook-weather-setup", phase: .open, tab: .home, prepare: {
                 (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.weather, .devices)
                 WeatherService.shared.loadSample(place: "", conditions: nil)
-            },
+            }),
             Scene(name: "95-closed-rain", phase: .closed, activity: .notice(LiveNotice(
                 key: "rain", symbol: "cloud.rain.fill", tint: .cyan, text: "in 15m", detail: "Rain starting soon"))),
             // The command field, empty and with something typed.
@@ -219,6 +242,7 @@ enum SnapshotRenderer {
                 let lunch = CalendarService.shared.events.filter { $0.title == "Lunch with Sam" }
                 CalendarService.shared.loadSample(events: lunch, reminders: CalendarService.shared.reminders)
             }),
+        ] + widgetScenes() + [
             // The other widgets beside the player, busy cards and empty ones. These change the samples, so they go last.
             Scene(name: "96-open-nook-timer-toggles", phase: .open, tab: .home, prepare: {
                 (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.timer, .toggles)
@@ -239,7 +263,8 @@ enum SnapshotRenderer {
         let settings = AppSettings.shared
         let savedTheme = settings.theme
         let savedSize = (settings.openWidth, settings.openHeight)
-        for scene in scenes {
+        var written = 0
+        for scene in scenes where wanted(scene.name) {
             apply(scene.theme ?? savedTheme)
             (settings.openWidth, settings.openHeight) = scene.openSize.map { ($0.width, $0.height) } ?? savedSize
             let size = CGSize(width: settings.openWidth + NotchTheme.standard.topRadius * 2 + 80, height: settings.openHeight + 40)
@@ -264,16 +289,19 @@ enum SnapshotRenderer {
             }
             .frame(width: size.width, height: height)
             .environment(\.isSnapshot, true)
+            .environment(\.snapshotDrop, scene.targetsDrop ? SnapshotDrop() : nil)
 
             let renderer = ImageRenderer(content: content)
             renderer.scale = 2
+            // A drop target takes the drop as it appears, so it shows targeted from the second frame on.
+            if scene.targetsDrop { _ = renderer.cgImage }
             guard let image = renderer.cgImage,
                   let png = NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]) else { continue }
-            try? png.write(to: folder.appendingPathComponent(scene.name + ".png"))
+            if (try? png.write(to: folder.appendingPathComponent(scene.name + ".png"))) != nil { written += 1 }
         }
         apply(savedTheme)
         (settings.openWidth, settings.openHeight) = savedSize
-        print("Wrote \(scenes.count) snapshots to \(folder.path)")
+        print("Wrote \(written) snapshots to \(folder.path)")
         loadSampleProfiles()
         renderSettings(into: folder)
         renderThemes(into: folder)
@@ -287,13 +315,16 @@ enum SnapshotRenderer {
     /// The capture editor over a made-up display: a bare selection, the toolbar with marks of every
     /// kind, a text mark being typed, and a pinned capture.
     private static func renderCapture(into folder: URL) {
-        guard let display = CaptureController.syntheticDisplay(id: 1, frame: CGRect(x: 0, y: 0, width: 1280, height: 800), scale: 2)
+        // One editor makes all four, each from the one before.
+        guard wanted("capture") || only.contains(where: { $0.hasPrefix("capture") }),
+              let display = CaptureController.syntheticDisplay(id: 1, frame: CGRect(x: 0, y: 0, width: 1280, height: 800), scale: 2)
         else { return }
         var count = 0
         let editor = CaptureEditor(displays: [display], accent: AppSettings.shared.theme.accent)
         let selection = CGRect(x: 118, y: 150, width: 700, height: 430)
         editor.stage(selection: selection, on: display.id)
-        let window = CaptureOverlayWindow(display: display, editor: editor)
+        // The chrome's glass as its black 0.85 stand-in, so the images don't depend on the glass.
+        let window = CaptureOverlayWindow(display: display, editor: editor, isSnapshot: true)
         window.setFrameOrigin(NSPoint(x: -20_000, y: -60_000))
         window.orderFrontRegardless()
         RunLoop.main.run(until: .now + 1.2)
@@ -370,6 +401,8 @@ enum SnapshotRenderer {
         var count = 0
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             for step in WelcomeTour.Step.allCases {
+                let name = "welcome-\(step.rawValue + 1)-\(step)-\(suffix)"
+                guard wanted(name) else { continue }
                 let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: WelcomeWindowController.contentSize),
                                              styleMask: WelcomeWindowController.styleMask, backing: .buffered, defer: false)
                 let tour = WelcomeTour()
@@ -379,7 +412,6 @@ enum SnapshotRenderer {
                 window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(count) * 1_000, y: -50_000))
                 window.orderFrontRegardless()
                 RunLoop.main.run(until: .now + 1.2)
-                let name = "welcome-\(step.rawValue + 1)-\(step)-\(suffix)"
                 if save(window, to: folder.appendingPathComponent(name + ".png")) { count += 1 }
                 if let scrollView = window.contentView.flatMap(overflowingScrollView), let document = scrollView.documentView,
                    document.isFlipped {
@@ -419,18 +451,19 @@ enum SnapshotRenderer {
     private static func renderProfiles(into folder: URL) {
         var count = 0
         for (index, appearance) in [NSAppearance.Name.darkAqua, .aqua].enumerated() {
+            let name = appearance == .aqua ? "settings-profiles-empty-light" : "settings-profiles-dark"
+            guard wanted(name) else { continue }
             if appearance == .aqua { ProfileStore.shared.loadSample([], active: nil) }
             ProfileStore.shared.revealRequested = true
             let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
                                          styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
             let navigation = SettingsNavigation()
             navigation.page = .general
-            SettingsWindowController.configure(window, navigation: navigation)
+            SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
             window.appearance = NSAppearance(named: appearance)
             window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -40_000))
             window.orderFrontRegardless()
             RunLoop.main.run(until: .now + 1.5)
-            let name = appearance == .aqua ? "settings-profiles-empty-light" : "settings-profiles-dark"
             if save(window, to: folder.appendingPathComponent(name + ".png")) { count += 1 }
             window.orderOut(nil)
             window.close()
@@ -448,18 +481,19 @@ enum SnapshotRenderer {
         var count = 0
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             for page in SettingsPage.allCases {
+                let name = String(format: "settings-%d-%@-%@", page.number, page.rawValue, suffix)
+                guard wanted(name) else { continue }
                 let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
                                              styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
                 let navigation = SettingsNavigation()
                 navigation.page = page
-                SettingsWindowController.configure(window, navigation: navigation)
+                SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
                 window.appearance = NSAppearance(named: appearance)
                 // A fresh spot for every window, so the window server never shows a stale one.
                 window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(count) * 1_000, y: -20_000))
                 window.orderFrontRegardless()
                 // Let tasks finish and animations settle.
                 RunLoop.main.run(until: .now + 1.2)
-                let name = String(format: "settings-%d-%@-%@", page.number, page.rawValue, suffix)
                 if save(window, to: folder.appendingPathComponent(name + ".png")) { count += 1 }
                 if let scrollView = window.contentView.flatMap(overflowingScrollView), let document = scrollView.documentView {
                     let viewport = scrollView.contentView.bounds.height
@@ -490,13 +524,13 @@ enum SnapshotRenderer {
     /// The Live Activities page with its preview held on each activity, as when pointing at its tile.
     private static func renderSpotlights(into folder: URL) {
         var count = 0
-        for (index, kind) in LiveActivityKind.allCases.enumerated() {
+        for (index, kind) in LiveActivityKind.allCases.enumerated() where wanted("stage-\(kind.rawValue)") {
             let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
                                          styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
             let navigation = SettingsNavigation()
             navigation.page = .activities
             navigation.spotlight = kind
-            SettingsWindowController.configure(window, navigation: navigation)
+            SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
             window.appearance = NSAppearance(named: .darkAqua)
             window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -30_000))
             window.orderFrontRegardless()
@@ -517,13 +551,13 @@ enum SnapshotRenderer {
             ("graphite-dark", .darkAqua, NotchTheme(accent: .graphite, topRadius: 20, bottomRadius: 24)),
         ]
         var count = 0
-        for (index, look) in looks.enumerated() {
+        for (index, look) in looks.enumerated() where wanted("settings-2-appearance-\(look.name)") {
             apply(look.theme)
             let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
                                          styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
             let navigation = SettingsNavigation()
             navigation.page = .appearance
-            SettingsWindowController.configure(window, navigation: navigation)
+            SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
             window.appearance = NSAppearance(named: look.appearance)
             window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -40_000))
             window.orderFrontRegardless()
@@ -662,6 +696,39 @@ enum SnapshotRenderer {
                 .init(id: "c", title: "Water the plants", dueDate: nil, color: .green),
                 .init(id: "e", title: "Renew the passport", dueDate: nil, color: .purple),
             ])
+    }
+
+    /// Ink on each accent: the Control tab, its jewel and the Mute mic tile, which is on in every
+    /// probe (the Dark tile follows the Mac's own appearance); on glass for the lightest and the
+    /// greyest accent; and a drop zone with files over it.
+    private static func accentScenes() -> [Scene] {
+        NotchAccent.allCases.map { accent in
+            Scene(name: "accent-\(accent.rawValue)-control", phase: .open, tab: .stats, micMuted: true,
+                  theme: NotchTheme(accent: accent))
+        } + [
+            Scene(name: "accent-yellow-control-glass", phase: .open, tab: .stats, micMuted: true,
+                  theme: NotchTheme(material: .glass, accent: .yellow)),
+            Scene(name: "accent-graphite-control-glass", phase: .open, tab: .stats, micMuted: true,
+                  theme: NotchTheme(material: .glass, accent: .graphite)),
+            Scene(name: "accent-yellow-tray-dropping", phase: .open, tab: .tray, draggingFiles: true, targetsDrop: true,
+                  theme: NotchTheme(accent: .yellow)),
+        ]
+    }
+
+    /// The widgets no other scene brings to the top of the Nook's stack, each first in it beside one
+    /// that never asks for the room, on black and on glass. They leave the widgets set, so they come
+    /// just before 96, which sets its own.
+    private static func widgetScenes() -> [Scene] {
+        let stacks: [(name: String, first: HomeWidget, second: HomeWidget)] = [
+            ("notes", .notes, .mirror), ("shortcuts", .shortcuts, .mirror),
+            ("mirror", .mirror, .notes), ("toggles", .toggles, .mirror),
+        ]
+        return stacks.flatMap { stack in
+            [nil, NotchTheme(material: .glass)].map { theme in
+                Scene(name: "widget-\(stack.name)" + (theme == nil ? "" : "-glass"), phase: .open, tab: .home, theme: theme,
+                      setUp: { (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (stack.first, stack.second) })
+            }
+        }
     }
 
     /// Each tab at the smallest and the largest open size the settings allow, with more in every

@@ -17,7 +17,8 @@ final class PermissionStatus: ObservableObject {
         let title: String
         let purpose: String
         let symbol: String
-        var tint: Color = Palette.accent
+        /// The badge's color. Without one, the window accent.
+        var tint: Color?
         /// Shown instead of the symbol: the app that the permission is for.
         var appBundleID: String?
         /// False when macOS never asks, like Full Disk Access: the button opens System Settings.
@@ -245,18 +246,14 @@ struct PermissionRow: View {
                     .font(.system(size: 13, weight: .medium))
                 Text(item.purpose)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
             }
             .accessibilityElement(children: .combine)
             Spacer(minLength: 12)
             switch item.state {
             case .granted:
                 Label("Allowed", systemImage: "checkmark.circle.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.green)
-                    .padding(.horizontal, 10)
-                    .frame(height: 26)
-                    .background(Capsule().fill(Color.green.opacity(0.12)))
+                    .modifier(CheckCapsule())
             case .denied:
                 openSettingsButton
             case .notDetermined where !item.hasPrompt:
@@ -267,7 +264,7 @@ struct PermissionRow: View {
             case .unavailable(let reason):
                 Text(reason)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
             }
         }
         .padding(.horizontal, 14)
@@ -277,6 +274,25 @@ struct PermissionRow: View {
     private var openSettingsButton: some View {
         CapsuleButton(title: "Open System Settings", symbol: "arrow.up.forward", action: item.action)
             .accessibilityLabel("Open System Settings for \(item.title)")
+    }
+}
+
+/// A green check and a word in a quiet green capsule: a permission that's allowed, a profile that's
+/// on. The green is the window's shade of it, deep enough to read on the light page, and its capsule
+/// is fainter there, as a selected chip's is, so the word keeps 4.5:1.
+struct CheckCapsule: ViewModifier {
+    var width: CGFloat?
+    @Environment(\.colorScheme) private var colorScheme
+
+    private static let green = WindowAccent(choice: .green).color
+
+    func body(content: Content) -> some View {
+        content
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Self.green)
+            .padding(.horizontal, 10)
+            .frame(width: width, height: 26)
+            .background(Capsule().fill(Self.green.opacity(colorScheme == .dark ? 0.12 : 0.06)))
     }
 }
 

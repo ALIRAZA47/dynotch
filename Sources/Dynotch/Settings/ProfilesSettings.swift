@@ -50,7 +50,7 @@ private struct IntroRow: View {
                     .font(.system(size: 13, weight: .medium))
                 Text("Work, Home, Presenting: a profile switches the notch's tabs, widgets and live activities together, from the menu bar, a dynotch:// link, or by itself when a Focus turns on or a display connects.")
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .combine)
@@ -82,7 +82,7 @@ private struct ProfileRow: View {
                 }
                 Text(detail)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(needsDiskAccess ? AnyShapeStyle(Color.orange) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(needsDiskAccess ? AnyShapeStyle(Self.warning) : AnyShapeStyle(Palette.secondaryText))
                     .lineLimit(1)
             }
             .accessibilityElement(children: .combine)
@@ -90,11 +90,7 @@ private struct ProfileRow: View {
             RulePicker(profile: profile)
             if isActive {
                 Label("On", systemImage: "checkmark.circle.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.green)
-                    .padding(.horizontal, 10)
-                    .frame(width: 76, height: 26)
-                    .background(Capsule().fill(Color.green.opacity(0.12)))
+                    .modifier(CheckCapsule(width: 76))
                     .accessibilityLabel("\(profile.name) is on")
             } else {
                 CapsuleButton(title: "Switch") { store.switchTo(profile) }
@@ -110,6 +106,7 @@ private struct ProfileRow: View {
                     .foregroundStyle(.secondary)
                     .frame(width: 26, height: 26)
                     .background(Circle().fill(Palette.wash))
+                    .overlay(Circle().strokeBorder(Palette.rimGradient))
                     .contentShape(Circle())
             }
             .menuStyle(.button)
@@ -135,10 +132,13 @@ private struct ProfileRow: View {
             .onSubmit(commitRename)
             .onExitCommand { isRenaming = false }
             .onChange(of: isEditing) { if !isEditing { commitRename() } }
-            .padding(.horizontal, 7)
+            .padding(.horizontal, 9)
             .frame(maxWidth: 220, minHeight: 22)
-            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Palette.wash))
+            .background(FieldWell())
     }
+
+    /// Orange in the window's shade, deep enough to read on the light page.
+    static let warning = WindowAccent(choice: .orange).color
 
     private var needsDiskAccess: Bool {
         profile.isFocusRule && focus.access == .denied
@@ -173,6 +173,8 @@ private struct RulePicker: View {
     let profile: Profile
     @ObservedObject private var store = ProfileStore.shared
     @ObservedObject private var focus = FocusMonitor.shared
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.windowAccent) private var accent
 
     private enum Choice: Hashable {
         case byHand, anyFocus, focus(String), display
@@ -198,21 +200,29 @@ private struct RulePicker: View {
                 Text("Focus rules need Full Disk Access")
             }
         } label: {
+            // A chip: quiet while the profile is switched by hand, and in the accent, like a
+            // selected chip, while something switches it on by itself.
+            let hasRule = profile.rule != nil
             HStack(spacing: 6) {
                 Image(systemName: symbol)
                     .font(.system(size: 10.5, weight: .bold))
-                    .foregroundStyle(profile.rule == nil ? Color.secondary : Palette.accent)
+                    .foregroundStyle(hasRule ? accent.color : Color.secondary)
                 Text(title)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 12, weight: hasRule ? .semibold : .medium))
                     .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 8.5, weight: .bold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(hasRule ? AnyShapeStyle(accent.color.opacity(0.7)) : AnyShapeStyle(.secondary))
             }
-            .foregroundStyle(.primary)
+            .foregroundStyle(hasRule ? accent.color : Color.primary.opacity(0.78))
             .padding(.horizontal, 11)
             .frame(height: 26)
-            .background(Capsule().fill(profile.rule == nil ? AnyShapeStyle(Palette.wash) : AnyShapeStyle(Palette.accent.opacity(0.13))))
+            .background {
+                // As faint as a selected chip's in light mode, where the accent's text has little room above 4.5:1.
+                Capsule().fill(hasRule ? AnyShapeStyle(accent.color.opacity(colorScheme == .dark ? 0.12 : 0.06))
+                                       : AnyShapeStyle(Palette.wash))
+                    .overlay(Capsule().strokeBorder(accent.color.opacity(hasRule ? 0.55 : 0), lineWidth: 1.2))
+            }
             .contentShape(Capsule())
         }
         .menuStyle(.button)
@@ -281,21 +291,21 @@ private struct NewProfileRow: View {
         let taken = store.isNameTaken(trimmed)
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 12) {
-                SymbolBadge(symbol: "plus", tint: Palette.accent, isActive: !trimmed.isEmpty && !taken, size: 28)
+                SymbolBadge(symbol: "plus", isActive: !trimmed.isEmpty && !taken, size: 28)
                 TextField(store.profiles.isEmpty ? "Name it, like Work or Home" : "Another profile's name", text: $name)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12.5))
                     .onSubmit(save)
-                    .padding(.horizontal, 10)
+                    .padding(.horizontal, 12)
                     .frame(height: 28)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.wash))
+                    .background(FieldWell())
                 CapsuleButton(title: "Save Current Setup", symbol: "square.and.arrow.down", kind: .prominent, action: save)
                     .disabled(trimmed.isEmpty || taken)
             }
             if taken {
                 Text("There's already a profile called “\(trimmed)”.")
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(ProfileRow.warning)
                     .padding(.leading, 40)
             }
         }

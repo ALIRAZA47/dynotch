@@ -119,6 +119,8 @@ private struct NotePreview: View {
             }
         }
         .font(.system(size: 11.5))
+        // White, as the editor draws it.
+        .foregroundStyle(theme.primary)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .clipped()
     }
@@ -130,10 +132,10 @@ private struct NotePreview: View {
             HStack(spacing: 6) {
                 Image(systemName: checked ? "checkmark.circle.fill" : "circle")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(checked ? Color.yellow : Color.white.opacity(0.5))
+                    .foregroundStyle(checked ? Color.yellow : theme.tertiary)
                 Text(line.content)
                     .strikethrough(checked, color: theme.tertiary)
-                    .foregroundStyle(checked ? theme.tertiary : Color.white)
+                    .foregroundStyle(checked ? theme.tertiary : theme.primary)
             }
             .padding(.leading, CGFloat(line.indent.count) * 6)
         case .heading:

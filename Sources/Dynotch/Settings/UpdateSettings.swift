@@ -26,25 +26,29 @@ private struct UpdateRow: View {
     var body: some View {
         let status = checker.status
         HStack(spacing: 12) {
-            SymbolBadge(symbol: symbol, tint: tint, isActive: isActive, size: 26)
+            // The card's lead row gets the larger badge, centered on the column of the switch row's
+            // below it, so the two titles still line up.
+            SymbolBadge(symbol: symbol, tint: tint, size: 30)
+                .frame(width: 26)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.primary)
                 Text(detail)
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Palette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
                 if case .available = status, case .downloading(let fraction) = installer.state {
+                    // The accent's groove once the size is known; until then, the system's small bar.
                     Group {
                         if let fraction {
-                            ProgressView(value: fraction)
+                            MeterBar(value: fraction)
                         } else {
                             ProgressView()
+                                .progressViewStyle(.linear)
+                                .controlSize(.small)
                         }
                     }
-                    .progressViewStyle(.linear)
-                    .controlSize(.small)
                     .padding(.top, 5)
                     .accessibilityLabel("Download progress")
                 }
@@ -119,17 +123,15 @@ private struct UpdateRow: View {
         }
     }
 
-    private var tint: Color {
+    /// Nil is the window accent, with its own glyph color: white would wash out on the pale accents
+    /// of dark mode.
+    private var tint: Color? {
         switch checker.status {
-        case .idle, .checking: Palette.accent
+        case .idle, .checking: nil
         case .upToDate: .green
-        case .available: installFailed ? .orange : Palette.magenta
+        case .available: installFailed ? .orange : nil
         case .failed: .orange
         }
-    }
-
-    private var isActive: Bool {
-        checker.status != .idle
     }
 
     private var title: String {

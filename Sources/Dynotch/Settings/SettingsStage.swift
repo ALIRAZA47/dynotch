@@ -1,14 +1,18 @@
 import SwiftUI
 
-/// The header of every page: a strip of the app icon's night sky with a model notch hanging from
-/// its top edge. The notch acts out the page's settings as they change.
+/// The header of every page: a stage of graphite glass, light or dark with the page and lit from
+/// above in the user's accent, with a model notch hanging from its top edge. The notch acts out
+/// the page's settings as they change.
 struct SettingsStage: View {
     @ObservedObject var navigation: SettingsNavigation
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
 
     static let height: CGFloat = 206
 
     var body: some View {
         let page = navigation.page
+        let ink = StageInk(colorScheme: colorScheme, contrast: contrast)
         ZStack(alignment: .bottom) {
             // Both are decoration. The backdrop's glow is stretched past the stage, where `clipped`
             // hides it but hit testing still finds it: it swallowed clicks on the sidebar's top rows.
@@ -22,11 +26,11 @@ struct SettingsStage: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(page.title)
                         .font(.system(size: 26, weight: .bold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(ink.primary)
                         .accessibilityAddTraits(.isHeader)
                     Text(page.subtitle)
                         .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.62))
+                        .foregroundStyle(ink.secondary)
                 }
                 .id(page)
                 .transition(.opacity)
@@ -39,17 +43,43 @@ struct SettingsStage: View {
         .frame(height: Self.height)
         .frame(maxWidth: .infinity)
         .clipped()
-        .environment(\.colorScheme, .dark)
     }
 }
 
+/// The stage's text. On the dark stage it's white at the notch's levels, a step brighter with
+/// Increase Contrast; on the light one it's the system's label color, with the second level a
+/// little firmer than the system's, which reads under 4.5:1 on the stage's grey.
+struct StageInk {
+    let colorScheme: ColorScheme
+    var contrast = ColorSchemeContrast.standard
+
+    var primary: Color { colorScheme == .dark ? .white : .primary }
+    var secondary: Color {
+        colorScheme == .dark ? .white.opacity(contrast == .increased ? 0.78 : 0.62) : .primary.opacity(0.7)
+    }
+    /// A method that's off.
+    var off: Color { colorScheme == .dark ? .white.opacity(0.36) : .primary.opacity(0.36) }
+}
+
+/// Graphite glass lit from above, light or dark with the page: a bloom of the user's accent where
+/// the model notch hangs, on the dark stage a white glow under the top edge, and a line along the
+/// foot where the stage meets the page.
 private struct StageBackdrop: View {
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.windowAccent) private var accent
+
     var body: some View {
+        let bloom = accent.color.opacity(Palette.stageBloomOpacity(colorScheme))
         ZStack {
-            LinearGradient(colors: [Palette.indigo, Palette.navy], startPoint: .top, endPoint: .bottom)
-            RadialGradient(colors: [Palette.lavender.opacity(0.5), Palette.lavender.opacity(0)],
-                           center: .top, startRadius: 0, endRadius: 250)
-                .scaleEffect(x: 1.6, y: 1, anchor: .top)
+            Palette.stageGradient
+            RadialGradient(colors: [bloom, bloom.opacity(0)], center: .top, startRadius: 0, endRadius: Palette.stageBloomRadius)
+                .scaleEffect(x: Palette.stageBloomStretch, y: 1, anchor: .top)
+            RadialGradient(colors: [Palette.stageGlow, Palette.stageGlow.opacity(0)], center: .top, startRadius: 0,
+                           endRadius: Palette.stageGlowRadius)
+                .scaleEffect(x: Palette.stageGlowStretch, y: 1, anchor: .top)
+        }
+        .overlay(alignment: .bottom) {
+            Palette.stageFoot.frame(height: 1)
         }
     }
 }
@@ -201,7 +231,8 @@ private struct StagePreview: View {
 }
 
 /// The notch silhouette at preview size, hanging from the top edge. Black, or glass for an open
-/// notch whose theme asks for it.
+/// notch whose theme asks for it. Whatever the stage around it, the notch is dark inside, with
+/// white on black as the real one has.
 private struct PreviewNotch<Content: View>: View {
     let size: CGSize
     let topRadius: CGFloat
@@ -210,30 +241,42 @@ private struct PreviewNotch<Content: View>: View {
     var bandHeight: CGFloat = 0
     var shadow = false
     @ViewBuilder var content: Content
+    /// The stage's appearance, which the shadow follows.
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
+        let onDark = colorScheme == .dark
         content
             .frame(width: size.width, height: size.height, alignment: .top)
             .padding(.horizontal, topRadius)
             .background(NotchSurface(isGlass: isGlass, topRadius: topRadius, bottomRadius: bottomRadius, bandHeight: bandHeight))
             .clipShape(NotchShape(topRadius: topRadius, bottomRadius: bottomRadius))
-            .shadow(color: .black.opacity(shadow ? (isGlass ? 0.35 : 0.6) : 0), radius: 12, y: 7)
+            .environment(\.colorScheme, .dark)
+            // Softer on the light stage, and fainter under glass, which would show it through.
+            .shadow(color: .black.opacity(shadow ? (onDark ? (isGlass ? 0.35 : 0.6) : (isGlass ? 0.15 : 0.25)) : 0),
+                    radius: 12, y: onDark ? 7 : 6)
     }
 }
 
-private struct CaptionText: View {
+/// A line under the model notch, in the stage's second color.
+struct CaptionText: View {
     let text: String
+    /// Numbers roll as they change; a line that's a sentence cross-fades instead.
+    let isNumeric: Bool
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
 
-    init(_ text: String) {
+    init(_ text: String, isNumeric: Bool = true) {
         self.text = text
+        self.isNumeric = isNumeric
     }
 
     var body: some View {
         Text(text)
             .font(.system(size: 11.5, weight: .semibold, design: .rounded))
             .monospacedDigit()
-            .foregroundStyle(.white.opacity(0.62))
-            .contentTransition(.numericText())
+            .foregroundStyle(StageInk(colorScheme: colorScheme, contrast: contrast).secondary)
+            .contentTransition(isNumeric ? .numericText() : .opacity)
     }
 }
 
@@ -271,7 +314,8 @@ private struct ClosedPreview: View {
                     .font(.system(size: 12 * scale, weight: .medium))
                     .foregroundStyle(.white.opacity(0.85))
                     .lineLimit(1)
-                    .padding(.horizontal, 16 * scale)
+                    // As in `ClosedNotchView`: the peek's semibold title gets 2 points more each side.
+                    .padding(.horizontal, (activity == .trackPeek ? 14 : 16) * scale)
                     .frame(height: layout.rowHeight * scale, alignment: .top)
             }
         }
@@ -301,7 +345,7 @@ private struct ClosedPreview: View {
                     .frame(width: 17 * scale, height: 17 * scale)
                 Text(countdown.name)
                     .font(.system(size: 12 * scale, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(theme.primary)
                     .lineLimit(1)
             }
         case .stopwatch:
@@ -324,8 +368,7 @@ private struct ClosedPreview: View {
                 .frame(width: 20 * scale, height: 14 * scale)
         case .timer:
             Text(timerText)
-                .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+                .font(NotchFont.numeric(12.5 * scale))
                 .foregroundStyle(PomodoroTimer.Phase.focus.color)
         case .notice(let notice):
             switch notice.kind {
@@ -334,25 +377,21 @@ private struct ClosedPreview: View {
                     .frame(width: 62 * scale, height: 5 * scale)
             case .info:
                 Text(notice.text)
-                    .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
-                    .monospacedDigit()
+                    .font(NotchFont.numeric(12.5 * scale))
                     .foregroundStyle(notice.tint)
                     .lineLimit(1)
             }
         case .countdown(let countdown):
             Text(Format.duration(countdown.remaining(at: .now).rounded(.up)))
-                .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+                .font(NotchFont.numeric(12.5 * scale))
                 .foregroundStyle(TimerStore.tint)
         case .stopwatch:
             Text("12:34")
-                .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+                .font(NotchFont.numeric(12.5 * scale))
                 .foregroundStyle(TimerStore.stopwatchTint)
         case .download:
             Text("45%")
-                .font(.system(size: 12.5 * scale, weight: .semibold, design: .rounded))
-                .monospacedDigit()
+                .font(NotchFont.numeric(12.5 * scale))
                 .foregroundStyle(DownloadMonitor.tint)
         }
     }
@@ -361,7 +400,7 @@ private struct ClosedPreview: View {
     private var detail: some View {
         switch activity {
         case .trackPeek:
-            Text("Midnight City · M83")
+            TrackPeekLine(title: "Midnight City", artist: "M83", scale: scale)
         case .notice(let notice):
             if let detail = notice.detail { Text(detail) }
         default:
@@ -396,21 +435,33 @@ private struct ClosedPreview: View {
     }
 }
 
+/// How the notch opens, as an info chip: glass on the stage, dim while that way is off.
 private struct MethodChip: View {
     let symbol: String
     let text: String
     let isOn: Bool
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
+        let ink = StageInk(colorScheme: colorScheme)
+        let dark = colorScheme == .dark
         HStack(spacing: 5) {
-            Image(systemName: symbol).font(.system(size: 10, weight: .semibold))
-            Text(text).font(.system(size: 11, weight: .semibold)).monospacedDigit()
+            Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
+            Text(text).font(.system(size: 12, weight: .medium)).monospacedDigit()
         }
-        .foregroundStyle(.white.opacity(isOn ? 0.92 : 0.3))
-        .padding(.horizontal, 9)
+        .foregroundStyle(isOn ? ink.primary : ink.off)
+        .padding(.horizontal, 10)
         .frame(height: 22)
-        .background(Capsule().fill(.white.opacity(isOn ? 0.12 : 0.03)))
-        .overlay(Capsule().strokeBorder(.white.opacity(isOn ? 0.16 : 0.07)))
+        .background {
+            if isOn {
+                Capsule().fill(dark ? AnyShapeStyle(Color.white.opacity(0.13)) : AnyShapeStyle(Palette.wash))
+                    .overlay(Capsule().strokeBorder(dark ? LinearGradient(colors: [.white.opacity(0.35), .white.opacity(0.06)],
+                                                                         startPoint: .top, endPoint: .bottom)
+                                                         : Palette.rimGradient))
+            } else {
+                Capsule().strokeBorder(Palette.stroke)
+            }
+        }
     }
 }
 
@@ -421,14 +472,12 @@ private struct ActivityDots: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            Text(featured.map { $0.isShown(with: settings) ? $0.title : "\($0.title) · Off" }
-                 ?? "Nothing shows in the closed notch")
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.7))
+            CaptionText(featured.map { $0.isShown(with: settings) ? $0.title : "\($0.title) · Off" }
+                        ?? "Nothing shows in the closed notch", isNumeric: false)
             HStack(spacing: 5) {
                 ForEach(LiveActivityKind.allCases) { kind in
                     Capsule()
-                        .fill(.white.opacity(kind == featured ? 0.95 : kind.isShown(with: settings) ? 0.35 : 0.1))
+                        .fill(Color.primary.opacity(kind == featured ? 0.95 : kind.isShown(with: settings) ? 0.35 : 0.1))
                         .frame(width: kind == featured ? 14 : 5, height: 5)
                 }
             }
@@ -468,7 +517,7 @@ private struct FocusRound: View {
 
 // MARK: Open notch
 
-/// The open notch in miniature: its tab bar and the Nook or the tray.
+/// The open notch in miniature: its header and the Nook or the tray.
 private struct OpenPreview: View {
     let tab: NotchTab
     let scale: CGFloat
@@ -493,6 +542,8 @@ private struct OpenPreview: View {
         .padding(.bottom, NotchTheme.inset * scale)
     }
 
+    /// As the real header has it: the tabs in a track pressed into the slab, the selected one a
+    /// jewel of the accent with ink on it, and the command pill and the ··· menu on the right.
     private var header: some View {
         // As in the real header: each side gets what's left beside the camera housing.
         let side = max(0, (settings.openWidth - NotchTheme.inset * 2 - 185) / 2 - 6) * scale
@@ -506,20 +557,30 @@ private struct OpenPreview: View {
                             Text(item.title).font(.system(size: 6.5, weight: .semibold)).fixedSize()
                         }
                     }
-                    .foregroundStyle(.white.opacity(selected ? 1 : 0.5))
+                    .foregroundStyle(selected ? theme.onAccent : theme.primary.opacity(0.55))
                     .padding(.horizontal, selected ? 5 : 3)
                     .frame(height: 11)
-                    .background(Capsule().fill(selected ? theme.selection : .clear))
+                    .background {
+                        if selected { GlassSurface(depth: .lens(theme.accent), shape: Capsule()) }
+                    }
                 }
             }
+            .padding(1)
+            .glass(.well, in: Capsule())
             .frame(width: side, alignment: .leading)
             Spacer(minLength: 0)
-            HStack(spacing: 5) {
-                Image(systemName: "battery.75percent")
-                Image(systemName: "gearshape.fill")
+            HStack(spacing: 4) {
+                HStack(spacing: 3) {
+                    Image(systemName: "magnifyingglass")
+                    Text("Type a command")
+                }
+                .padding(.horizontal, 5)
+                .frame(height: 13)
+                .glass(.control, in: Capsule())
+                Image(systemName: "ellipsis")
             }
-            .font(.system(size: 6.5, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.5))
+            .font(.system(size: 6, weight: .semibold))
+            .foregroundStyle(theme.secondary)
             .frame(width: side, alignment: .trailing)
         }
     }
@@ -544,11 +605,11 @@ private struct NookSketch: View {
                             .foregroundStyle(.white.opacity(0.85))
                         Text(widget.title)
                             .font(.system(size: 6.5, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.55))
+                            .foregroundStyle(theme.secondary)
                             .lineLimit(1)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(RoundedRectangle(cornerRadius: cardRadius, style: .continuous).fill(theme.card))
+                    .glass(.pane, in: RoundedRectangle(cornerRadius: cardRadius, style: .continuous))
                     .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 }
             }
@@ -556,24 +617,31 @@ private struct NookSketch: View {
     }
 }
 
+/// The player in miniature: glass-rimmed art, the bold title, a groove of light in the music's tint
+/// and a pearl to play.
 private struct PlayerSketch: View {
     let tint: Color
     let artworkRadius: CGFloat
+    @Environment(\.notchTheme) private var theme
+
+    private static let pearl: CGFloat = 13
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .top, spacing: 6) {
-                RoundedRectangle(cornerRadius: artworkRadius, style: .continuous)
-                    .fill(Palette.sunset)
+                let art = RoundedRectangle(cornerRadius: artworkRadius, style: .continuous)
+                art.fill(Palette.sunset)
+                    .overlay(art.strokeBorder(LinearGradient(colors: [.white.opacity(0.4), .white.opacity(0.05)],
+                                                             startPoint: .top, endPoint: .bottom)))
                     .frame(width: 34, height: 34)
                     .shadow(color: Palette.magenta.opacity(0.4), radius: 4)
                 VStack(alignment: .leading, spacing: 1.5) {
                     Text("Midnight City")
-                        .font(.system(size: 7.5, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .font(.system(size: 8.5, weight: .bold))
+                        .foregroundStyle(theme.primary)
                     Text("M83")
                         .font(.system(size: 6.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(theme.secondary)
                     AudioBars(isPlaying: false, color: tint)
                         .frame(width: 11, height: 6)
                         .padding(.top, 4)
@@ -581,23 +649,42 @@ private struct PlayerSketch: View {
                 .lineLimit(1)
             }
             Capsule()
-                .fill(.white.opacity(0.2))
+                .fill(theme.track)
                 .frame(height: 2)
                 .overlay(alignment: .leading) {
                     GeometryReader { proxy in
-                        Capsule().fill(.white).frame(width: proxy.size.width * 0.35)
+                        Capsule()
+                            .fill(LinearGradient(colors: [tint.opacity(0.55), tint], startPoint: .leading, endPoint: .trailing))
+                            .frame(width: proxy.size.width * 0.35)
                     }
                 }
             HStack {
                 ForEach(["shuffle", "backward.fill", "pause.fill", "forward.fill", "repeat"], id: \.self) { symbol in
-                    Image(systemName: symbol)
+                    if symbol == "pause.fill" {
+                        pearl(symbol)
+                    } else {
+                        Image(systemName: symbol)
+                            .foregroundStyle(.white.opacity(symbol == "shuffle" || symbol == "repeat" ? 0.5 : 0.85))
+                    }
                     if symbol != "repeat" { Spacer(minLength: 0) }
                 }
             }
             .font(.system(size: 6.5, weight: .bold))
-            .foregroundStyle(.white.opacity(0.85))
+            .frame(height: Self.pearl)
         }
         .frame(maxHeight: .infinity, alignment: .top)
+    }
+
+    /// The play button's pearl of white glass, with the glyph in black. No shadow: the miniature
+    /// redraws all the while a size slider is dragged.
+    private func pearl(_ symbol: String) -> some View {
+        let side = Self.pearl
+        return Image(systemName: symbol)
+            .font(.system(size: side * 0.4, weight: .bold))
+            .foregroundStyle(.black.opacity(0.86))
+            .frame(width: side, height: side)
+            .background(Circle().fill(LinearGradient(colors: [.white, .white.opacity(0.8)], startPoint: .top, endPoint: .bottom)))
+            .overlay(Circle().strokeBorder(LinearGradient(colors: [.white, .white.opacity(0.2)], startPoint: .top, endPoint: .bottom)))
     }
 }
 
@@ -613,12 +700,12 @@ private struct TraySketch: View {
                     Text("Tray").font(.system(size: 7, weight: .bold)).foregroundStyle(.white)
                     Text(tray.items.count == 1 ? "1 item" : "\(tray.items.count) items")
                         .font(.system(size: 6.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(theme.tertiary)
                 }
                 if tray.items.isEmpty {
                     Text("Drop files here")
                         .font(.system(size: 6.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(theme.tertiary)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     HStack(alignment: .top, spacing: 4) {
@@ -640,7 +727,7 @@ private struct TraySketch: View {
             }
             .padding(6)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(RoundedRectangle(cornerRadius: cardRadius, style: .continuous).fill(theme.card))
+            .glass(.pane, in: RoundedRectangle(cornerRadius: cardRadius, style: .continuous))
             VStack(spacing: 3) {
                 Image(systemName: "dot.radiowaves.left.and.right")
                     .font(.system(size: 9, weight: .medium))
@@ -649,14 +736,14 @@ private struct TraySketch: View {
             .foregroundStyle(.white.opacity(0.8))
             .frame(width: 50)
             .frame(maxHeight: .infinity)
-            .background(RoundedRectangle(cornerRadius: cardRadius, style: .continuous).fill(theme.card))
+            .glass(.pane, in: RoundedRectangle(cornerRadius: cardRadius, style: .continuous))
         }
     }
 }
 
 // MARK: Model notch elsewhere
 
-/// The header's night sky, for windows other than Settings.
+/// The header's lit glass, for windows other than Settings.
 struct StageSky: View {
     var body: some View {
         StageBackdrop()

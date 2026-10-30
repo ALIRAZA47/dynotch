@@ -78,6 +78,7 @@ struct GlanceView: View {
     // The glance follows the music and the calendar as they change.
     @ObservedObject private var media = NowPlayingService.shared
     @ObservedObject private var calendar = CalendarService.shared
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         let band = viewModel.geometry.closedSize.height
@@ -96,6 +97,18 @@ struct GlanceView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .contentShape(Rectangle())
         .onTapGesture { viewModel.open() }
+        // The glance is black to its edge whatever the open notch is made of, so its glass is lit as
+        // glass on black: a pane on Liquid Glass darkens the glass, and on black it would vanish.
+        .environment(\.notchTheme, theme.onBlack)
+    }
+}
+
+private extension NotchTheme {
+    /// This look on the black slab: the same accent, corners and contrast, with black's tokens.
+    var onBlack: NotchTheme {
+        var theme = self
+        theme.material = .black
+        return theme
     }
 }
 
@@ -130,7 +143,9 @@ private struct GlanceLayout<Leading: View, Trailing: View, Center: View, Bottom:
                 .padding(.leading, 14)
                 .padding(.top, 10)
             trailing
-                .frame(width: GlanceContent.earWidth - 12, height: band, alignment: .trailing)
+                // Centered in the band, or in the tallest control's height when a short menu bar
+                // makes the band shorter, so no control's lit top edge is cut off at the screen's edge.
+                .frame(width: GlanceContent.earWidth - 12, height: max(band, 28), alignment: .trailing)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .padding(.trailing, 12)
             center
@@ -154,7 +169,7 @@ extension GlanceLayout where Bottom == EmptyView {
     }
 }
 
-/// A round button in the glance's ear: pause, play.
+/// A round button in the glance's ear, a disc of glass with the tint's light in it: pause, play.
 private struct GlanceCircleButton: View {
     let symbol: String
     let tint: Color
@@ -168,8 +183,8 @@ private struct GlanceCircleButton: View {
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(tint)
                 .contentTransition(.symbolEffect(.replace))
-                .frame(width: 26, height: 26)
-                .background(Circle().fill(tint.opacity(hovering ? 0.3 : 0.2)))
+                .frame(width: 27, height: 27)
+                .glass(.tint(tint), in: Circle(), isLit: hovering)
                 .contentShape(Circle())
         }
         .buttonStyle(PressableButtonStyle())
@@ -177,6 +192,44 @@ private struct GlanceCircleButton: View {
         .animation(.notchHighlight, value: hovering)
         .help(help)
         .accessibilityLabel(help)
+    }
+}
+
+/// The picture for a stopwatch or a notice: its symbol on a disc of glass holding the tint's light.
+private struct GlanceDisc: View {
+    let symbol: String
+    let tint: Color
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 19, weight: .semibold))
+            .foregroundStyle(tint)
+            .frame(width: glancePicture, height: glancePicture)
+            .glass(.tint(tint), in: Circle())
+    }
+}
+
+/// The two lines under the camera: what it is, then a quieter line about it.
+private struct GlanceLines: View {
+    let title: String
+    var subtitle: String?
+    var truncation: Text.TruncationMode = .tail
+    @Environment(\.notchTheme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title)
+                .font(NotchFont.glanceTitle)
+                .foregroundStyle(theme.primary)
+                .lineLimit(1)
+                .truncationMode(truncation)
+            if let subtitle {
+                Text(subtitle)
+                    .font(NotchFont.body)
+                    .foregroundStyle(theme.secondary)
+                    .lineLimit(1)
+            }
+        }
     }
 }
 
@@ -194,7 +247,7 @@ private struct GlanceFigure: View {
                 .foregroundStyle(theme.secondary)
                 .lineLimit(1)
             Text(figure)
-                .font(NotchFont.numeric(22))
+                .font(NotchFont.figure(22))
                 .foregroundStyle(tint)
                 .contentTransition(.numericText(countsDown: true))
         }
@@ -212,7 +265,9 @@ private struct MusicGlance: View {
     var body: some View {
         let tint = settings.artworkTint ? Color(nsColor: media.accent) : theme.accent
         GlanceLayout(band: band) {
-            ArtworkView(image: media.artwork, size: glancePicture, cornerRadius: 11)
+            // The art's color falls on the black below it, as the player's does.
+            ArtworkView(image: media.artwork, size: glancePicture, cornerRadius: 11,
+                        glow: settings.artworkTint ? tint : nil)
         } trailing: {
             HStack(spacing: 2) {
                 IconButton(symbol: "backward.fill", size: 12, help: "Previous", action: media.previous)
@@ -220,15 +275,7 @@ private struct MusicGlance: View {
                 IconButton(symbol: "forward.fill", size: 12, help: "Next", action: media.next)
             }
         } center: {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(media.track?.title ?? "Nothing playing")
-                    .font(.system(size: 13.5, weight: .semibold))
-                    .lineLimit(1)
-                Text(media.track?.artist ?? "")
-                    .font(NotchFont.body)
-                    .foregroundStyle(theme.secondary)
-                    .lineLimit(1)
-            }
+            GlanceLines(title: media.track?.title ?? "Nothing playing", subtitle: media.track?.artist ?? "")
         } bottom: {
             PlaybackScrubber(tint: tint)
         }
@@ -244,7 +291,7 @@ private struct PomodoroGlance: View {
         let color = timer.phase.color
         GlanceLayout(band: band) {
             ZStack {
-                ProgressRing(progress: timer.progress, color: color, lineWidth: 4)
+                ProgressRing(progress: timer.progress, color: color, lineWidth: 4, halo: true)
                 Image(systemName: timer.phase.symbol)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(color)
@@ -277,7 +324,9 @@ private struct CountdownGlance: View {
         let tint = countdown.isRunning ? TimerStore.tint : theme.secondary
         GlanceLayout(band: band) {
             ZStack {
-                ProgressRing(progress: countdown.progress(at: store.now), color: tint, lineWidth: 4)
+                // Light runs round the ring only while it's counting.
+                ProgressRing(progress: countdown.progress(at: store.now), color: tint, lineWidth: 4,
+                             halo: countdown.isRunning)
                 Image(systemName: "timer")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(tint)
@@ -291,13 +340,14 @@ private struct CountdownGlance: View {
                     Text("+1 min")
                         .font(NotchFont.bodyStrong)
                         .foregroundStyle(TimerStore.tint)
-                        .padding(.horizontal, 8)
-                        .frame(height: 24)
-                        .background(Capsule().fill(TimerStore.tint.opacity(hovering ? 0.3 : 0.2)))
+                        .padding(.horizontal, 9)
+                        .frame(height: 25)
+                        .glass(.tint(TimerStore.tint), in: Capsule(), isLit: hovering)
                         .contentShape(Capsule())
                 }
                 .buttonStyle(PressableButtonStyle(scale: 0.94))
                 .onHover { hovering = $0 }
+                .animation(.notchHighlight, value: hovering)
                 .help("A minute more")
                 GlanceCircleButton(symbol: countdown.isRunning ? "pause.fill" : "play.fill", tint: TimerStore.tint,
                                    help: countdown.isRunning ? "Pause" : "Resume") { store.togglePause(countdown) }
@@ -318,11 +368,7 @@ private struct StopwatchGlance: View {
         let stopwatch = store.stopwatch
         let tint = TimerStore.stopwatchTint
         GlanceLayout(band: band) {
-            Image(systemName: "stopwatch.fill")
-                .font(.system(size: 19, weight: .semibold))
-                .foregroundStyle(tint)
-                .frame(width: 46, height: 46)
-                .background(Circle().fill(tint.opacity(0.16)))
+            GlanceDisc(symbol: "stopwatch.fill", tint: tint)
         } trailing: {
             HStack(spacing: 4) {
                 IconButton(symbol: "arrow.counterclockwise", size: 11, idleOpacity: 0.6, help: "Reset the stopwatch",
@@ -341,25 +387,15 @@ private struct StopwatchGlance: View {
 private struct DownloadGlance: View {
     let band: CGFloat
     @ObservedObject private var monitor = DownloadMonitor.shared
-    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         GlanceLayout(band: band) {
-            DownloadRing(fraction: monitor.fraction, lineWidth: 4, arrowSize: 15)
+            DownloadRing(fraction: monitor.fraction, lineWidth: 4, arrowSize: 15, halo: true)
                 .padding(2)
         } trailing: {
             DownloadAmount()
         } center: {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.system(size: 13.5, weight: .semibold))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text("Downloading to Downloads")
-                    .font(NotchFont.body)
-                    .foregroundStyle(theme.secondary)
-                    .lineLimit(1)
-            }
+            GlanceLines(title: title, subtitle: "Downloading to Downloads", truncation: .middle)
         }
     }
 
@@ -378,15 +414,10 @@ private struct DownloadGlance: View {
 private struct NoticeGlance: View {
     let notice: LiveNotice
     let band: CGFloat
-    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         GlanceLayout(band: band) {
-            Image(systemName: notice.symbol)
-                .font(.system(size: 19, weight: .semibold))
-                .foregroundStyle(notice.tint)
-                .frame(width: 46, height: 46)
-                .background(Circle().fill(notice.tint.opacity(0.16)))
+            GlanceDisc(symbol: notice.symbol, tint: notice.tint)
                 // A script's notice keeps its terminal badge, so it can't pass for one of Dynotch's own.
                 .overlay(alignment: .bottomTrailing) {
                     if notice.fromScript { ScriptBadge().scaleEffect(1.6, anchor: .bottomTrailing) }
@@ -394,17 +425,7 @@ private struct NoticeGlance: View {
         } trailing: {
             EmptyView()
         } center: {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(notice.text)
-                    .font(.system(size: 13.5, weight: .semibold))
-                    .lineLimit(1)
-                if let detail = notice.detail {
-                    Text(detail)
-                        .font(NotchFont.body)
-                        .foregroundStyle(theme.secondary)
-                        .lineLimit(1)
-                }
-            }
+            GlanceLines(title: notice.text, subtitle: notice.detail)
         }
     }
 }
@@ -417,6 +438,7 @@ private struct EventGlance: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             GlanceLayout(band: band) {
+                // A leaf of a desk calendar: a pane with the weekday over the day.
                 VStack(spacing: 0) {
                     Text(event.start.formatted(.dateTime.weekday(.abbreviated)).uppercased())
                         .font(.system(size: 9, weight: .bold))
@@ -424,9 +446,12 @@ private struct EventGlance: View {
                         .foregroundStyle(Color.orange)
                     Text(event.start.formatted(.dateTime.day()))
                         .font(NotchFont.numeric(20))
+                        .foregroundStyle(theme.primary)
                 }
-                .frame(width: 46, height: 46)
-                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(theme.control))
+                // Digits leave the line's descender empty, so the pair sits a point low to look centered.
+                .offset(y: 1)
+                .frame(width: glancePicture, height: glancePicture)
+                .glass(.pane, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             } trailing: {
                 Text(event.isHappening(at: context.date) ? "Now" : Format.countdown(to: event.start, from: context.date))
                     .font(NotchFont.numeric(12))
@@ -434,16 +459,9 @@ private struct EventGlance: View {
                     .lineLimit(1)
             } center: {
                 HStack(spacing: 8) {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(event.title)
-                            .font(.system(size: 13.5, weight: .semibold))
-                            .lineLimit(1)
-                        Text(event.start.formatted(date: .omitted, time: .shortened) + " – "
-                             + event.end.formatted(date: .omitted, time: .shortened))
-                            .font(NotchFont.body)
-                            .foregroundStyle(theme.secondary)
-                            .lineLimit(1)
-                    }
+                    GlanceLines(title: event.title,
+                                subtitle: event.start.formatted(date: .omitted, time: .shortened) + " – "
+                                    + event.end.formatted(date: .omitted, time: .shortened))
                     Spacer(minLength: 0)
                     if let url = event.meetingURL {
                         JoinButton(url: url, height: 28)
@@ -472,6 +490,7 @@ private struct TodayGlance: View {
                 HStack(spacing: 0) {
                     Text(context.date.formatted(.dateTime.weekday(.abbreviated).day()))
                         .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(theme.primary)
                     Spacer(minLength: 0)
                     if power.hasBattery {
                         HStack(spacing: 3) {
@@ -486,32 +505,42 @@ private struct TodayGlance: View {
                 }
                 .padding(.horizontal, 16)
                 .frame(height: band)
-                HStack(spacing: 6) {
-                    if let conditions = weather.conditions {
-                        let sky = Sky(code: conditions.code, isDay: conditions.isDay)
-                        chip(symbol: sky.symbol, tint: .yellow,
-                             text: WeatherService.format(conditions.temperature, units: settings.weatherUnits) + " " + sky.description) {
-                            viewModel.open(tab: .home)
-                        }
-                    }
-                    if let event = nextEvent(at: context.date) {
-                        chip(symbol: "calendar", tint: .orange, text: eventText(event, at: context.date)) {
-                            viewModel.open(tab: .home)
-                        }
-                    }
-                    if !tray.items.isEmpty {
-                        chip(symbol: "tray.full.fill", tint: theme.secondary, text: "Tray \(tray.items.count)") {
-                            viewModel.open(tab: .tray)
-                        }
-                    }
-                    if weather.conditions == nil, nextEvent(at: context.date) == nil, tray.items.isEmpty {
-                        chip(symbol: "sparkles", tint: theme.secondary, text: "Nothing coming up") { viewModel.open() }
-                    }
+                // The weather gives up its description first, then the Tray its chip, so the row
+                // never runs past the glance's edges.
+                ViewThatFits(in: .horizontal) {
+                    chips(at: context.date, describesSky: true, showsTray: true)
+                    chips(at: context.date, describesSky: false, showsTray: true)
+                    chips(at: context.date, describesSky: false, showsTray: false)
                 }
                 .padding(.horizontal, 14)
             }
             .padding(.top, 0)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+
+    private func chips(at now: Date, describesSky: Bool, showsTray: Bool) -> some View {
+        HStack(spacing: 6) {
+            if let conditions = weather.conditions {
+                let sky = Sky(code: conditions.code, isDay: conditions.isDay)
+                let temperature = WeatherService.format(conditions.temperature, units: settings.weatherUnits)
+                chip(symbol: sky.symbol, tint: .yellow, text: describesSky ? temperature + " " + sky.description : temperature) {
+                    viewModel.open(tab: .home)
+                }
+            }
+            if let event = nextEvent(at: now) {
+                chip(symbol: "calendar", tint: .orange, text: eventText(event, at: now)) {
+                    viewModel.open(tab: .home)
+                }
+            }
+            if showsTray, !tray.items.isEmpty {
+                chip(symbol: "tray.full.fill", tint: theme.secondary, text: "Tray \(tray.items.count)") {
+                    viewModel.open(tab: .tray)
+                }
+            }
+            if weather.conditions == nil, nextEvent(at: now) == nil, tray.items.isEmpty {
+                chip(symbol: "sparkles", tint: theme.secondary, text: "Nothing coming up") { viewModel.open() }
+            }
         }
     }
 
@@ -532,6 +561,7 @@ private struct TodayGlance: View {
     }
 }
 
+/// A capsule of glass under the camera: what's coming, in its color, and a tap opens where it is.
 private struct GlanceChip: View {
     let symbol: String
     let tint: Color
@@ -549,13 +579,14 @@ private struct GlanceChip: View {
                 // As wide as the words, up to a point.
                 Text(text)
                     .font(NotchFont.body)
+                    .foregroundStyle(theme.primary)
                     .lineLimit(1)
                     .frame(maxWidth: 160, alignment: .leading)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            .padding(.horizontal, 10)
+            .padding(.horizontal, 11)
             .frame(height: 28)
-            .background(Capsule().fill(hovering ? theme.controlHover : theme.control))
+            .glass(.control, in: Capsule(), isLit: hovering)
             .contentShape(Capsule())
         }
         .buttonStyle(PressableButtonStyle(scale: 0.95))

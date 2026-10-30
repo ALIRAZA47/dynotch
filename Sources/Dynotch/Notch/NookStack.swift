@@ -15,6 +15,7 @@ struct NookStack: View {
     @ObservedObject private var power = PowerMonitor.shared
     @ObservedObject private var devices = DeviceBatteryMonitor.shared
     @Environment(\.isSnapshot) private var isSnapshot
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Turned to by hand, or by something that needed the room. Stays until the next turn.
     @ViewState private var picked: HomeWidget?
     /// The last turn went to a later card, so the new one comes up from below.
@@ -26,12 +27,13 @@ struct NookStack: View {
             let shown = picked.flatMap { widgets.contains($0) ? $0 : nil } ?? urgent ?? widgets[0]
             HomeWidgetView(widget: shown)
                 .id(shown)
-                .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: forward ? 12 : -12)),
+                // With Reduce Motion the new card only fades in; it doesn't slide.
+                .transition(.asymmetric(insertion: reduceMotion ? .opacity : .opacity.combined(with: .offset(y: forward ? 12 : -12)),
                                         removal: .opacity.animation(.easeOut(duration: 0.1))))
                 .overlay(alignment: .trailing) {
+                    // Centered in the card's trailing padding, so the dots never touch what's in the card.
                     if widgets.count > 1 {
                         pager(shown: shown)
-                            .padding(.trailing, 4)
                     }
                 }
                 .onChange(of: urgent) { _, widget in

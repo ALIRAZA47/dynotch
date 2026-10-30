@@ -85,7 +85,9 @@ struct MirrorWidget: View {
         let shape = RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous)
         ZStack {
             if camera.isRunning {
-                CameraPreview(session: camera.session)
+                // Set into the pane like a picture in a frame, its corners following the card's.
+                CameraPreview(session: camera.session, cornerRadius: theme.controlRadius)
+                    .padding(theme.controlRadius)
                     .transition(.opacity)
             } else {
                 VStack(spacing: 6) {
@@ -95,7 +97,7 @@ struct MirrorWidget: View {
                         .frame(height: 28)
                     Text("Mirror")
                         .font(NotchFont.headline)
-                        .foregroundStyle(theme.primary.opacity(hovering ? 1 : 0.85))
+                        .foregroundStyle(theme.primary)
                     Text("Check yourself before a call")
                         .font(NotchFont.caption)
                         .foregroundStyle(theme.tertiary)
@@ -123,14 +125,19 @@ struct MirrorWidget: View {
 
 private struct CameraPreview: NSViewRepresentable {
     let session: AVCaptureSession
+    /// The picture's corners. The layer rounds them itself, so the video can't spill past them.
+    var cornerRadius: CGFloat = 0
 
     func makeNSView(context: Context) -> PreviewView {
         let view = PreviewView()
         view.previewLayer.session = session
+        view.round(cornerRadius)
         return view
     }
 
-    func updateNSView(_ nsView: PreviewView, context: Context) {}
+    func updateNSView(_ nsView: PreviewView, context: Context) {
+        nsView.round(cornerRadius)
+    }
 
     final class PreviewView: NSView {
         let previewLayer = AVCaptureVideoPreviewLayer()
@@ -139,6 +146,8 @@ private struct CameraPreview: NSViewRepresentable {
             super.init(frame: frame)
             wantsLayer = true
             layer = CALayer()
+            layer?.masksToBounds = true
+            layer?.cornerCurve = .continuous
             previewLayer.videoGravity = .resizeAspectFill
             // A mirror shows you flipped, the way you see yourself.
             previewLayer.setAffineTransform(CGAffineTransform(scaleX: -1, y: 1))
@@ -146,6 +155,11 @@ private struct CameraPreview: NSViewRepresentable {
         }
 
         required init?(coder: NSCoder) { nil }
+
+        func round(_ radius: CGFloat) {
+            guard layer?.cornerRadius != radius else { return }
+            layer?.cornerRadius = radius
+        }
 
         override func layout() {
             super.layout()
