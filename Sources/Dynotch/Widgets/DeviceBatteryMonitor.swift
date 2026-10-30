@@ -316,8 +316,9 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
 
     // MARK: Snapshots
 
-    func loadSample(_ devices: [Device], paired: [PairedDevice] = [], connections: [String: Connection] = [:]) {
-        isAuthorized = true
+    func loadSample(_ devices: [Device], paired: [PairedDevice] = [], connections: [String: Connection] = [:],
+                    isAuthorized: Bool = true) {
+        self.isAuthorized = isAuthorized
         self.devices = devices
         self.paired = paired
         self.connections = connections

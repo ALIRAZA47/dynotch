@@ -54,14 +54,8 @@ enum NotchAccent: String, CaseIterable, Identifiable {
         }
     }
 
-    /// WCAG's relative luminance, from the color's sRGB values.
     private static func luminance(of color: Color) -> Double {
-        guard let rgb = NSColor(color).usingColorSpace(.sRGB) else { return 0 }
-        func linear(_ value: CGFloat) -> Double {
-            let value = Double(value)
-            return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
-        }
-        return 0.2126 * linear(rgb.redComponent) + 0.7152 * linear(rgb.greenComponent) + 0.0722 * linear(rgb.blueComponent)
+        Luminance.rgb(of: NSColor(color)).map(Luminance.of) ?? 0
     }
     #endif
 }
@@ -124,6 +118,8 @@ struct NotchTheme: Equatable {
     static let cardPadding = EdgeInsets(top: 10, leading: 12, bottom: 10, trailing: 12)
     /// Between a card's title and what's under it.
     static let titleGap: CGFloat = 6
+    /// How tall every control in the header is: the tab track, the command pill and the ··· disc.
+    static let headerControlHeight: CGFloat = 28
 
     // MARK: Corners
 
@@ -162,6 +158,8 @@ struct NotchTheme: Equatable {
     /// Ink: text and symbols on any accent face, at 0.8 for second lines. White on an accent is
     /// hard to read, on the light ones most of all.
     var onAccent: Color { Color(red: 0.08, green: 0.06, blue: 0.17) }
+    /// A date that has passed. The system's red reads under 4.5:1 on a pane of glass, so glass has its own.
+    var overdue: Color { isGlass ? Color(red: 1, green: 0.5, blue: 0.46) : .red }
 
     /// What Increase Contrast adds to tracks and lines.
     private var contrastLift: Double { isHighContrast ? 0.06 : 0 }
@@ -248,26 +246,6 @@ struct NotchTheme: Equatable {
                                .init(color: far, location: 1)],
                        startPoint: .top, endPoint: .bottom)
     }
-
-    // MARK: Before glass
-
-    // Flat fills from before `GlassDepth`, kept as they were until their last uses move to it.
-
-    @available(*, deprecated, message: "Use GlassDepth.pane: CardSurface, or .glass(.pane, in:)")
-    var card: Color { .white.opacity(isGlass ? 0.1 : 0.06) }
-    @available(*, deprecated, message: "Use GlassDepth.pane with isLit")
-    var cardHover: Color { .white.opacity(isGlass ? 0.15 : 0.1) }
-    /// A hairline that keeps a card's edge crisp.
-    @available(*, deprecated, message: "GlassDepth surfaces draw their own rim")
-    var cardStroke: Color { .white.opacity(isGlass ? 0.12 : 0.06) }
-    /// Behind the selected tab, day or file.
-    @available(*, deprecated, message: "Use GlassDepth.lens(accent) for what is selected or on")
-    var selection: Color { accent.opacity(0.26) }
-    /// Behind a selected file or clipboard item, inside a ring of `selectionRing`.
-    @available(*, deprecated, message: "Use GlassDepth.tint(accent) for a selected file, .lens(accent) for a targeted drop")
-    var selectionFill: Color { accent.opacity(0.16) }
-    @available(*, deprecated, message: "Use a 1.5 pt accent ring at 0.8 over GlassDepth.tint(accent)")
-    var selectionRing: Color { accent.opacity(0.6) }
 }
 
 /// What the notch is made of: black, or Liquid Glass when `isGlass`. Glass stays black along the
@@ -283,6 +261,11 @@ struct NotchSurface: View {
     /// plain black, so they blend with the camera housing.
     var chamfer = false
     @Environment(\.isSnapshot) private var isSnapshot
+
+    /// How much black lies over Liquid Glass. It's the least that keeps every label at 4.5:1 over a
+    /// bright wallpaper; below that, glass goes pale behind white text. The glass's own tint can't
+    /// do this: raised, it only lightens the glass.
+    private static let glassScrim = 0.5
 
     var body: some View {
         ZStack {
@@ -326,8 +309,10 @@ struct NotchSurface: View {
                     .stroke(Color.white.opacity(0.24), lineWidth: 1)
             }
         } else if #available(macOS 26, *) {
-            // A little darker than plain glass, so white text stays easy to read over a bright wallpaper.
-            Rectangle().fill(.clear).glassEffect(.regular.tint(Color.black.opacity(0.32)), in: shape)
+            ZStack {
+                Rectangle().fill(.clear).glassEffect(.regular.tint(Color.black.opacity(0.32)), in: shape)
+                shape.fill(Color.black.opacity(Self.glassScrim))
+            }
         } else {
             Color.black
         }

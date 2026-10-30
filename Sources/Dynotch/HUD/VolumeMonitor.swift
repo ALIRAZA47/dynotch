@@ -58,7 +58,7 @@ final class VolumeMonitor: ObservableObject {
 
     /// The default output has a volume Dynotch can set. Some outputs, like many HDMI displays, don't.
     var canSetVolume: Bool { isSettable(&Self.volumeAddress) }
-    var canMute: Bool { isSettable(&Self.muteAddress) }
+    var canMute: Bool { sampleCanMute || isSettable(&Self.muteAddress) }
 
     /// One press of a volume key: a sixteenth, or a sixty-fourth with ⇧⌥, as in macOS. Unmutes, and
     /// shows the meter even when the volume is already at either end.
@@ -180,9 +180,13 @@ final class VolumeMonitor: ObservableObject {
 
     // MARK: Snapshots
 
-    func loadSample(volume: Float, changing: Bool) {
+    /// Snapshots have no output to ask, so a scene says whether this one has a mute.
+    private var sampleCanMute = false
+
+    func loadSample(volume: Float, changing: Bool, canMute: Bool = false) {
         self.volume = volume
         isMuted = false
         isChanging = changing
+        sampleCanMute = canMute
     }
 }

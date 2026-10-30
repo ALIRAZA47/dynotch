@@ -40,9 +40,12 @@ struct ShortcutsWidget: View {
                 PermissionPrompt(symbol: "square.stack.3d.up", message: "Pin shortcuts to run them from here.",
                                  buttonTitle: "Choose…") { SettingsWindowController.shared.show(page: .nook) }
             } else {
-                VStack(spacing: 4) {
-                    ForEach(settings.pinnedShortcuts.prefix(4), id: \.self) { name in
-                        ShortcutButton(name: name, isRunning: shortcuts.running.contains(name)) { shortcuts.run(name) }
+                // Four rows are taller than the card in a short notch.
+                Scroller(.vertical, fadesOverflow: true) {
+                    VStack(spacing: 4) {
+                        ForEach(settings.pinnedShortcuts.prefix(4), id: \.self) { name in
+                            ShortcutButton(name: name, isRunning: shortcuts.running.contains(name)) { shortcuts.run(name) }
+                        }
                     }
                 }
             }

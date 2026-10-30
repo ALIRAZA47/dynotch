@@ -170,7 +170,7 @@ final class NotchViewModel: ObservableObject {
 
     /// The open notch with the command field up: tall enough for its rows, at least as tall as the tabs.
     static func commandHeight(rows: Int, closedHeight: CGFloat) -> CGFloat {
-        closedHeight + 92 + 32 * CGFloat(min(max(rows, 1), CommandEngine.maximumResults))
+        max(closedHeight, NotchTheme.headerControlHeight) + 92 + 32 * CGFloat(min(max(rows, 1), CommandEngine.maximumResults))
     }
 
     /// The tallest the open notch gets, so its panel always has room.

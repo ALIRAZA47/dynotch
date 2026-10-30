@@ -258,7 +258,7 @@ enum SnapshotRenderer {
                 CalendarService.shared.loadSample(events: [], reminders: [])
                 NotesStore.shared.loadSample([""])
             }),
-        ] + sizeScenes()
+        ] + sizeScenes() + edgeScenes(virtualNotch: virtualNotch)
 
         let settings = AppSettings.shared
         let savedTheme = settings.theme
@@ -753,6 +753,78 @@ enum SnapshotRenderer {
             Scene(name: "size-\(label)-9-tray-empty", phase: .open, tab: .tray, openSize: size, prepare: {
                 TrayStore.shared.loadSample([])
             })
+        }
+    }
+
+    /// States the samples never reach: Bluetooth not allowed, a session of hours, a long track, a
+    /// cover in a deep color or none at all, the Sound row's mute, the open notch on a display
+    /// without one. Last, as they leave the samples changed.
+    private static func edgeScenes(virtualNotch: NotchGeometry) -> [Scene] {
+        let short = CGSize(width: 680, height: 218), small = CGSize(width: 600, height: 196)
+        let glass = NotchTheme(material: .glass)
+        let noBluetooth: @MainActor () -> Void = { DeviceBatteryMonitor.shared.loadSample([], isAuthorized: false) }
+        let mute: @MainActor () -> Void = { VolumeMonitor.shared.loadSample(volume: 0.62, changing: false, canMute: true) }
+        let hours: @MainActor () -> Void = { PomodoroTimer.shared.loadSample(remaining: 2 * 3600 - 1, running: true) }
+        let resting: @MainActor () -> Void = { PomodoroTimer.shared.loadSample(remaining: 25 * 60, running: false) }
+        let longRate: @MainActor () -> Void = { SystemMonitor.shared.loadSample(cpu: 1, download: 120_400_000) }
+        let sampleTrack = NowPlayingService.Track(title: "Midnight City", artist: "M83", album: "Hurry Up, We're Dreaming",
+                                                  duration: 243)
+        func cover(_ color: NSColor) -> @MainActor () -> Void {
+            { NowPlayingService.shared.loadSample(sampleTrack, artwork: solidCover(color), playing: true, elapsed: 81) }
+        }
+        let noCover: @MainActor () -> Void = { NowPlayingService.shared.loadSample(sampleTrack, playing: true, elapsed: 81) }
+        let longTrack: @MainActor () -> Void = {
+            NowPlayingService.shared.loadSample(
+                NowPlayingService.Track(title: "Midnight City", artist: "M83", album: "Hurry Up, We're Dreaming", duration: 7265),
+                artwork: sampleArtwork(), playing: true, elapsed: 3700)
+        }
+        let detailOnly = LiveNotice(key: "screenshot", symbol: "camera.viewfinder", tint: .white,
+                                    detail: "Screenshot added to the Tray")
+        return [
+            Scene(name: "edge-mute-control", phase: .open, tab: .stats, setUp: mute),
+            Scene(name: "edge-mute-control-small", phase: .open, tab: .stats, openSize: small, setUp: mute),
+            Scene(name: "edge-control-short", phase: .open, tab: .stats, openSize: CGSize(width: 680, height: 220)),
+            Scene(name: "edge-focus-hours", phase: .open, tab: .focus, prepare: hours),
+            Scene(name: "edge-focus-hours-short", phase: .open, tab: .focus, openSize: short, prepare: hours),
+            Scene(name: "edge-focus-resting-short", phase: .open, tab: .focus, openSize: short, prepare: resting),
+            Scene(name: "edge-focus-overdue-glass", phase: .open, tab: .focus, theme: glass, setUp: {
+                TimerStore.shared.start("pizza 12m")
+            }, prepare: {
+                PomodoroTimer.shared.loadSample(remaining: 18 * 60 + 24, running: true)
+                loadBusySamples()
+            }),
+            Scene(name: "edge-long-track", phase: .open, tab: .home, setUp: longTrack),
+            Scene(name: "edge-long-track-small", phase: .open, tab: .home, openSize: small, setUp: longTrack),
+            Scene(name: "edge-cover-navy", phase: .open, tab: .home, setUp: cover(NSColor(srgbRed: 0, green: 0.06, blue: 0.75, alpha: 1))),
+            Scene(name: "edge-cover-violet", phase: .open, tab: .home, setUp: cover(NSColor(srgbRed: 0.3, green: 0, blue: 0.7, alpha: 1))),
+            Scene(name: "edge-cover-navy-glass", phase: .open, tab: .home, theme: glass,
+                  setUp: cover(NSColor(srgbRed: 0, green: 0.06, blue: 0.75, alpha: 1))),
+            Scene(name: "edge-no-cover-glance", phase: .glance, activity: .music, setUp: noCover),
+            Scene(name: "edge-no-cover-nook", phase: .open, tab: .home, setUp: noCover),
+            Scene(name: "edge-notice-detail-only", phase: .glance, activity: .notice(detailOnly)),
+            Scene(name: "edge-four-shortcuts-small", phase: .open, tab: .home, openSize: small, prepare: {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.shortcuts, .mirror)
+                AppSettings.shared.pinnedShortcuts = ["Morning routine", "Log a glass of water", "Focus playlist", "Start the day"]
+            }),
+            Scene(name: "edge-command-glass", phase: .open, theme: glass, command: ""),
+            Scene(name: "edge-virtual-notch-control", phase: .open, tab: .stats, geometry: virtualNotch),
+            Scene(name: "edge-virtual-notch-command", phase: .open, geometry: virtualNotch, command: ""),
+            // These change the Control tab for every scene after them.
+            Scene(name: "edge-long-rate-small", phase: .open, tab: .stats, openSize: small, prepare: longRate),
+            Scene(name: "edge-no-bluetooth-control", phase: .open, tab: .stats, prepare: {
+                SystemMonitor.shared.loadSample()
+                noBluetooth()
+            }),
+            Scene(name: "edge-no-bluetooth-control-small", phase: .open, tab: .stats, openSize: small),
+        ]
+    }
+
+    /// A cover of one color.
+    private static func solidCover(_ color: NSColor) -> NSImage {
+        NSImage(size: NSSize(width: 64, height: 64), flipped: false) { rect in
+            color.setFill()
+            rect.fill()
+            return true
         }
     }
 
