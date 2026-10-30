@@ -95,12 +95,17 @@ final class WelcomeTour: ObservableObject {
 
     func next() {
         guard let next = Step(rawValue: step.rawValue + 1) else { return finish() }
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { step = next }
+        withAnimation(stepAnimation) { step = next }
     }
 
     func back() {
         guard let previous = Step(rawValue: step.rawValue - 1) else { return }
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { step = previous }
+        withAnimation(stepAnimation) { step = previous }
+    }
+
+    /// A spring, or an ease with Reduce Motion. Nothing here has an environment to ask.
+    private var stepAnimation: Animation {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? .easeOut(duration: 0.2) : .spring(response: 0.42, dampingFraction: 0.86)
     }
 }
 
@@ -165,9 +170,9 @@ private struct WelcomeStage: View {
                     ModelNotch(pose: scene.pose)
                     CaptionText(scene.caption, isNumeric: false)
                 }
-                .animation(.notchOpen, value: scene.pose)
+                .animation(reduceMotion ? .easeOut(duration: 0.2) : .notchOpen, value: scene.pose)
             }
-            .animation(.notchOpen, value: step)
+            .animation(reduceMotion ? .easeOut(duration: 0.2) : .notchOpen, value: step)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             .accessibilityHidden(true)
             HStack(alignment: .bottom, spacing: 16) {
@@ -389,7 +394,7 @@ private struct DoneStep: View {
                         detail: "Profiles, the Tray, the focus timer and Settings, a click away")
                     CardDivider()
                     row(symbol: "gearshape.fill", tint: .gray, title: "Settings",
-                        detail: "From the menu bar icon, or the gear in the open notch") {
+                        detail: "From the menu bar icon, or the ··· menu in the open notch") {
                         CapsuleButton(title: "Open Settings", symbol: "arrow.up.forward") {
                             tour.finish()
                             SettingsWindowController.shared.show(page: .general)
@@ -401,8 +406,8 @@ private struct DoneStep: View {
                 }
             }
             SettingsSection(title: "Try it") {
-                HStack(spacing: 14) {
-                    SymbolBadge(symbol: "hand.point.up.left.fill", tint: Palette.magenta, size: 30)
+                HStack(spacing: 12) {
+                    SymbolBadge(symbol: "hand.point.up.left.fill", tint: Palette.magenta, size: 28)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Point at the notch, or press ⌃⌥N")
                             .font(.system(size: 13, weight: .medium))

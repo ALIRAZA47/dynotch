@@ -123,7 +123,9 @@ struct SettingsView: View {
 
     var body: some View {
         HStack(spacing: 0) {
+            // Above the stage, so its shadow falls on it.
             SettingsSidebar(navigation: navigation)
+                .zIndex(1)
             VStack(spacing: 0) {
                 SettingsStage(navigation: navigation)
                 ScrollView {
@@ -138,7 +140,10 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        // Behind the sidebar too, which floats above it on macOS 26.
+        // Behind the sidebar too, which floats above it on macOS 26: the stage runs to the window's edge.
+        .background(alignment: .top) {
+            Palette.stageGradient.frame(height: SettingsStage.height)
+        }
         .background(Palette.window)
         .ignoresSafeArea()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -305,7 +310,7 @@ private struct SidebarRow: View {
                 if hovering, !isSelected {
                     Text("⌘\(page.number)")
                         .font(.system(size: 10.5, weight: .medium))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Palette.secondaryText)
                 }
             }
             .padding(.horizontal, 6)

@@ -43,14 +43,47 @@ enum Format {
     }
 }
 
+/// WCAG's relative luminance, and how far a color has to come up to reach one.
+enum Luminance {
+    /// The relative luminance of sRGB values.
+    static func of(_ rgb: [Double]) -> Double {
+        let linear = rgb.map { $0 <= 0.04045 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
+        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
+    }
+
+    /// The sRGB values of `color`.
+    static func rgb(of color: NSColor) -> [Double]? {
+        color.usingColorSpace(.sRGB).map { [$0.redComponent, $0.greenComponent, $0.blueComponent].map(Double.init) }
+    }
+
+    /// `rgb` lifted toward white just far enough to reach `minimum`.
+    static func lifted(_ rgb: [Double], to minimum: Double) -> [Double] {
+        guard of(rgb) < minimum else { return rgb }
+        var low = 0.0, high = 1.0
+        for _ in 0..<12 {
+            let mix = (low + high) / 2
+            if of(rgb.map { $0 + (1 - $0) * mix }) < minimum { low = mix } else { high = mix }
+        }
+        return rgb.map { $0 + (1 - $0) * high }
+    }
+}
+
 extension NSImage {
-    /// The average color of the image, brightened so it reads well on black.
+    /// The luminance the player's marks need: the bars, the scrubber, a check, an active shuffle.
+    /// Enough for 3:1 on a pane, on black and on glass.
+    private static let markLuminance = 0.24
+
+    /// The average color of the image, brightened so it reads well on black. HSB brightness says
+    /// little about how light a color looks, so a deep blue or violet then comes up toward white.
     func vibrantAverageColor() -> NSColor? {
-        sampledPixels().flatMap { Self.vibrantAverage(of: $0, brightest: 1) { _, _ in true } }
+        guard let color = sampledPixels().flatMap({ Self.vibrantAverage(of: $0, brightest: 1) { _, _ in true } }) else { return nil }
+        guard let rgb = Luminance.rgb(of: color) else { return color }
+        let lifted = Luminance.lifted(rgb, to: Self.markLuminance)
+        return NSColor(srgbRed: lifted[0], green: lifted[1], blue: lifted[2], alpha: 1)
     }
 
     /// A few of the image's colors for the light behind it, brightened like `vibrantAverageColor`
-    /// but never glaring: its top-left half, its bottom-right half and the whole, so a cover that
+    /// but never lifted or glaring: its top-left half, its bottom-right half and the whole, so a cover that
     /// runs from one color to another lights the notch with both.
     func vibrantPalette() -> [NSColor] {
         guard let pixels = sampledPixels() else { return [] }

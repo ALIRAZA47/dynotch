@@ -3,30 +3,16 @@ import SwiftUI
 
 // MARK: Palette
 
-/// The app icon's colors: a deep indigo-to-navy body, a lavender glow and an orange-to-magenta accent,
+/// The app icon's colors: a graphite glass body, a lavender glow and an orange-to-magenta accent,
 /// plus the surfaces of the settings window in light and dark mode, and the sky of its header.
 enum Palette {
     static let indigo = Color(red: 0.20, green: 0.22, blue: 0.48)
-    static let navy = Color(red: 0.05, green: 0.05, blue: 0.12)
     static let lavender = Color(red: 0.55, green: 0.45, blue: 1.0)
     static let lilac = Color(red: 0.66, green: 0.58, blue: 1.0)
     static let orange = Color(red: 1.0, green: 0.58, blue: 0.30)
     static let magenta = Color(red: 0.93, green: 0.25, blue: 0.56)
 
     static let sunset = LinearGradient(colors: [orange, magenta], startPoint: .topLeading, endPoint: .bottomTrailing)
-
-    /// Switches, sliders and selections: lavender, a few shades deeper in light mode so it holds up on white.
-    @available(*, deprecated, message: "Read @Environment(\\.windowAccent), the user's accent in the window's shades")
-    static let accent = Color(light: NSColor(srgbRed: 0.40, green: 0.27, blue: 0.94, alpha: 1),
-                              dark: NSColor(srgbRed: 0.64, green: 0.56, blue: 1.0, alpha: 1))
-    private static let accentTop = Color(light: NSColor(srgbRed: 0.53, green: 0.42, blue: 1.0, alpha: 1),
-                                         dark: NSColor(srgbRed: 0.72, green: 0.64, blue: 1.0, alpha: 1))
-    @available(*, deprecated, message: "Use the window accent's gradient, @Environment(\\.windowAccent).gradient")
-    static let accentGradient = LinearGradient(colors: [accentTop, accent], startPoint: .top, endPoint: .bottom)
-    /// Behind white text: deep enough to read in both modes.
-    @available(*, deprecated, message: "Use the window accent's gradient under its onFill, like CapsuleButton(kind: .prominent)")
-    static let buttonGradient = LinearGradient(colors: [Color(red: 0.50, green: 0.40, blue: 1.0), Color(red: 0.36, green: 0.24, blue: 0.88)],
-                                               startPoint: .top, endPoint: .bottom)
 
     /// A neutral graphite in dark mode and a cool paper white in light mode, so the accent and the
     /// glass carry the color.
@@ -35,8 +21,6 @@ enum Palette {
     /// Under the sidebar's translucent material, and the welcome tour's footer.
     static let sidebar = Color(light: NSColor(srgbRed: 0.918, green: 0.918, blue: 0.937, alpha: 1),
                                dark: NSColor(srgbRed: 0.098, green: 0.1, blue: 0.118, alpha: 1))
-    @available(*, deprecated, message: "Cards are glass now: use cardGradient, or CardBackground")
-    static let card = Color(light: .white, dark: NSColor(srgbRed: 0.105, green: 0.109, blue: 0.192, alpha: 1))
     /// A card's glass, top to bottom: lit from above, falling off toward its foot.
     static let cardTop = Color(light: NSColor(white: 1, alpha: 0.96), dark: NSColor(white: 1, alpha: 0.075))
     static let cardBottom = Color(light: NSColor(white: 1, alpha: 0.78), dark: NSColor(white: 1, alpha: 0.035))
@@ -541,6 +525,7 @@ struct ChoiceTile<Art: View>: View {
     let action: () -> Void
     @ViewBuilder var art: Art
     @Environment(\.windowAccent) private var accent
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Button(action: action) {
@@ -548,12 +533,13 @@ struct ChoiceTile<Art: View>: View {
                 art.frame(height: 34)
                 VStack(spacing: 2) {
                     Text(title)
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.primary)
                     if let detail {
                         Text(detail)
-                            .font(.system(size: 11))
-                            .foregroundStyle(Palette.secondaryText)
+                            .font(.system(size: 11.5))
+                            // Firmer on a selected tile: its accent wash lifts the background under it.
+                            .foregroundStyle(isSelected ? Color.primary.opacity(0.8) : Palette.secondaryText)
                     }
                 }
                 .multilineTextAlignment(.center)
@@ -568,13 +554,13 @@ struct ChoiceTile<Art: View>: View {
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(accent.color)
                         .padding(9)
-                        .transition(.scale.combined(with: .opacity))
+                        .transition(reduceMotion ? AnyTransition.opacity : .scale.combined(with: .opacity))
                 }
             }
             .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
         .buttonStyle(TileButtonStyle())
-        .animation(.spring(response: 0.3, dampingFraction: 0.75), value: isSelected)
+        .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.75), value: isSelected)
         .accessibilityLabel(title)
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }

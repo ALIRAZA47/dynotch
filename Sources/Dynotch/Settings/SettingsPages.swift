@@ -99,6 +99,7 @@ struct FieldWell: View {
 
 struct GeneralSettings: View {
     @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let openers = [
         SwitchOption(title: "Hover", detail: "A glance, or the whole notch, when the pointer rests on it",
@@ -124,10 +125,11 @@ struct GeneralSettings: View {
                                   format: { String(format: "%.2f s", $0) },
                                   spoken: { String(format: "%.2f seconds", $0) })
                     }
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .transition(reduceMotion ? AnyTransition.opacity : .opacity.combined(with: .move(edge: .top)))
                 }
             }
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: settings.openOnHover)
+            .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.35, dampingFraction: 0.85),
+                       value: settings.openOnHover)
 
             SettingsSection(title: "Command field",
                             footer: "Start a timer (tea 4m), add a note or a reminder (remind Call Sam 5pm), flip a toggle, "
@@ -428,12 +430,15 @@ private struct MaterialArt: View {
 /// The accent colors as a row of swatches, as in System Settings.
 private struct AccentPicker: View {
     @Binding var selection: NotchAccent
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 10) {
             ForEach(NotchAccent.allCases) { accent in
                 AccentSwatch(accent: accent, isSelected: selection == accent) {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) { selection = accent }
+                    withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.75)) {
+                        selection = accent
+                    }
                 }
             }
             Spacer(minLength: 0)
@@ -451,6 +456,7 @@ private struct AccentSwatch: View {
     let accent: NotchAccent
     let isSelected: Bool
     let action: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ViewState private var hovering = false
 
     var body: some View {
@@ -462,7 +468,7 @@ private struct AccentSwatch: View {
                     if isSelected {
                         Circle().fill(.white).frame(width: 7, height: 7)
                             .shadow(color: .black.opacity(0.25), radius: 1)
-                            .transition(.scale.combined(with: .opacity))
+                            .transition(reduceMotion ? AnyTransition.opacity : .scale.combined(with: .opacity))
                     }
                 }
                 .frame(width: 22, height: 22)
@@ -483,6 +489,7 @@ private struct AccentSwatch: View {
 private struct VirtualNotchSketch: View {
     let width: Double
     var style: VirtualNotchStyle = .notch
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         let isLine = style == .line
@@ -494,8 +501,8 @@ private struct VirtualNotchSketch: View {
             NotchShape(topRadius: isLine ? 0 : 3, bottomRadius: isLine ? 1 : 6)
                 .fill(.black.opacity(isLine ? 0.4 : 1))
                 .frame(width: width / 2 + (isLine ? 0 : 6), height: isLine ? 2 : 14)
-                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: width)
-                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: style)
+                .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.8), value: width)
+                .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.35, dampingFraction: 0.85), value: style)
         }
         .frame(height: 44)
         .clipShape(UnevenRoundedRectangle(topLeadingRadius: 13, topTrailingRadius: 13, style: .continuous))
@@ -648,6 +655,7 @@ struct ActivitySettings: View {
     @ObservedObject var navigation: SettingsNavigation
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var focus = FocusMonitor.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let options = [
         SwitchOption(title: "Two at once", detail: "A second activity as a small glyph at the end of the right ear",
@@ -678,11 +686,12 @@ struct ActivitySettings: View {
             activities
             if settings.liveNotifications {
                 NotificationSettingsSection()
-                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .transition(reduceMotion ? AnyTransition.opacity : .opacity.combined(with: .move(edge: .top)))
             }
             EqualizerAndKeysSettings()
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: settings.liveNotifications)
+        .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.35, dampingFraction: 0.85),
+                   value: settings.liveNotifications)
     }
 
     @ViewBuilder
@@ -818,22 +827,39 @@ private struct NotesFolderCard: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
             CardDivider()
-            HStack(spacing: 8) {
-                CapsuleButton(title: "Choose Folder…", symbol: "folder") {
-                    if let folder = FileActions.chooseFolder(prompt: "Keep Notes Here") { store.useFolder(folder) }
+            // On two lines when a custom folder brings all four buttons.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    folderButtons
+                    Spacer(minLength: 0)
+                    showInFinder
                 }
-                if let iCloud = store.iCloudFolder, !store.isInICloud {
-                    CapsuleButton(title: "Use iCloud Drive", symbol: "icloud") { store.useFolder(iCloud) }
+                FlowLayout(spacing: 8) {
+                    folderButtons
+                    showInFinder
                 }
-                if !store.isUsingDefaultFolder {
-                    CapsuleButton(title: "Use Dynotch's Folder", symbol: "arrow.uturn.backward") { store.useFolder(nil) }
-                }
-                Spacer(minLength: 0)
-                CapsuleButton(title: "Show in Finder", symbol: "arrow.up.forward") { NSWorkspace.shared.open(store.folder) }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
         }
+    }
+
+    /// Where the notes could go instead.
+    @ViewBuilder
+    private var folderButtons: some View {
+        CapsuleButton(title: "Choose Folder…", symbol: "folder") {
+            if let folder = FileActions.chooseFolder(prompt: "Keep Notes Here") { store.useFolder(folder) }
+        }
+        if let iCloud = store.iCloudFolder, !store.isInICloud {
+            CapsuleButton(title: "Use iCloud Drive", symbol: "icloud") { store.useFolder(iCloud) }
+        }
+        if !store.isUsingDefaultFolder {
+            CapsuleButton(title: "Use Dynotch's Folder", symbol: "arrow.uturn.backward") { store.useFolder(nil) }
+        }
+    }
+
+    private var showInFinder: some View {
+        CapsuleButton(title: "Show in Finder", symbol: "arrow.up.forward") { NSWorkspace.shared.open(store.folder) }
     }
 
     /// "iCloud Drive › Dynotch Notes", or the path with ~ for the home folder.
@@ -922,9 +948,11 @@ private struct WeatherSettings: View {
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .accessibilityHidden(true)
-                TextField("Search for a city", text: $query)
+                TextField("Search for a city", text: $query, prompt: Text(""))
                     .textFieldStyle(.plain)
                     .font(.system(size: 12.5))
+                    .fieldPlaceholder("Search for a city", isEmpty: query.isEmpty, font: .system(size: 12.5),
+                                      color: Palette.secondaryText)
                 if isSearching {
                     ProgressView().controlSize(.small)
                 }
@@ -1027,7 +1055,10 @@ private struct PlaceRow: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(Palette.wash.opacity(hovering ? 1 : 0))
+            // Rounded and inset, so on the last result it stays inside the card's corner.
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Palette.wash.opacity(hovering ? 1 : 0))
+                .padding(.horizontal, 4))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

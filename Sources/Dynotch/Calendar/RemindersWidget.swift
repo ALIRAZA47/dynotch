@@ -66,7 +66,7 @@ struct RemindersList: View {
             if let due = reminder.dueDate {
                 Text(dueText(due))
                     .font(NotchFont.caption)
-                    .foregroundStyle(due < .now ? Color.red : Calendar.current.isDateInToday(due) ? Color.orange : theme.tertiary)
+                    .foregroundStyle(due < .now ? theme.overdue : Calendar.current.isDateInToday(due) ? Color.orange : theme.tertiary)
                     .lineLimit(1)
                     .fixedSize()
             }

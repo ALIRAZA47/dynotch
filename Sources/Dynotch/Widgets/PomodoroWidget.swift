@@ -49,6 +49,10 @@ struct PomodoroDial: View {
                     .font(NotchFont.figure(large ? 27 : 19))
                     .foregroundStyle(theme.primary)
                     .contentTransition(.numericText(countsDown: true))
+                    // On one line, clear of the ticks, however long the session.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .frame(maxWidth: side - (large ? 34 : 14))
                 Text(timer.phase.title)
                     .font(.system(size: large ? 10.5 : 9.5, weight: .semibold))
                     .foregroundStyle(timer.phase.color)
@@ -68,7 +72,7 @@ struct PomodoroDial: View {
         return HStack(spacing: dense ? 2 : large ? 4 : 3) {
             ForEach(0..<max(1, settings.sessionsPerRound), id: \.self) { index in
                 Circle()
-                    .fill(index < timer.completedSessions ? PomodoroTimer.Phase.focus.color : Color.white.opacity(0.25))
+                    .fill(index < timer.completedSessions ? PomodoroTimer.Phase.focus.color : Color.white.opacity(0.38))
                     .frame(width: dot, height: dot)
             }
         }

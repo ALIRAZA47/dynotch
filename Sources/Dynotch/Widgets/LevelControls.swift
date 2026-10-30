@@ -13,23 +13,31 @@ struct LevelControls: View {
         GeometryReader { proxy in
             // In a short notch the names go and the sliders thin, which the symbols on them make up for.
             let compact = proxy.size.height < 164
-            VStack(alignment: .leading, spacing: compact ? 8 : 10) {
-                if brightness.canSetLevel || isSnapshot, let level = brightness.level ?? (isSnapshot ? 0.68 : nil) {
-                    LevelSlider(title: "Display", symbol: level < 0.5 ? "sun.min.fill" : "sun.max.fill", value: Double(level),
-                                compact: compact) {
-                        brightness.set(Float($0))
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: compact ? 8 : 10) {
+                    if brightness.canSetLevel || isSnapshot, let level = brightness.level ?? (isSnapshot ? 0.68 : nil) {
+                        LevelSlider(title: "Display", symbol: level < 0.5 ? "sun.min.fill" : "sun.max.fill", value: Double(level),
+                                    compact: compact) {
+                            brightness.set(Float($0))
+                        } accessory: {
+                            // As wide as the mute button below, so the two levels line up.
+                            if volume.canMute {
+                                Color.clear.frame(width: 20, height: 14)
+                            }
+                        }
+                    }
+                    LevelSlider(title: "Sound", symbol: volume.symbol, value: volume.isMuted ? 0 : Double(volume.volume),
+                                isEnabled: volume.canSetVolume || isSnapshot, compact: compact) {
+                        volume.setVolume(Float($0))
+                    } accessory: {
+                        if volume.canMute {
+                            CardButton(symbol: volume.isMuted ? "speaker.slash.fill" : "speaker.fill",
+                                       help: volume.isMuted ? "Unmute" : "Mute", action: volume.toggleMute)
+                        }
                     }
                 }
-                LevelSlider(title: "Sound", symbol: volume.symbol, value: volume.isMuted ? 0 : Double(volume.volume),
-                            isEnabled: volume.canSetVolume || isSnapshot, compact: compact) {
-                    volume.setVolume(Float($0))
-                } accessory: {
-                    if volume.canMute {
-                        CardButton(symbol: volume.isMuted ? "speaker.slash.fill" : "speaker.fill",
-                                   help: volume.isMuted ? "Unmute" : "Mute", action: volume.toggleMute)
-                    }
-                }
-                Spacer(minLength: 0)
+                // The menu stands on the foot of the column, level with the tiles and the Batteries card.
+                Spacer(minLength: 8)
                 OutputMenu(height: compact ? 28 : 32)
             }
         }
@@ -90,6 +98,7 @@ private struct LevelSlider<Accessory: View>: View {
                     Spacer(minLength: 0)
                     readout
                         .foregroundStyle(theme.secondary)
+                        .opacity(isEnabled ? 1 : 0.4)
                     accessory
                 }
                 .frame(height: 16)

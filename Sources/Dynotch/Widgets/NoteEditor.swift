@@ -276,15 +276,16 @@ final class NoteTextView: NSTextView {
     }
 
     private func drawCheckbox(checked: Bool, in rect: NSRect) {
-        // A dark tick on a yellow disc, like Notes; an empty ring otherwise.
-        let colors = checked ? [NSColor.black, NSColor.systemYellow] : [dim]
+        // A dark tick on a yellow disc, like Notes; an empty ring otherwise. The symbol applies a
+        // palette color's alpha twice, so the ring gets `dim` opaque and its alpha when it's drawn.
+        let colors = checked ? [NSColor.black, NSColor.systemYellow] : [dim.withAlphaComponent(1)]
         let configuration = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
             .applying(NSImage.SymbolConfiguration(paletteColors: colors))
         guard let image = NSImage(systemSymbolName: checked ? "checkmark.circle.fill" : "circle", accessibilityDescription: nil)?
             .withSymbolConfiguration(configuration) else { return }
         let size = image.size
         let origin = NSPoint(x: rect.minX, y: (rect.midY - size.height / 2).rounded())
-        image.draw(in: NSRect(origin: origin, size: size), from: .zero, operation: .sourceOver, fraction: 1,
-                   respectFlipped: true, hints: nil)
+        image.draw(in: NSRect(origin: origin, size: size), from: .zero, operation: .sourceOver,
+                   fraction: checked ? 1 : dim.alphaComponent, respectFlipped: true, hints: nil)
     }
 }

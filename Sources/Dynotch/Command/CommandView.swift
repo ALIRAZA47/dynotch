@@ -57,12 +57,11 @@ struct CommandView: View {
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else {
-                // The prompt brings its own color: the system's placeholder color is far fainter on
-                // older versions of macOS. The title stays the field's label.
-                TextField(Self.placeholder, text: $viewModel.commandQuery,
-                          prompt: Text(Self.placeholder).foregroundStyle(theme.tertiary))
+                TextField(Self.placeholder, text: $viewModel.commandQuery, prompt: Text(""))
                     .textFieldStyle(.plain)
                     .font(.system(size: 13.5))
+                    .fieldPlaceholder(Self.placeholder, isEmpty: viewModel.commandQuery.isEmpty,
+                                      font: .system(size: 13.5), color: theme.tertiary)
                     .focused($isFocused)
                     .onSubmit { runSelected(results) }
                     .onKeyPress(.downArrow) {
@@ -107,7 +106,8 @@ private struct CommandRow: View {
             HStack(spacing: 10) {
                 Image(systemName: result.symbol)
                     .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(result.tint)
+                    // On glass the disc comes up toward its tint, so the symbol stands out in white.
+                    .foregroundStyle(theme.isGlass ? theme.primary : result.tint)
                     .frame(width: 24, height: 24)
                     .glass(.tint(result.tint), in: Circle())
                 Text(result.title)
