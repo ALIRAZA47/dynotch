@@ -106,10 +106,7 @@ final class NowPlayingService: ObservableObject {
     // MARK: Commands
 
     func playPause() {
-        guard let player else {
-            startPreferredPlayer()
-            return
-        }
+        guard let player else { return }
         setPlaying(!isPlaying)
         send(player == .music ? "tell application id \"com.apple.Music\" to playpause"
                               : "tell application id \"com.spotify.client\" to playpause")
@@ -165,11 +162,6 @@ final class NowPlayingService: ObservableObject {
     func openPlayer() {
         guard let player else { return }
         NSRunningApplication.runningApplications(withBundleIdentifier: player.bundleID).first?.activate()
-    }
-
-    func startPreferredPlayer() {
-        let preferred: Player = AppSettings.shared.preferredPlayer == .spotify && Player.spotify.isInstalled ? .spotify : .music
-        start(preferred)
     }
 
     func start(_ source: Player) {

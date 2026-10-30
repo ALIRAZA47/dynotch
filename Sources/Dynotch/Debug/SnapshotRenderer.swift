@@ -55,6 +55,8 @@ enum SnapshotRenderer {
         var focus: FocusMode?
         /// A look other than the user's, for this scene only.
         var theme: NotchTheme?
+        /// The system's Reduce Transparency is on.
+        var reducesTransparency = false
         /// A display other than a MacBook's, for this scene only.
         var geometry: NotchGeometry?
         /// The command field, with this typed into it.
@@ -141,6 +143,9 @@ enum SnapshotRenderer {
             Scene(name: "15-open-control", phase: .open, tab: .stats),
             // Themes
             Scene(name: "16-open-nook-glass", phase: .open, tab: .home, theme: NotchTheme(material: .glass)),
+            // Reduce Transparency keeps glass black: this one matches 10-open-nook.
+            Scene(name: "16-open-nook-glass-reduced", phase: .open, tab: .home, theme: NotchTheme(material: .glass),
+                  reducesTransparency: true),
             Scene(name: "17-open-focus-glass", phase: .open, tab: .focus, theme: NotchTheme(material: .glass)),
             Scene(name: "18-open-control-pink-round", phase: .open, tab: .stats,
                   theme: NotchTheme(accent: .pink, topRadius: 18, bottomRadius: 40)),
@@ -290,6 +295,7 @@ enum SnapshotRenderer {
             .frame(width: size.width, height: height)
             .environment(\.isSnapshot, true)
             .environment(\.snapshotDrop, scene.targetsDrop ? SnapshotDrop() : nil)
+            .environment(\._accessibilityReduceTransparency, scene.reducesTransparency)
 
             let renderer = ImageRenderer(content: content)
             renderer.scale = 2
@@ -308,6 +314,7 @@ enum SnapshotRenderer {
         renderProfiles(into: folder)
         renderWelcome(into: folder)
         renderCapture(into: folder)
+        renderNotesLeftBehind(into: folder)
     }
 
     // MARK: Capture
@@ -545,10 +552,11 @@ enum SnapshotRenderer {
     /// The Appearance page with other themes, so its header's model notch shows them, glass included.
     private static func renderThemes(into folder: URL) {
         let savedTheme = AppSettings.shared.theme
-        let looks: [(name: String, appearance: NSAppearance.Name, theme: NotchTheme)] = [
-            ("glass-dark", .darkAqua, NotchTheme(material: .glass, accent: .pink, topRadius: 16, bottomRadius: 38)),
-            ("glass-light", .aqua, NotchTheme(material: .glass, accent: .teal, topRadius: 8, bottomRadius: 20)),
-            ("graphite-dark", .darkAqua, NotchTheme(accent: .graphite, topRadius: 20, bottomRadius: 24)),
+        let looks: [(name: String, appearance: NSAppearance.Name, theme: NotchTheme, reducesTransparency: Bool)] = [
+            ("glass-dark", .darkAqua, NotchTheme(material: .glass, accent: .pink, topRadius: 16, bottomRadius: 38), false),
+            ("glass-light", .aqua, NotchTheme(material: .glass, accent: .teal, topRadius: 8, bottomRadius: 20), false),
+            ("graphite-dark", .darkAqua, NotchTheme(accent: .graphite, topRadius: 20, bottomRadius: 24), false),
+            ("glass-reduced-dark", .darkAqua, NotchTheme(material: .glass, accent: .pink, topRadius: 16, bottomRadius: 38), true),
         ]
         var count = 0
         for (index, look) in looks.enumerated() where wanted("settings-2-appearance-\(look.name)") {
@@ -558,6 +566,13 @@ enum SnapshotRenderer {
             let navigation = SettingsNavigation()
             navigation.page = .appearance
             SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
+            if look.reducesTransparency {
+                let hosting = NSHostingController(rootView: SettingsView(navigation: navigation).environment(\.isSnapshot, true)
+                    .environment(\._accessibilityReduceTransparency, true))
+                hosting.sizingOptions = []
+                window.contentViewController = hosting
+                window.setContentSize(SettingsWindowController.contentSize)
+            }
             window.appearance = NSAppearance(named: look.appearance)
             window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -40_000))
             window.orderFrontRegardless()
@@ -568,6 +583,43 @@ enum SnapshotRenderer {
         }
         apply(savedTheme)
         print("Wrote \(count) theme previews to \(folder.path)")
+    }
+
+    /// The Notes card just after leaving a folder that kept its notes, in iCloud Drive and elsewhere,
+    /// with the folder in use still empty. Last, as it empties the sample notes.
+    private static func renderNotesLeftBehind(into folder: URL) {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let samples: [(name: String, left: NotesStore.LeftBehind, appearance: NSAppearance.Name)] = [
+            ("icloud-dark", .init(folder: home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/Dynotch Notes"),
+                                  count: 3), .darkAqua),
+            ("icloud-light", .init(folder: home.appendingPathComponent("Library/Mobile Documents/com~apple~CloudDocs/Dynotch Notes"),
+                                   count: 3), .aqua),
+            ("folder-dark", .init(folder: home.appendingPathComponent("Documents/Obsidian Vault"), count: 1), .darkAqua),
+        ]
+        var count = 0
+        for (index, sample) in samples.enumerated() where wanted("settings-4-nook-notes-left-\(sample.name)") {
+            NotesStore.shared.loadSample([])
+            NotesStore.shared.loadSample(leftBehind: sample.left)
+            let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
+                                         styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
+            let navigation = SettingsNavigation()
+            navigation.page = .nook
+            SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
+            window.appearance = NSAppearance(named: sample.appearance)
+            window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -60_000))
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: .now + 1.2)
+            if let scrollView = window.contentView.flatMap(overflowingScrollView) {
+                scrollView.contentView.scroll(to: NSPoint(x: 0, y: 470))
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+                RunLoop.main.run(until: .now + 0.8)
+            }
+            if save(window, to: folder.appendingPathComponent("settings-4-nook-notes-left-\(sample.name).png")) { count += 1 }
+            window.orderOut(nil)
+            window.close()
+        }
+        NotesStore.shared.loadSample(leftBehind: nil)
+        print("Wrote \(count) notes folder snapshots to \(folder.path)")
     }
 
     /// Writes the window to a PNG, trying again if the window server hands back a blank frame.

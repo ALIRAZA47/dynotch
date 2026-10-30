@@ -37,6 +37,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var captureHotKey: HotKey?
     private let profilesMenu = NSMenu(title: "Profiles")
     private var cancellables = Set<AnyCancellable>()
+    /// Links waiting for launch to finish, or nil once it has.
+    private var linksDuringLaunch: [URL]? = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let arguments = CommandLine.arguments
@@ -141,6 +143,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+
+        // On the next turn, once the notch has settled: one opened before that would close again.
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                let links = self.linksDuringLaunch ?? []
+                self.linksDuringLaunch = nil
+                links.forEach(URLCommands.handle)
+            }
+        }
     }
 
     /// Opening the app again from Finder or Spotlight shows its settings.
@@ -149,9 +160,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
-    /// dynotch:// links from `scripts/dynotch`, shell hooks and other apps.
+    /// dynotch:// links from `scripts/dynotch`, shell hooks and other apps. A link that starts the app
+    /// arrives before `applicationDidFinishLaunching`, with nothing loaded yet: saving the Tray then
+    /// would write over the saved one, so links wait for launch to finish.
     func application(_ application: NSApplication, open urls: [URL]) {
-        urls.forEach(URLCommands.handle)
+        if linksDuringLaunch != nil {
+            linksDuringLaunch?.append(contentsOf: urls)
+        } else {
+            urls.forEach(URLCommands.handle)
+        }
     }
 
     // MARK: Menu bar

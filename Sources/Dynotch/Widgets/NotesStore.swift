@@ -24,11 +24,19 @@ final class NotesStore: ObservableObject {
         var isBlank: Bool { text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     }
 
+    /// The notes that stayed in the last folder left that had any.
+    struct LeftBehind: Equatable {
+        let folder: URL
+        let count: Int
+    }
+
     @Published private(set) var notes: [Note] = []
     @Published private(set) var currentID: Note.ID?
     @Published private(set) var folder: URL
     /// The last save failed, say because the folder went away.
     @Published private(set) var saveFailed = false
+    /// The folder in use starts out without these, so Settings says where they are.
+    @Published private(set) var leftBehind: LeftBehind?
 
     /// ~/Library/Application Support/Dynotch/Notes
     let defaultFolder: URL
@@ -126,23 +134,42 @@ final class NotesStore: ObservableObject {
     // MARK: Folder
 
     /// Keeps notes in `newFolder`, or in Dynotch's own folder when it's nil. Notes in Dynotch's own
-    /// folder move along; a folder the user picked is left as it is.
+    /// folder move along. Any other folder is left as it is: it may be a vault of other Markdown, or
+    /// in iCloud Drive for another Mac, so its notes only move on `bringLeftBehind`.
     func useFolder(_ newFolder: URL?) {
         let target = (newFolder ?? defaultFolder).standardizedFileURL
         guard target != folder.standardizedFileURL else { return }
         saveAll()
         try? FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        let saved = notes.filter(\.isOnDisk)
         if isUsingDefaultFolder {
-            for note in notes where note.isOnDisk {
-                let destination = FileActions.uniqueURL(for: target.appendingPathComponent(note.url.lastPathComponent))
-                try? FileManager.default.moveItem(at: note.url, to: destination)
-            }
+            move(saved.map(\.url), to: target)
+        } else if !saved.isEmpty {
+            leftBehind = LeftBehind(folder: folder, count: saved.count)
         }
+        if leftBehind?.folder.standardizedFileURL == target { leftBehind = nil }
         AppSettings.shared.notesFolderPath = newFolder == nil ? "" : target.path
         folder = target
         notes = []
         reload()
         watch()
+    }
+
+    /// Moves the notes left behind into the folder in use.
+    func bringLeftBehind() {
+        guard let leftBehind else { return }
+        saveAll()
+        move(Self.noteFiles(in: leftBehind.folder), to: folder)
+        self.leftBehind = nil
+        notes = []
+        reload()
+    }
+
+    private func move(_ files: [URL], to target: URL) {
+        for file in files {
+            let destination = FileActions.uniqueURL(for: target.appendingPathComponent(file.lastPathComponent))
+            try? FileManager.default.moveItem(at: file, to: destination)
+        }
     }
 
     /// iCloud Drive's "Dynotch Notes" folder, if iCloud Drive is on.
@@ -153,7 +180,9 @@ final class NotesStore: ObservableObject {
         return drive.appendingPathComponent("Dynotch Notes", isDirectory: true)
     }
 
-    var isInICloud: Bool {
+    var isInICloud: Bool { Self.isInICloud(folder) }
+
+    static func isInICloud(_ folder: URL) -> Bool {
         folder.path.contains("/Library/Mobile Documents/")
     }
 
@@ -223,10 +252,7 @@ final class NotesStore: ObservableObject {
 
     /// Reads every Markdown file in the folder. Notes edited here keep their edits; others take what's on disk.
     private func reload() {
-        let keys: [URLResourceKey] = [.creationDateKey, .isRegularFileKey]
-        let files = ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys,
-                                                                   options: [.skipsHiddenFiles])) ?? [])
-            .filter { ["md", "markdown"].contains($0.pathExtension.lowercased()) }
+        let files = Self.noteFiles(in: folder)
         let paths = Set(files.map(\.standardizedFileURL.path))
         let known = Dictionary(notes.map { ($0.url.standardizedFileURL.path, $0) }, uniquingKeysWith: { first, _ in first })
         var gone = notes.filter { $0.isOnDisk && !paths.contains($0.url.standardizedFileURL.path) }
@@ -259,6 +285,13 @@ final class NotesStore: ObservableObject {
             currentID = notes.first { $0.url.lastPathComponent == remembered }?.id ?? notes.first?.id
         }
         if notes.isEmpty { newNote() }
+    }
+
+    private static func noteFiles(in folder: URL) -> [URL] {
+        let keys: [URLResourceKey] = [.creationDateKey, .isRegularFileKey]
+        return ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys,
+                                                              options: [.skipsHiddenFiles])) ?? [])
+            .filter { ["md", "markdown"].contains($0.pathExtension.lowercased()) }
     }
 
     private func scheduleReload() {
@@ -319,6 +352,10 @@ final class NotesStore: ObservableObject {
                  created: Date(timeIntervalSinceReferenceDate: Double(index)))
         }
         currentID = notes.first?.id
+    }
+
+    func loadSample(leftBehind: LeftBehind?) {
+        self.leftBehind = leftBehind
     }
 }
 

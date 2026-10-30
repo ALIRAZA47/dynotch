@@ -122,7 +122,7 @@ final class NotchViewModel: ObservableObject {
     @Published private(set) var commandResults: [CommandResult] = []
 
     /// Something was dragged out of the tray and the drag hasn't ended yet.
-    var isDraggingOut = false
+    @Published var isDraggingOut = false
     var onOpen: (() -> Void)?
     /// A swipe over the Nook's stack of widgets: true for the next card, false for the one before.
     let stackTurns = PassthroughSubject<Bool, Never>()

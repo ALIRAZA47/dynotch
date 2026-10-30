@@ -119,12 +119,20 @@ private struct StagePreview: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var permissions = PermissionStatus.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     /// The closed notch is drawn larger than life and the open one smaller, so both fit.
     private static let closedScale: CGFloat = 1.4
     private static let openScale: CGFloat = 0.46
     private static let hardwareNotch = CGSize(width: 185, height: 32)
     private static let cycle: TimeInterval = 2.6
+
+    /// The look as the real notch draws it.
+    private var theme: NotchTheme {
+        var theme = settings.theme
+        theme.reducesTransparency = reduceTransparency
+        return theme
+    }
 
     var body: some View {
         let page = navigation.page
@@ -140,8 +148,8 @@ private struct StagePreview: View {
             .animation(.notchActivity, value: featured)
         }
         .animation(.notchOpen, value: page)
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: settings.theme)
-        .environment(\.notchTheme, settings.theme)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: theme)
+        .environment(\.notchTheme, theme)
     }
 
     // MARK: Notch
@@ -151,7 +159,6 @@ private struct StagePreview: View {
         let page = navigation.page
         if isOpen {
             let scale = Self.openScale
-            let theme = settings.theme
             PreviewNotch(size: CGSize(width: settings.openWidth * scale, height: settings.openHeight * scale),
                          topRadius: theme.topRadius * scale, bottomRadius: theme.bottomRadius * scale,
                          isGlass: theme.isGlass, bandHeight: 32 * scale, shadow: settings.showOpenShadow) {
@@ -761,15 +768,23 @@ struct ModelNotch: View {
 
     let pose: Pose
     @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     // As in StagePreview: the closed notch larger than life, the open one smaller.
     private static let closedScale: CGFloat = 1.4
     private static let openScale: CGFloat = 0.46
     private static let hardwareNotch = CGSize(width: 185, height: 32)
 
+    /// The look as the real notch draws it.
+    private var theme: NotchTheme {
+        var theme = settings.theme
+        theme.reducesTransparency = reduceTransparency
+        return theme
+    }
+
     var body: some View {
         notch
-            .environment(\.notchTheme, settings.theme)
+            .environment(\.notchTheme, theme)
     }
 
     @ViewBuilder
@@ -777,7 +792,6 @@ struct ModelNotch: View {
         switch pose {
         case .open(let tab):
             let scale = Self.openScale
-            let theme = settings.theme
             PreviewNotch(size: CGSize(width: settings.openWidth * scale, height: settings.openHeight * scale),
                          topRadius: theme.topRadius * scale, bottomRadius: theme.bottomRadius * scale,
                          isGlass: theme.isGlass, bandHeight: 32 * scale, shadow: settings.showOpenShadow) {

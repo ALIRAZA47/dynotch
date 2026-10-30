@@ -96,6 +96,9 @@ struct NotchTheme: Equatable {
     /// The system's Increase Contrast: quieter text, tracks and lit edges come up a step.
     /// `NotchRootView` sets it, so `AppSettings.theme` leaves it off.
     var isHighContrast = false
+    /// The system's Reduce Transparency: the open notch stays black, whatever its material.
+    /// Set beside `isHighContrast`.
+    var reducesTransparency = false
 
     static let topRadiusRange: ClosedRange<CGFloat> = 6...20
     static let bottomRadiusRange: ClosedRange<CGFloat> = 16...40
@@ -112,7 +115,7 @@ struct NotchTheme: Equatable {
     /// Picks out the selected tab, selections and the main buttons.
     var accent: Color { accentChoice.color }
     /// See-through glass rather than black, so what's on it needs a little more contrast.
-    var isGlass: Bool { material == .glass && NotchMaterial.isGlassAvailable }
+    var isGlass: Bool { material == .glass && NotchMaterial.isGlassAvailable && !reducesTransparency }
 
     // MARK: Spacing
 
