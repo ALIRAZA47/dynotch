@@ -22,7 +22,7 @@ const images = variants.map((file) => {
 });
 ---
 
-<figure class="shot">
+<figure class:list={['shot', { wide: images[0].width === 1568 }]}>
   <div class="shot-frame">
     {
       images.map(({ file, width, height }) => (
@@ -33,7 +33,6 @@ const images = variants.map((file) => {
           {height}
           {alt}
           loading={eager ? 'eager' : 'lazy'}
-          decoding="async"
         />
       ))
     }

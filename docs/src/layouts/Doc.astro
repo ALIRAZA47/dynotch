@@ -26,9 +26,9 @@ const onThisPage = headings.filter((heading) => heading.depth === 2);
 const source = slug === 'changelog' ? 'docs/src/pages/changelog.astro' : `docs/src/content/docs/${slug}.mdx`;
 ---
 
-<Base title={`${title} · Dynotch`} {description} current={slug} section={group.title}>
+<Base title={`${title} · Dynotch`} {description} current={slug} section={group.title} headings={onThisPage}>
   <div class="doc">
-    <Sidebar current={slug} isColumn />
+    <Sidebar current={slug} />
 
     <main class="page-main" id="content">
       <article data-pagefind-body data-pagefind-meta={`group:${group.title}`}>
@@ -40,7 +40,7 @@ const source = slug === 'changelog' ? 'docs/src/pages/changelog.astro' : `docs/s
           </div>
           {
             open && (
-              <a class="button small control" href={open.href} title="Opens Dynotch, if it's installed" data-pagefind-ignore>
+              <a class="button small control open-app" href={open.href} title="Opens Dynotch, if it's installed" data-pagefind-ignore>
                 <svg aria-hidden="true" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M3 11 11 3M4.5 3H11v6.5" />
                 </svg>
@@ -125,6 +125,16 @@ const source = slug === 'changelog' ? 'docs/src/pages/changelog.astro' : `docs/s
     addEventListener('scroll', update, { passive: true });
     update();
   }
+
+  // Pictures are small, so fetch the page's once it has settled. Otherwise each one waits until it's
+  // nearly on screen, and a fast scroll, or a dropped connection, leaves an empty frame.
+  function fetchPictures() {
+    for (const image of document.querySelectorAll<HTMLImageElement>('.shot img')) {
+      if (getComputedStyle(image).display !== 'none') image.loading = 'eager';
+    }
+  }
+  addEventListener('load', () => setTimeout(fetchPictures, 300));
+  new MutationObserver(fetchPictures).observe(document.documentElement, { attributeFilter: ['data-theme'] });
 
   // A copy button on each block of code.
   document.querySelectorAll<HTMLElement>('.prose pre').forEach((block) => {

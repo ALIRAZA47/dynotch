@@ -1,9 +1,12 @@
 ---
 import '../styles/global.css';
+import type { MarkdownHeading } from 'astro';
+import Dock from '../components/Dock.astro';
+import DocsSheet from '../components/DocsSheet.astro';
 import Icons from '../components/Icons.astro';
 import MenuBar from '../components/MenuBar.astro';
+import MoreSheet from '../components/MoreSheet.astro';
 import Search from '../components/Search.astro';
-import Sidebar from '../components/Sidebar.astro';
 import { latestReleaseURL, repositoryURL } from '../data/site';
 
 interface Props {
@@ -12,9 +15,11 @@ interface Props {
   /** The page's slug, on a page of the docs. */
   current?: string;
   section?: string;
+  /** The page's sections, for the phone's More sheet. */
+  headings?: MarkdownHeading[];
 }
 
-const { title, description, current, section } = Astro.props;
+const { title, description, current, section, headings } = Astro.props;
 const base = import.meta.env.BASE_URL;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const socialImage = new URL(`${base}social.png`, Astro.site);
@@ -24,7 +29,7 @@ const socialImage = new URL(`${base}social.png`, Astro.site);
 <html lang="en" data-theme="dark">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
@@ -48,10 +53,13 @@ const socialImage = new URL(`${base}social.png`, Astro.site);
         } catch {}
         document.documentElement.dataset.theme =
           theme ?? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        // On a phone the browser's bar takes this color. The home page starts on the black notch.
+        const light = document.documentElement.dataset.theme === 'light' && location.pathname.split('/').length > 3;
+        document.querySelector('meta[name="theme-color"]').content = light ? '#f4f2fa' : '#000000';
       })();
     </script>
   </head>
-  <body>
+  <body class:list={{ 'is-home': !current }}>
     <a class="skip" href="#content">Skip to the content</a>
     <Icons />
     <MenuBar {current} {section} ring={Boolean(current)} />
@@ -71,26 +79,71 @@ const socialImage = new URL(`${base}social.png`, Astro.site);
 
     <Search />
 
-    <dialog class="sheet" id="menu" aria-label="Documentation">
-      <div class="sheet-head">
-        <span>Docs</span>
-        <button class="icon-button menu-button" type="button" data-close-menu aria-label="Close the menu">
-          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
-            <path d="m4.5 4.5 11 11M15.5 4.5l-11 11"></path>
-          </svg>
-        </button>
-      </div>
-      <Sidebar {current} />
-    </dialog>
+    <Dock inDocs={Boolean(current)} />
+    <DocsSheet {current} />
+    <MoreSheet {headings} />
 
     <script>
-      const menu = document.querySelector<HTMLDialogElement>('#menu')!;
-      document.querySelector('[data-open-menu]')?.addEventListener('click', () => menu.showModal());
-      document.querySelector('[data-close-menu]')?.addEventListener('click', () => menu.close());
-      // A wider window has the sidebar back, so the sheet has nothing left to do.
-      matchMedia('(min-width: 861px)').addEventListener('change', (event) => {
-        if (event.matches) menu.close();
+      const root = document.documentElement;
+
+      function setTheme(theme: string) {
+        root.dataset.theme = theme;
+        try {
+          localStorage.setItem('theme', theme);
+        } catch {
+          // Without storage it just lasts until the next page.
+        }
+        showTheme();
+      }
+
+      function showTheme() {
+        for (const button of document.querySelectorAll<HTMLElement>('[data-set-theme]')) {
+          button.setAttribute('aria-pressed', String(button.dataset.setTheme === root.dataset.theme));
+        }
+      }
+
+      document.querySelector('[data-theme-toggle]')?.addEventListener('click', () => {
+        setTheme(root.dataset.theme === 'dark' ? 'light' : 'dark');
       });
+
+      for (const button of document.querySelectorAll<HTMLElement>('[data-set-theme]')) {
+        button.addEventListener('click', () => setTheme(button.dataset.setTheme!));
+      }
+
+      showTheme();
+
+      for (const button of document.querySelectorAll<HTMLElement>('[data-open-sheet]')) {
+        button.addEventListener('click', () => {
+          document.querySelector<HTMLDialogElement>(`#${button.dataset.openSheet}`)?.showModal();
+        });
+      }
+
+      for (const sheet of document.querySelectorAll<HTMLDialogElement>('.sheet')) {
+        sheet.addEventListener('click', (event) => {
+          const target = event.target as HTMLElement;
+          // A click on the dim area lands on the dialog itself, and a link leaves the sheet behind.
+          if (target === sheet || target.closest('[data-close-sheet], a')) sheet.close();
+        });
+      }
+
+      // A wider window has the menu bar back, so the sheets have nothing left to do.
+      matchMedia('(min-width: 861px)').addEventListener('change', (event) => {
+        if (event.matches) document.querySelectorAll<HTMLDialogElement>('.sheet').forEach((sheet) => sheet.close());
+      });
+
+      // The dock tucks away as you read, and comes back as soon as you scroll up.
+      const dock = document.querySelector<HTMLElement>('[data-dock]')!;
+      let lastScroll = scrollY;
+      addEventListener(
+        'scroll',
+        () => {
+          if (Math.abs(scrollY - lastScroll) < 8) return;
+          const atEnd = scrollY + innerHeight >= root.scrollHeight - 40;
+          dock.classList.toggle('tucked', scrollY > lastScroll && scrollY > 120 && !atEnd);
+          lastScroll = scrollY;
+        },
+        { passive: true },
+      );
     </script>
   </body>
 </html>

@@ -31,6 +31,9 @@
   --glow: rgba(112, 92, 255, 0.3);
   --backdrop: rgba(0, 0, 0, 0.62);
   --jewel: #a894ff;
+  --sheet-bg: #111114;
+  --dock-bg: rgba(34, 34, 40, 0.8);
+  --dock-edge: inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 0 0 1px rgba(255, 255, 255, 0.07), 0 14px 40px rgba(0, 0, 0, 0.6);
   --pane-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.028));
   --pane-edge: inset 0 1px 0 rgba(255, 255, 255, 0.2), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
   --control-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.125), rgba(255, 255, 255, 0.06));
@@ -72,6 +75,9 @@
   --glow: rgba(140, 115, 255, 0.24);
   --backdrop: rgba(20, 15, 43, 0.42);
   --jewel: #a894ff;
+  --sheet-bg: #fbfafe;
+  --dock-bg: rgba(255, 255, 255, 0.78);
+  --dock-edge: inset 0 0 0 1px rgba(20, 15, 43, 0.08), 0 12px 34px rgba(20, 15, 43, 0.2);
   --pane-bg: linear-gradient(180deg, #fff, #fbfafe);
   --pane-edge: inset 0 0 0 1px rgba(20, 15, 43, 0.08), 0 1px 2px rgba(20, 15, 43, 0.05);
   --control-bg: linear-gradient(180deg, #fff, #f3f1fa);
@@ -356,10 +362,6 @@ p {
   color: var(--ink);
   font-weight: 600;
   white-space: nowrap;
-}
-
-.menu-button {
-  display: none;
 }
 
 .notch {
@@ -1387,6 +1389,16 @@ p {
   gap: 11px;
 }
 
+.map-card-title > div {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.map-card-title p,
+.map-card-title > svg {
+  display: none;
+}
+
 .map-card h3 {
   font-size: 18px;
   letter-spacing: -0.012em;
@@ -1586,71 +1598,275 @@ p {
   color: var(--text);
 }
 
-/* The menu on a phone: another thing that grows out of the notch */
+/* A phone's sheets, which slide up from the bottom. Nothing opens them on a wider window. */
 
 .sheet {
   position: fixed;
-  inset: 0 0 auto;
+  inset: auto 0 0;
   width: 100vw;
   max-width: none;
-  max-height: 100dvh;
+  max-height: calc(100dvh - 64px);
   margin: 0;
   padding: 0;
   border: 0;
-  border-radius: 0 0 24px 24px;
-  background: var(--ground);
+  border-radius: 26px 26px 0 0;
+  background: var(--sheet-bg);
   color: var(--text);
+  box-shadow:
+    inset 0 1px 0 var(--hairline),
+    0 -20px 60px rgba(0, 0, 0, 0.45);
   overflow: hidden;
-  opacity: 0;
-  transform: translateY(-12px);
+  transform: translateY(100%);
   transition:
-    transform 0.28s var(--glide),
-    opacity 0.2s,
-    overlay 0.28s allow-discrete,
-    display 0.28s allow-discrete;
+    transform 0.34s var(--glide),
+    overlay 0.34s allow-discrete,
+    display 0.34s allow-discrete;
 }
 
 .sheet[open] {
-  opacity: 1;
+  display: flex;
+  flex-direction: column;
   transform: none;
 }
 
 @starting-style {
   .sheet[open] {
-    opacity: 0;
-    transform: translateY(-12px);
+    transform: translateY(100%);
   }
 }
 
 .sheet::backdrop {
   background: var(--backdrop);
+  opacity: 0;
+  transition:
+    opacity 0.25s,
+    overlay 0.25s allow-discrete,
+    display 0.25s allow-discrete;
+}
+
+.sheet[open]::backdrop {
+  opacity: 1;
+}
+
+@starting-style {
+  .sheet[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+.sheet-grabber {
+  flex-shrink: 0;
+  width: 38px;
+  height: 5px;
+  margin: 9px auto 0;
+  border-radius: 3px;
+  background: var(--frame);
 }
 
 .sheet-head {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 50px;
+  height: 48px;
   padding: 0 8px 0 20px;
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.sheet-close {
+  width: 44px;
+  height: 44px;
+  color: var(--text-2);
+}
+
+.sheet-body {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 2px 20px calc(24px + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+#menu .sheet-body {
+  gap: 0;
+  padding-inline: 12px;
+}
+
+.sheet-group + .sheet-group {
+  box-shadow: inset 0 1px 0 var(--hairline);
+}
+
+.sheet-group summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 54px;
+  padding: 0 8px;
+  font-size: 16.5px;
   font-weight: 600;
+  list-style: none;
+  cursor: pointer;
 }
 
-.sheet .sidebar {
-  position: static;
-  max-height: calc(100dvh - 50px);
-  padding: 4px 8px 24px;
-  border-radius: 0;
-  background: none;
-  box-shadow: none;
-}
-
-.sheet .sidebar-brand {
+.sheet-group summary::-webkit-details-marker {
   display: none;
 }
 
-.sheet a.page {
-  padding: 9px 10px;
+.sheet-group summary > span:not(.badge) {
+  flex-grow: 1;
+}
+
+.sheet-chevron {
+  color: var(--text-3);
+  transition: transform 0.2s var(--glide);
+}
+
+.sheet-group[open] .sheet-chevron {
+  transform: rotate(180deg);
+}
+
+.sheet-pages {
+  display: flex;
+  flex-direction: column;
+  padding: 0 0 8px 40px;
+}
+
+.sheet-pages a {
+  display: flex;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 12px;
+  border-radius: 10px;
   font-size: 16px;
+  color: var(--text-2);
+}
+
+.sheet-pages a[aria-current='page'] {
+  background: var(--control-bg);
+  box-shadow: var(--control-edge);
+  color: var(--text);
+  font-weight: 600;
+}
+
+.sheet-label {
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.sheet-list {
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.sheet-list a {
+  display: flex;
+  align-items: center;
+  min-height: 46px;
+  padding: 0 16px;
+  font-size: 16px;
+}
+
+.sheet-list a + a {
+  box-shadow: inset 0 1px 0 var(--hairline);
+}
+
+.sheet-theme {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px;
+  padding: 4px;
+  border-radius: 22px;
+}
+
+.sheet-theme button {
+  height: 38px;
+  border: 0;
+  border-radius: 19px;
+  background: none;
+  color: var(--text-2);
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.sheet-theme button[aria-pressed='true'] {
+  background: var(--jewel);
+  color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* The dock: the notch's tab track, at the thumb. */
+
+.dock {
+  position: fixed;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  z-index: 30;
+  display: none;
+  align-items: center;
+  gap: 2px;
+  padding: 6px;
+  border-radius: 30px;
+  background: var(--dock-bg);
+  -webkit-backdrop-filter: blur(24px) saturate(1.7);
+  backdrop-filter: blur(24px) saturate(1.7);
+  box-shadow: var(--dock-edge);
+  transform: translateX(-50%);
+  transition:
+    transform 0.3s var(--glide),
+    opacity 0.2s;
+}
+
+.dock.tucked {
+  opacity: 0;
+  transform: translate(-50%, calc(100% + 24px));
+}
+
+.dock-tab {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-width: 52px;
+  height: 46px;
+  padding: 0;
+  border: 0;
+  border-radius: 23px;
+  background: none;
+  color: var(--text-2);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dock-tab span {
+  display: none;
+}
+
+.dock-tab.on {
+  padding: 0 16px 0 14px;
+  background: var(--jewel);
+  color: var(--ink);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.2),
+    0 0 22px rgba(168, 148, 255, 0.32);
+}
+
+.dock-tab.on span {
+  display: inline;
+}
+
+.hero-brand,
+.stage-reel {
+  display: none;
 }
 
 /* Narrower windows */
@@ -1673,63 +1889,553 @@ p {
   }
 }
 
+/* A phone. The menu bar and its notch belong to a Mac, so they go: the app hangs from the top of the
+   screen instead, the dock takes over the way around, and pictures run edge to edge. */
+
 @media (max-width: 860px) {
   :root {
-    --bar: 50px;
+    --bar: 52px;
     --gutter: 20px;
   }
 
+  html {
+    scroll-padding-top: 16px;
+  }
+
   .menubar {
-    grid-template-columns: 44px 1fr 44px;
-    gap: 0;
-    padding: 0 8px;
+    position: static;
+    display: flex;
+    height: auto;
+    padding: env(safe-area-inset-top) var(--gutter) 0;
+    background: none;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    box-shadow: none;
+    view-transition-name: none;
   }
 
-  .brand {
-    justify-content: center;
-    width: 44px;
-    height: var(--bar);
-  }
-
-  .brand span,
-  .menubar-right .download,
-  .notch .keys,
-  .ring {
+  .menubar-links,
+  .menubar-right,
+  .notch {
     display: none;
   }
 
-  .menubar-left {
-    gap: 0;
+  .brand {
+    font-size: 16px;
   }
 
-  .menu-button {
+  .brand img {
+    width: 30px;
+    height: 30px;
+  }
+
+  .is-home .menubar {
+    display: none;
+  }
+
+  .dock {
     display: flex;
-    width: 44px;
-    height: var(--bar);
   }
 
-  .notch {
-    justify-self: center;
-    justify-content: center;
+  .footer-inner {
+    flex-direction: column;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
+  /* The home page */
+
+  .home {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .home-light {
+    inset: 130px 0 auto;
+    height: 420px;
+    background: radial-gradient(90% 300px at 50% 0, var(--glow), transparent 72%);
+  }
+
+  .stage {
+    order: -1;
+    max-width: none;
+    padding: 0;
+  }
+
+  .stage-frame {
+    display: none;
+  }
+
+  .stage-reel {
+    display: flex;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+    background: #6c80cf;
+  }
+
+  .stage-reel::-webkit-scrollbar,
+  .sizes::-webkit-scrollbar,
+  .shots::-webkit-scrollbar,
+  .chips::-webkit-scrollbar {
+    display: none;
+  }
+
+  .stage-reel-item {
+    flex: 0 0 100%;
+    aspect-ratio: 1360 / 536;
+    overflow: hidden;
+    scroll-snap-align: start;
+  }
+
+  .stage-reel-item img {
+    width: 115.3%;
+    max-width: none;
+    height: auto;
+    margin-left: -7.65%;
+  }
+
+  .stage-bar {
     gap: 8px;
-    width: 186px;
-    padding: 0 12px;
-    border-radius: 0 0 16px 16px;
-    color: rgba(255, 255, 255, 0.72);
-    font-size: 15px;
+    margin-top: 12px;
+    padding-inline: var(--gutter);
   }
 
-  .notch:hover,
-  .notch:focus-visible {
-    width: 186px;
+  .stage-tabs {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
   }
 
-  .notch-label {
-    flex-grow: 0;
+  .stage-tabs button {
+    padding: 0;
   }
 
+  .stage-tabs [data-pick='closed'],
+  .stage-tabs [data-pick='glance'] {
+    display: none;
+  }
+
+  .stage-caption {
+    width: 100%;
+    text-align: center;
+  }
+
+  .hero {
+    padding-top: 26px;
+  }
+
+  .hero-brand {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 14px;
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .hero h1 {
+    font-size: clamp(36px, 11.2vw, 46px);
+    line-height: 1.02;
+  }
+
+  .hero h1 br {
+    display: none;
+  }
+
+  .hero-side {
+    gap: 18px;
+    margin-top: 12px;
+  }
+
+  .hero-side > p {
+    flex-basis: auto;
+    max-width: none;
+    font-size: 18px;
+  }
+
+  .hero-cta {
+    width: 100%;
+  }
+
+  .hero-actions {
+    flex-direction: column;
+  }
+
+  .hero-actions .button {
+    width: 100%;
+    height: 50px;
+    border-radius: 25px;
+  }
+
+  /* You can't install a Mac app from a phone, so here the docs come first. */
+  .hero-cta .hero-actions {
+    flex-direction: column-reverse;
+  }
+
+  .hero-cta .jewel {
+    background: var(--control-bg);
+    color: var(--text);
+    box-shadow: var(--control-edge);
+  }
+
+  .hero-cta .control {
+    background: var(--jewel);
+    color: var(--ink);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.55),
+      inset 0 -1px 0 rgba(0, 0, 0, 0.2),
+      0 0 22px rgba(168, 148, 255, 0.32);
+  }
+
+  .hero-meta {
+    text-align: center;
+  }
+
+  .section {
+    padding-top: 64px;
+  }
+
+  .section h2 {
+    font-size: 30px;
+  }
+
+  .section-lede {
+    font-size: 17px;
+  }
+
+  /* Positioned, so a screen reader's hidden text can't stretch the page from inside. */
+  .sizes,
+  .shots,
+  .chips {
+    position: relative;
+    display: flex;
+    flex-wrap: nowrap;
+    margin-inline: calc(var(--gutter) * -1);
+    padding-inline: var(--gutter);
+    overflow-x: auto;
+    scroll-padding-inline: var(--gutter);
+    scrollbar-width: none;
+  }
+
+  .sizes,
+  .shots {
+    gap: 10px;
+    scroll-snap-type: x mandatory;
+  }
+
+  .sizes {
+    margin-top: 20px;
+  }
+
+  .size-card {
+    flex: 0 0 min(80%, 320px);
+    scroll-snap-align: start;
+  }
+
+  .chip {
+    white-space: nowrap;
+  }
+
+  .split {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px;
+  }
+
+  .split:has(.terminal) > :first-child {
+    order: 1;
+  }
+
+  .shot-plain {
+    margin-inline: calc(var(--gutter) * -1);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .shot-plain img {
+    width: 115.3%;
+    max-width: none;
+    margin-left: -7.65%;
+  }
+
+  .terminal pre {
+    font-size: 14px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .notice-art {
+    height: auto;
+    aspect-ratio: 900 / 190;
+  }
+
+  .map {
+    display: block;
+    margin-top: 20px;
+    border-radius: 18px;
+    overflow: hidden;
+    background: var(--pane-bg);
+    box-shadow: var(--pane-edge);
+  }
+
+  .map-card {
+    display: block;
+    padding: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: inset 0 1px 0 var(--hairline);
+  }
+
+  .map-card:first-child {
+    box-shadow: none;
+  }
+
+  .map-card ul {
+    display: none;
+  }
+
+  .map-card-title {
+    gap: 12px;
+    min-height: 64px;
+    padding: 8px 14px 8px 16px;
+  }
+
+  .map-card h3 {
+    font-size: 16px;
+    letter-spacing: 0;
+  }
+
+  .map-card-title p {
+    display: block;
+    overflow: hidden;
+    font-size: 13.5px;
+    color: var(--text-3);
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  .map-card-title > svg {
+    display: block;
+    flex-shrink: 0;
+    color: var(--text-3);
+  }
+
+  .closing {
+    gap: 20px;
+    padding-block: 64px 40px;
+  }
+
+  .closing h2 {
+    font-size: 38px;
+  }
+
+  .closing .button {
+    width: 100%;
+    height: 50px;
+    border-radius: 25px;
+  }
+
+  /* A page of the docs */
+
+  .doc {
+    display: block;
+    padding: 0 var(--gutter);
+  }
+
+  .doc > .sidebar {
+    display: none;
+  }
+
+  .page-main {
+    padding: 14px 0 44px;
+  }
+
+  .page-head h1 {
+    font-size: 42px;
+  }
+
+  .page-lede {
+    font-size: 19px;
+  }
+
+  /* These open the app, which is on a Mac. */
+  .open-app {
+    display: none;
+  }
+
+  .prose {
+    margin-top: 20px;
+  }
+
+  .prose h2 {
+    margin-top: 44px;
+    font-size: 26px;
+  }
+
+  .prose > .shot {
+    margin-inline: calc(var(--gutter) * -1);
+  }
+
+  .prose > .shot .shot-frame {
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .prose > .shot figcaption {
+    padding-inline: var(--gutter);
+  }
+
+  /* The notch fills the frame, and only the desktop either side of it goes. */
+  .shot.wide .shot-frame img {
+    width: 115.3%;
+    max-width: none;
+    margin-left: -7.65%;
+  }
+
+  .shots .shot {
+    flex: 0 0 min(84%, 330px);
+    scroll-snap-align: start;
+  }
+
+  .prose pre {
+    padding-top: 44px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+
+  .prose pre[data-language='text'] {
+    white-space: pre;
+    overflow-wrap: normal;
+  }
+
+  .copy {
+    opacity: 1;
+  }
+
+  /* A table folds into rows: each starts with its first cell, and any other column gets its name. */
+  .table-wrap {
+    overflow: visible;
+  }
+
+  .prose table,
+  .prose tbody,
+  .prose tr,
+  .prose td {
+    display: block;
+  }
+
+  .prose thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .prose tr {
+    padding: 12px 16px;
+    box-shadow: inset 0 1px 0 var(--hairline);
+  }
+
+  .prose tbody tr:first-child {
+    box-shadow: none;
+  }
+
+  .prose td {
+    padding: 0;
+    box-shadow: none;
+    color: var(--text-2);
+  }
+
+  .prose td:empty {
+    display: none;
+  }
+
+  .prose td:first-child {
+    font-size: 16px;
+  }
+
+  .prose td + td {
+    margin-top: 3px;
+  }
+
+  .prose table:not([data-columns='2']) td:not(:first-child, [data-label^='What']) {
+    position: relative;
+    margin-top: 6px;
+    padding-left: 100px;
+  }
+
+  .prose table:not([data-columns='2']) td:not(:first-child, [data-label^='What'])::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 0;
+    width: 92px;
+    font-size: 13.5px;
+    color: var(--text-3);
+  }
+
+  .pager {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 44px;
+  }
+
+  .pager a {
+    padding: 12px 14px;
+  }
+
+  .pager a.next {
+    grid-column: 2;
+  }
+
+  .pager strong {
+    font-size: 16px;
+  }
+
+  /* Search takes the whole screen, above the keyboard. */
   .search {
-    padding: 10px 12px 14px;
+    inset: 0;
+    width: 100vw;
+    height: 100dvh;
+    max-height: none;
+    padding: calc(10px + env(safe-area-inset-top)) 12px 12px;
+    border-radius: 0;
+    box-shadow: none;
+    overflow: hidden;
+    clip-path: none;
+    transform: translateY(100%);
+    transition:
+      transform 0.32s var(--glide),
+      overlay 0.32s allow-discrete,
+      display 0.32s allow-discrete;
+  }
+
+  .search[open] {
+    display: flex;
+    flex-direction: column;
+    clip-path: none;
+    transform: none;
+    transition:
+      transform 0.32s var(--glide),
+      overlay 0.32s allow-discrete,
+      display 0.32s allow-discrete;
+  }
+
+  @starting-style {
+    .search[open] {
+      clip-path: none;
+      transform: translateY(100%);
+    }
+  }
+
+  .search::before,
+  .search::after {
+    display: none;
+  }
+
+  .search-results {
+    flex: 1 1 auto;
+    max-height: none;
   }
 
   .search-hints,
@@ -1743,96 +2449,10 @@ p {
   }
 
   .search-excerpt {
-    white-space: normal;
     display: -webkit-box;
+    white-space: normal;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
-  }
-
-  .doc {
-    display: block;
-    padding: 0 var(--gutter);
-  }
-
-  .doc > .sidebar {
-    display: none;
-  }
-
-  .page-main {
-    padding-top: 28px;
-  }
-
-  .page-lede {
-    font-size: 19px;
-  }
-
-  .prose h2 {
-    margin-top: 44px;
-    font-size: 25px;
-  }
-
-  .hero {
-    padding-top: 40px;
-  }
-
-  .hero h1 br {
-    display: none;
-  }
-
-  .hero-cta {
-    width: 100%;
-  }
-
-  .hero-actions .button {
-    flex: 1 1 100%;
-    height: 48px;
-    border-radius: 24px;
-  }
-
-  .hero-meta {
-    text-align: center;
-  }
-
-  .stage {
-    padding-top: 34px;
-  }
-
-  /* The slab fills the frame, and only the desktop either side of it goes. */
-  .stage-frame {
-    aspect-ratio: 1360 / 536;
-  }
-
-  .stage-frame > .stage-scene {
-    inset: 0 auto auto 50%;
-    width: 115.3%;
-    height: 100%;
-    transform: translateX(-50%);
-  }
-
-  .stage-hit {
-    left: 25%;
-    width: 50%;
-    min-height: 44px;
-  }
-
-  .stage-tabs {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    width: 100%;
-  }
-
-  .stage-tabs button {
-    height: 40px;
-    padding: 0 6px;
-    font-size: 14.5px;
-  }
-
-  .section {
-    padding-top: 80px;
-  }
-
-  .closing {
-    padding-block: 80px 56px;
   }
 }
 
@@ -1877,8 +2497,13 @@ p {
 
   .notch,
   .button,
-  .sheet {
+  .sheet,
+  .dock {
     transition: none;
+  }
+
+  .search {
+    transform: none;
   }
 
   .button:hover {
@@ -1897,7 +2522,8 @@ p {
   .pager,
   .footer,
   .search,
-  .sheet {
+  .sheet,
+  .dock {
     display: none !important;
   }
 

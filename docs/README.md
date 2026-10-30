@@ -32,13 +32,20 @@ Pages can use these without importing them:
 <Note warn>Worth worrying about.</Note>
 <Shot name="12-open-tray" alt="What it shows, for a screen reader." caption="Optional." />
 <Shot name="settings-1-general" themed alt="…" />
-<Shots min={320}>two or more Shots in a grid</Shots>
+<Shots min={320}>two or more Shots: a grid, or a row to swipe on a phone</Shots>
 ```
 
 A page's front matter takes `title`, `description`, an optional shorter `navTitle` for the sidebar,
 and an optional `open` button that opens that part of the app through a `dynotch://` link.
 
 A new page needs its slug in `src/data/nav.ts`, or the build stops and says so.
+
+## On a phone
+
+Below 860 points the menu bar and its notch go, because they belong to a Mac. The app hangs from the
+top of the screen instead, and a dock at the thumb (`src/components/Dock.astro`) opens sheets for the
+docs and everything else. Tables fold into rows and pictures run edge to edge, so a page needs nothing
+special for this, but keep a table's first column short: it becomes each row's title.
 
 ## Screenshots
 

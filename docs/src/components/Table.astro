@@ -1,5 +1,13 @@
 ---
-// Wide tables scroll inside their own glass rather than widening the page.
+// Wide tables scroll inside their own glass on a wider window, and fold into rows on a phone. For that,
+// each cell carries its column's heading, which the CSS shows beside it.
+const html = await Astro.slots.render('default');
+const head = html.match(/<thead>.*?<\/thead>/s)?.[0] ?? '';
+const labels = [...head.matchAll(/<th[^>]*>(.*?)<\/th>/gs)].map((match) => match[1].replace(/<[^>]+>/g, '').trim());
+const rows = html.replace(/<tr>.*?<\/tr>/gs, (row) => {
+  let column = 0;
+  return row.replace(/<td(?=[ >])/g, () => `<td data-label="${labels[column++]}"`);
+});
 ---
 
-<div class="table-wrap pane"><table><slot /></table></div>
+<div class="table-wrap pane"><table data-columns={labels.length} set:html={rows} /></div>
