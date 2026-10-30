@@ -1,0 +1,25 @@
+---
+interface Props {
+  /** Keys as written in the app: `⌃⌥K`, `⇧⌘Z`, `Space`, or several joined by spaces. */
+  k: string;
+}
+
+const names: Record<string, string> = {
+  '⌃': 'Control',
+  '⌥': 'Option',
+  '⇧': 'Shift',
+  '⌘': 'Command',
+  '↩': 'Return',
+  '↑': 'Up arrow',
+  '↓': 'Down arrow',
+  '←': 'Left arrow',
+  '→': 'Right arrow',
+};
+
+const caps = Astro.props.k
+  .split(' ')
+  .flatMap((key) => [...(key.match(/^[⌃⌥⇧⌘]+/)?.[0] ?? '')].concat(key.replace(/^[⌃⌥⇧⌘]+/, '') || []));
+const spoken = caps.map((cap) => names[cap] ?? cap).join(' ');
+---
+
+<kbd class="keys"><span class="sr-only">{spoken}</span><span class="keys" aria-hidden="true">{caps.map((cap) => <span class="key">{cap}</span>)}</span></kbd>

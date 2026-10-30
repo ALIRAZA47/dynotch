@@ -1,0 +1,41 @@
+---
+import { getPageNames, nav } from '../data/nav';
+import { getLatest } from '../data/site';
+import Badge from './Badge.astro';
+
+interface Props {
+  current?: string;
+  /** The full column beside a page, as opposed to the same list in the phone's menu. */
+  isColumn?: boolean;
+}
+
+const { current, isColumn = false } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const { version } = await getLatest();
+const names = await getPageNames();
+---
+
+<aside class:list={['sidebar', { pane: isColumn }]} aria-label="Documentation" data-sidebar={isColumn ? '' : undefined}>
+  <div class="sidebar-brand">
+    <img src={`${base}icon.png`} alt="" width="38" height="38" />
+    <div>
+      <strong>Dynotch</strong>
+      <span>Docs for {version}</span>
+    </div>
+  </div>
+  {
+    nav.map((group) => (
+      <div>
+        <div class="sidebar-group-title">
+          <Badge {group} size={18} />
+          {group.title}
+        </div>
+        {group.pages.map((slug) => (
+          <a class="page" href={`${base}${slug}/`} aria-current={slug === current ? 'page' : undefined}>
+            {names.get(slug)}
+          </a>
+        ))}
+      </div>
+    ))
+  }
+</aside>

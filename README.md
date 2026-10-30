@@ -10,6 +10,8 @@ show up beside the camera.
 It's a native SwiftUI + AppKit app, about 22,800 lines of Swift, with no third-party
 dependencies.
 
+**[Read the documentation](https://aliraza47.github.io/dynotch/)**, with screenshots of everything below.
+
 ## Features
 
 | | |

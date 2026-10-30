@@ -1,0 +1,42 @@
+---
+import screens from '../data/screens.json';
+
+interface Props {
+  /** The scene's name in public/screens. With `themed`, without its -dark or -light. */
+  name: string;
+  alt: string;
+  caption?: string;
+  /** Show the -dark or the -light render, whichever matches the page. */
+  themed?: boolean;
+  eager?: boolean;
+}
+
+const { name, alt, caption, themed = false, eager = false } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const variants = themed ? [`${name}-dark`, `${name}-light`] : [name];
+
+const images = variants.map((file) => {
+  const size = (screens as Record<string, number[]>)[file];
+  if (!size) throw new Error(`There's no screenshot called ${file}. Add it to scripts/screens.mjs.`);
+  return { file, width: size[0], height: size[1] };
+});
+---
+
+<figure class="shot">
+  <div class="shot-frame">
+    {
+      images.map(({ file, width, height }) => (
+        <img
+          class:list={{ 'only-dark': file.endsWith('-dark') && themed, 'only-light': file.endsWith('-light') && themed }}
+          src={`${base}screens/${file}.webp`}
+          {width}
+          {height}
+          {alt}
+          loading={eager ? 'eager' : 'lazy'}
+          decoding="async"
+        />
+      ))
+    }
+  </div>
+  {caption && <figcaption>{caption}</figcaption>}
+</figure>

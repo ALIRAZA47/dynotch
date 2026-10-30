@@ -1,0 +1,96 @@
+---
+import '../styles/global.css';
+import Icons from '../components/Icons.astro';
+import MenuBar from '../components/MenuBar.astro';
+import Search from '../components/Search.astro';
+import Sidebar from '../components/Sidebar.astro';
+import { latestReleaseURL, repositoryURL } from '../data/site';
+
+interface Props {
+  title: string;
+  description: string;
+  /** The page's slug, on a page of the docs. */
+  current?: string;
+  section?: string;
+}
+
+const { title, description, current, section } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const socialImage = new URL(`${base}social.png`, Astro.site);
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="icon" type="image/png" href={`${base}favicon.png`} />
+    <link rel="apple-touch-icon" href={`${base}apple-touch-icon.png`} />
+    <link rel="sitemap" href={`${base}sitemap-index.xml`} />
+    <meta name="theme-color" content="#000000" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Dynotch" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={socialImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script is:inline>
+      // Before the first paint, so a light page never flashes dark.
+      (() => {
+        let theme = null;
+        try {
+          theme = localStorage.getItem('theme');
+        } catch {}
+        document.documentElement.dataset.theme =
+          theme ?? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="skip" href="#content">Skip to the content</a>
+    <Icons />
+    <MenuBar {current} {section} ring={Boolean(current)} />
+    <slot />
+
+    <footer class="footer">
+      <div class="footer-inner">
+        <span>Dynotch is MIT licensed. Inspired by NotchNook and MacNotch.</span>
+        <nav aria-label="Footer">
+          <a href={repositoryURL}>GitHub</a>
+          <a href={latestReleaseURL}>Releases</a>
+          <a href={`${repositoryURL}/blob/main/.github/SECURITY.md`}>Security</a>
+          <a href={`${repositoryURL}/blob/main/.github/CONTRIBUTING.md`}>Contributing</a>
+        </nav>
+      </div>
+    </footer>
+
+    <Search />
+
+    <dialog class="sheet" id="menu" aria-label="Documentation">
+      <div class="sheet-head">
+        <span>Docs</span>
+        <button class="icon-button menu-button" type="button" data-close-menu aria-label="Close the menu">
+          <svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+            <path d="m4.5 4.5 11 11M15.5 4.5l-11 11"></path>
+          </svg>
+        </button>
+      </div>
+      <Sidebar {current} />
+    </dialog>
+
+    <script>
+      const menu = document.querySelector<HTMLDialogElement>('#menu')!;
+      document.querySelector('[data-open-menu]')?.addEventListener('click', () => menu.showModal());
+      document.querySelector('[data-close-menu]')?.addEventListener('click', () => menu.close());
+      // A wider window has the sidebar back, so the sheet has nothing left to do.
+      matchMedia('(min-width: 861px)').addEventListener('change', (event) => {
+        if (event.matches) menu.close();
+      });
+    </script>
+  </body>
+</html>

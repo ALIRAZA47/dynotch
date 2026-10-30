@@ -1,0 +1,145 @@
+---
+import type { MarkdownHeading } from 'astro';
+import Sidebar from '../components/Sidebar.astro';
+import { getPageNames, nav } from '../data/nav';
+import { repositoryURL } from '../data/site';
+import Base from './Base.astro';
+
+interface Props {
+  slug: string;
+  title: string;
+  description: string;
+  headings: MarkdownHeading[];
+  open?: { label: string; href: string };
+}
+
+const { slug, title, description, headings, open } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const group = nav.find((group) => group.pages.includes(slug));
+if (!group) throw new Error(`${slug} has a page but isn't in the sidebar. Add it to src/data/nav.ts.`);
+
+const names = await getPageNames();
+const order = nav.flatMap((group) => group.pages);
+const previous = order[order.indexOf(slug) - 1];
+const next = order[order.indexOf(slug) + 1];
+const onThisPage = headings.filter((heading) => heading.depth === 2);
+const source = slug === 'changelog' ? 'docs/src/pages/changelog.astro' : `docs/src/content/docs/${slug}.mdx`;
+---
+
+<Base title={`${title} · Dynotch`} {description} current={slug} section={group.title}>
+  <div class="doc">
+    <Sidebar current={slug} isColumn />
+
+    <main class="page-main" id="content">
+      <article data-pagefind-body data-pagefind-meta={`group:${group.title}`}>
+        <p class="eyebrow" data-pagefind-ignore>{group.title}</p>
+        <div class="page-head">
+          <div>
+            <h1>{title}</h1>
+            <p class="page-lede">{description}</p>
+          </div>
+          {
+            open && (
+              <a class="button small control" href={open.href} title="Opens Dynotch, if it's installed" data-pagefind-ignore>
+                <svg aria-hidden="true" width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 11 11 3M4.5 3H11v6.5" />
+                </svg>
+                {open.label}
+              </a>
+            )
+          }
+        </div>
+        <div class="prose"><slot /></div>
+      </article>
+
+      <nav class="pager" aria-label="Next and previous">
+        {
+          previous && (
+            <a class="pane" href={`${base}${previous}/`}>
+              <span>Previous</span>
+              <strong>{names.get(previous)}</strong>
+            </a>
+          )
+        }
+        {
+          next && (
+            <a class="pane next" href={`${base}${next}/`}>
+              <span>Next</span>
+              <strong>{names.get(next)}</strong>
+            </a>
+          )
+        }
+      </nav>
+    </main>
+
+    <aside class="toc" aria-label="On this page">
+      {
+        onThisPage.length > 0 && (
+          <>
+            <p class="toc-title">On this page</p>
+            <ul>
+              {onThisPage.map((heading) => (
+                <li>
+                  <a href={`#${heading.slug}`}>{heading.text}</a>
+                </li>
+              ))}
+            </ul>
+          </>
+        )
+      }
+      <a class="toc-edit" href={`${repositoryURL}/edit/main/${source}`}>Edit this page</a>
+    </aside>
+  </div>
+</Base>
+
+<script>
+  // The sidebar stays where it was scrolled to from one page to the next.
+  const sidebar = document.querySelector<HTMLElement>('[data-sidebar]');
+  if (sidebar) {
+    try {
+      sidebar.scrollTop = Number(sessionStorage.getItem('sidebar') ?? 0);
+      addEventListener('pagehide', () => sessionStorage.setItem('sidebar', String(sidebar.scrollTop)));
+    } catch {
+      // Without storage it starts at the top, which is fine.
+    }
+    // A link from elsewhere can land on a page that's scrolled out of the list.
+    const page = sidebar.querySelector<HTMLElement>('[aria-current="page"]');
+    if (page) {
+      const bottom = page.offsetTop + page.offsetHeight + 16 - sidebar.clientHeight;
+      if (page.offsetTop < sidebar.scrollTop || bottom > sidebar.scrollTop) sidebar.scrollTop = Math.max(bottom, 0);
+    }
+  }
+
+  // On this page: the section you're reading.
+  const links = [...document.querySelectorAll<HTMLAnchorElement>('.toc li a')];
+  const headings = links.map((link) => document.getElementById(decodeURIComponent(link.hash.slice(1))));
+  if (links.length) {
+    const update = () => {
+      const line = 120;
+      let current = 0;
+      headings.forEach((heading, index) => {
+        if (heading && heading.getBoundingClientRect().top <= line) current = index;
+      });
+      links.forEach((link, index) => link.classList.toggle('current', index === current));
+    };
+    addEventListener('scroll', update, { passive: true });
+    update();
+  }
+
+  // A copy button on each block of code.
+  document.querySelectorAll<HTMLElement>('.prose pre').forEach((block) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'code-wrap';
+    block.replaceWith(wrap);
+    const button = document.createElement('button');
+    button.className = 'copy';
+    button.type = 'button';
+    button.textContent = 'Copy';
+    button.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(block.innerText);
+      button.textContent = 'Copied';
+      setTimeout(() => (button.textContent = 'Copy'), 1400);
+    });
+    wrap.append(block, button);
+  });
+</script>

@@ -1,0 +1,37 @@
+---
+title: Profiles
+description: Saved setups such as Work, Home and Presenting.
+---
+
+A profile keeps what the notch shows and how it opens: tabs, widgets, live activities (and which apps' notifications peek), size, theme and displays. **Hover shows** stays as it is across profiles. The profile that's on keeps the changes you make.
+
+<Shot name="settings-profiles-dark" eager alt="The Profiles section of Dynotch's General settings, listing Work, Home, Desk and Presenting, each with what switches it on." />
+
+## Making one
+
+Set the notch up the way you want it. Then, in <Path to="Settings → General → Profiles" />, type a name and click **Save Current Setup**.
+
+## Switching
+
+- The **Profiles** menu in the menu bar menu
+- The **···** menu in the open notch's header
+- <Path to="Settings → General → Profiles" />
+- `Work` or `profile Work` in the [command field](/dynotch/command-field/)
+- `dynotch profile Work` from a script
+
+From the command field or a script, the notch says which profile it switched to, or that there's no such profile.
+
+## Switching by itself
+
+A profile can switch on by itself:
+
+| Rule | It switches on when |
+|---|---|
+| By hand | Only when you say |
+| A Focus | That Focus turns on |
+| Any Focus | Any Focus turns on |
+| External display | An external display connects |
+
+When that Focus ends or the display goes, the notch goes back to how it was, unless you switched profiles by hand in between.
+
+<Note>Focus rules need Full Disk Access, like the [Focus activity](/dynotch/permissions/), because that's how Dynotch can tell which Focus is on.</Note>

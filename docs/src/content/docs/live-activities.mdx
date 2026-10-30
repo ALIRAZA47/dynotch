@@ -1,0 +1,70 @@
+---
+title: Live activities
+description: What the closed notch shows beside the camera.
+---
+
+With the notch closed, what's going on shows up beside the camera, without opening anything. The closed notch stays black, so it blends with the camera housing, and grows only as far as it has to.
+
+<Shot name="03-closed-music" eager alt="A MacBook menu bar with the closed notch showing album art on its left and an equalizer on its right." />
+
+## What it can show
+
+Each one has a switch in <Path to="Settings → Live Activities" />. All of them start on.
+
+| Activity | What it shows |
+|---|---|
+| Now playing | Artwork and an equalizer while music plays |
+| Track changes | The song's name when the track changes |
+| Focus timer | A countdown while the timer runs |
+| Volume & brightness | A meter as you change them |
+| Charging | The battery level when you plug in |
+| Low battery | For the Mac and Bluetooth devices |
+| Upcoming events | Five minutes before they start |
+| Bluetooth devices | When one connects, with its battery |
+| Muted microphone | A red badge while the mic is muted |
+| Timers | Named timers and the stopwatch from the Focus tab |
+| Downloads | Progress as a file downloads, and a notice when it's done |
+| Focus | Your Focus's symbol while one is on, and a notice when it changes |
+| Notifications | Messages, Mail, Slack and more as they arrive |
+
+<Note>**Focus** and **Notifications** need [Full Disk Access](/dynotch/permissions/#full-disk-access), and show nothing without it.</Note>
+
+A few other things use the same space: a Shortcut finishing, a screenshot landing in the Tray, rain about to start, a new version of Dynotch, and whatever your [scripts](/dynotch/dynotch-command/) say.
+
+<Shots min={320}>
+  <Shot name="04-closed-track-peek" alt="The closed notch with the song title and artist on a row under the camera." caption="Track changes" />
+  <Shot name="05-closed-timer" alt="The closed notch with a timer ring on the left and 18:24 on the right." caption="Focus timer" />
+  <Shot name="06-closed-volume" alt="The closed notch as a volume meter." caption="Volume" />
+  <Shot name="07-closed-charging" alt="The closed notch with a green bolt and 82%." caption="Charging" />
+  <Shot name="08-closed-event" alt="The closed notch saying Design review is in five minutes." caption="An event five minutes away" />
+  <Shot name="09-closed-notification" alt="The closed notch with a message from Anna on a row under the camera." caption="A notification" />
+  <Shot name="60-closed-download" alt="The closed notch with a download ring and 45%." caption="A download" />
+  <Shot name="72-closed-focus-on" alt="The closed notch saying Do Not Disturb is on." caption="A Focus turning on" />
+  <Shot name="90-closed-screenshot" alt="The closed notch saying a screenshot was added to the Tray." caption="A screenshot in the Tray" />
+  <Shot name="95-closed-rain" alt="The closed notch saying rain is starting soon, in 15 minutes." caption="Rain on its way" />
+</Shots>
+
+To see one without waiting for it, point at it in <Path to="Settings → Live Activities" /> and it plays in the model notch at the top of the page. The **Preview** tile shows a sample in the real notch.
+
+<Shot name="settings-3-activities" themed alt="The Live Activities page of Dynotch's Settings, with a tile and a switch for each activity." />
+
+## Two at once
+
+A second activity keeps a small glyph at the end of the right ear while another takes the notch: the mute badge, a timer's or a download's ring, the Focus that's on, or the album art.
+
+<Shots min={320}>
+  <Shot name="20-closed-timer-and-music" alt="A timer in the closed notch with the album art as a small glyph at the end of the right ear." caption="A timer, with the music as a glyph" />
+  <Shot name="42-closed-two-countdowns" alt="The Tea timer with a second timer's ring at the end of the right ear." caption="Two named timers" />
+  <Shot name="62-closed-download-and-music" alt="A download's ring with the album art as a glyph." caption="A download, with the music as a glyph" />
+  <Shot name="71-closed-music-and-focus" alt="Music in the closed notch with the Work Focus symbol as a glyph." caption="Music, with a Focus as a glyph" />
+</Shots>
+
+The main activity follows this order, and the first that applies takes the notch:
+
+1. Notices
+2. The song title
+3. The timer that ends soonest
+4. A download
+5. Music
+
+Turn **Two at once** off in <Path to="Settings → Live Activities → Options" /> to show only the main one. A status like the mute badge or your Focus's symbol then shows only when nothing else does.

@@ -1,0 +1,133 @@
+---
+import screens from '../data/screens.json';
+
+const base = import.meta.env.BASE_URL;
+
+const states = [
+  { id: 'closed', label: 'Closed', caption: 'Live activities beside the camera.' },
+  { id: 'glance', label: 'Glance', caption: 'Rest the pointer on the notch.' },
+  { id: 'nook', label: 'Nook', caption: 'Your music, and a stack of widgets beside it.' },
+  { id: 'tray', label: 'Tray', caption: 'A shelf for the files you’re using.' },
+  { id: 'focus', label: 'Focus', caption: 'Pomodoro, named timers, reminders and notes.' },
+  { id: 'control', label: 'Control', caption: 'Toggles, sliders, batteries and the system at a glance.' },
+];
+
+const scenes = [
+  { state: 'glance', file: 'glance-1-music', alt: 'The glance: the track, a scrubber, and play and skip buttons.' },
+  { state: 'nook', file: '10-open-nook', alt: 'The open notch on the Nook tab: the music player beside the next calendar event.' },
+  { state: 'tray', file: '12-open-tray', alt: 'The Tray tab: a shelf of files with a tile for adding more.' },
+  { state: 'focus', file: '14-open-focus', alt: 'The Focus tab: a Pomodoro dial, named timers and reminders.' },
+  { state: 'control', file: '15-open-control', alt: 'The Control tab: toggle tiles, display and sound sliders, and battery rings.' },
+];
+
+const size = (file: string) => {
+  const [width, height] = (screens as Record<string, number[]>)[file];
+  return { width, height };
+};
+---
+
+<section class="wrap stage" data-stage data-state="nook" aria-label="Dynotch in each of its states">
+  <div class="stage-frame">
+    <div class="stage-scene">
+      <img src={`${base}screens/03-closed-music.webp`} {...size('03-closed-music')} alt="The closed notch, with album art and an equalizer either side of the camera." />
+      {
+        scenes.map(({ state, file, alt }) => (
+          <div class="stage-scene stage-layer" data-scene={state}>
+            <img src={`${base}screens/${file}.webp`} {...size(file)} {alt} />
+          </div>
+        ))
+      }
+      <button class="stage-hit" type="button" data-notch aria-label="Open the notch"></button>
+    </div>
+  </div>
+
+  <div class="stage-bar">
+    <div class="stage-tabs well" role="group" aria-label="Choose a state">
+      {
+        states.map(({ id, label, caption }) => (
+          <button type="button" data-pick={id} data-caption={caption} aria-pressed={id === 'nook' ? 'true' : 'false'}>
+            {label}
+          </button>
+        ))
+      }
+    </div>
+    <p class="stage-caption" aria-live="polite">{states[2].caption}</p>
+  </div>
+</section>
+
+<script is:inline>
+  // Before the first paint: the page starts on the closed notch, then the notch opens by itself.
+  (() => {
+    if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      document.querySelector('[data-stage]').dataset.state = 'closed';
+    }
+  })();
+</script>
+
+<script>
+  const stage = document.querySelector<HTMLElement>('[data-stage]')!;
+  const notch = stage.querySelector<HTMLElement>('[data-notch]')!;
+  const frame = stage.querySelector<HTMLElement>('.stage-frame')!;
+  const caption = stage.querySelector<HTMLElement>('.stage-caption')!;
+  const buttons = [...stage.querySelectorAll<HTMLButtonElement>('[data-pick]')];
+  const tabs = ['nook', 'tray', 'focus', 'control'];
+
+  let intro: number | undefined;
+  let hover: number | undefined;
+
+  function show(state: string) {
+    const from = stage.dataset.state!;
+    stage.classList.toggle('between-tabs', tabs.includes(from) && tabs.includes(state));
+    stage.dataset.state = state;
+    for (const button of buttons) {
+      const on = button.dataset.pick === state;
+      button.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (on) caption.textContent = button.dataset.caption!;
+    }
+  }
+
+  function takeOver() {
+    clearTimeout(intro);
+  }
+
+  for (const button of buttons) {
+    button.addEventListener('click', () => {
+      takeOver();
+      show(button.dataset.pick!);
+    });
+  }
+
+  // As in the app: rest on the notch for a glance, click for the rest, move away to close it.
+  notch.addEventListener('pointerenter', (event) => {
+    if (event.pointerType !== 'mouse' || stage.dataset.state !== 'closed') return;
+    takeOver();
+    hover = window.setTimeout(() => show('glance'), 150);
+  });
+
+  notch.addEventListener('pointerleave', () => clearTimeout(hover));
+
+  frame.addEventListener('pointerleave', (event) => {
+    if (event.pointerType === 'mouse' && stage.dataset.state === 'glance') show('closed');
+  });
+
+  notch.addEventListener('click', () => {
+    takeOver();
+    clearTimeout(hover);
+    show('nook');
+  });
+
+  // The glance's slab is taller than the notch, so a click on any of it opens the rest.
+  frame.addEventListener('click', (event) => {
+    if (stage.dataset.state === 'glance' && event.target !== notch) show('nook');
+  });
+
+  stage.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && stage.dataset.state !== 'closed') show('closed');
+  });
+
+  if (stage.dataset.state === 'closed') {
+    for (const button of buttons) button.setAttribute('aria-pressed', button.dataset.pick === 'closed' ? 'true' : 'false');
+    caption.textContent = buttons[0].dataset.caption!;
+    intro = window.setTimeout(() => show('nook'), 1100);
+  }
+</script>

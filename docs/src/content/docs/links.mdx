@@ -1,0 +1,59 @@
+---
+title: dynotch:// links
+description: The same commands, for anything that can open a link.
+---
+
+Dynotch answers `dynotch://` links, so Shortcuts, Raycast, Alfred, a script or a web page can drive it. In Terminal, `open` sends one:
+
+```bash
+open -g 'dynotch://notify?text=Hello&tint=orange'
+```
+
+`-g` keeps the app you're in at the front.
+
+## The links
+
+| Link | What it does |
+|---|---|
+| `dynotch://notify?text=…` | Shows a notice |
+| `dynotch://open?tab=tray` | Opens the notch on a tab |
+| `dynotch://close` | Closes the notch |
+| `dynotch://timer/start` | Controls the focus timer |
+| `dynotch://tray/add?path=…` | Adds files to the Tray |
+| `dynotch://profile?name=Work` | Switches to a profile |
+| `dynotch://capture` | Freezes the screen to capture a region |
+
+## notify
+
+| Parameter | What it does |
+|---|---|
+| `text` | The main text, up to 100 characters. Over 18, it moves to the row underneath, or with a `detail` it's cut to 17 |
+| `detail` | The second line, up to 140 characters. The notch shows one line of it |
+| `symbol` | An SF Symbol's name |
+| `tint` | A color name, or a hex value without its `#`, like `FF6B5C`. See [notify](/dynotch/dynotch-command/#notify) |
+| `seconds` | How long it stays, from 1 to 30. It's 4 by default |
+
+## open
+
+`tab` is `home`, `tray`, `focus` or `stats`, and `nook` works for `home`. Without one, the notch opens as it would by hand.
+
+## timer
+
+The path after `timer/` is `start`, `pause`, `toggle`, `reset` or `skip`. `stop` means `pause`, and anything else means `toggle`.
+
+## tray/add
+
+Repeat `path` for each file, up to 20, and add `show=1` to open the Tray.
+
+```text
+dynotch://tray/add?path=/Users/you/report.pdf&path=/Users/you/notes.txt&show=1
+```
+
+## What links can't do
+
+Anything on the Mac can open these links, so they only do what you could see and undo:
+
+- Notices carry a terminal badge, so a script can't pass one off as Dynotch's own.
+- Tray adds point at files without copying them, and skip `~/Library`. The notch says what was added.
+- A capture link only opens the editor over the screen. Nothing is copied or saved until you act, and <Keys k="Esc" /> closes it.
+- Nothing reads a protected database on a link's behalf.

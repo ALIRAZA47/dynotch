@@ -1,0 +1,446 @@
+{
+  "card-closed": [
+    900,
+    335
+  ],
+  "card-glance": [
+    1100,
+    409
+  ],
+  "card-open": [
+    1440,
+    536
+  ],
+  "10-open-nook": [
+    1568,
+    536
+  ],
+  "12-open-tray": [
+    1568,
+    536
+  ],
+  "14-open-focus": [
+    1568,
+    536
+  ],
+  "15-open-control": [
+    1568,
+    536
+  ],
+  "03-closed-music": [
+    1568,
+    536
+  ],
+  "glance-1-music": [
+    1568,
+    536
+  ],
+  "03-closed-music-crop": [
+    900,
+    190
+  ],
+  "04-closed-track-peek": [
+    900,
+    190
+  ],
+  "05-closed-timer": [
+    900,
+    190
+  ],
+  "06-closed-volume": [
+    900,
+    190
+  ],
+  "07-closed-charging": [
+    900,
+    190
+  ],
+  "08-closed-event": [
+    900,
+    190
+  ],
+  "09-closed-notification": [
+    900,
+    190
+  ],
+  "09-closed-notification-private": [
+    900,
+    190
+  ],
+  "09-closed-notification-other-app": [
+    900,
+    190
+  ],
+  "20-closed-timer-and-music": [
+    900,
+    190
+  ],
+  "23-closed-event-and-timer": [
+    900,
+    190
+  ],
+  "30-closed-muted": [
+    900,
+    190
+  ],
+  "31-closed-music-muted": [
+    900,
+    190
+  ],
+  "32-closed-mute-notice": [
+    900,
+    190
+  ],
+  "33-closed-on-air-camera": [
+    900,
+    190
+  ],
+  "34-closed-on-air-mic-muted": [
+    900,
+    190
+  ],
+  "40-closed-countdown": [
+    900,
+    190
+  ],
+  "42-closed-two-countdowns": [
+    900,
+    190
+  ],
+  "44-closed-stopwatch-and-music": [
+    900,
+    190
+  ],
+  "45-closed-timer-done": [
+    900,
+    190
+  ],
+  "51-closed-long-message": [
+    900,
+    190
+  ],
+  "60-closed-download": [
+    900,
+    190
+  ],
+  "61-closed-download-size": [
+    900,
+    190
+  ],
+  "62-closed-download-and-music": [
+    900,
+    190
+  ],
+  "64-closed-downloaded": [
+    900,
+    190
+  ],
+  "65-closed-script-notice": [
+    900,
+    190
+  ],
+  "70-closed-focus": [
+    900,
+    190
+  ],
+  "71-closed-music-and-focus": [
+    900,
+    190
+  ],
+  "72-closed-focus-on": [
+    900,
+    190
+  ],
+  "73-closed-focus-off": [
+    900,
+    190
+  ],
+  "90-closed-screenshot": [
+    900,
+    190
+  ],
+  "95-closed-rain": [
+    900,
+    190
+  ],
+  "25-virtual-notch-idle": [
+    900,
+    190
+  ],
+  "26-virtual-notch-music": [
+    900,
+    190
+  ],
+  "27-line-idle": [
+    900,
+    190
+  ],
+  "28-line-hover": [
+    900,
+    190
+  ],
+  "29-line-music": [
+    900,
+    190
+  ],
+  "glance-1-music-crop": [
+    1000,
+    300
+  ],
+  "glance-2-pomodoro": [
+    1000,
+    300
+  ],
+  "glance-3-countdown": [
+    1000,
+    300
+  ],
+  "glance-4-event": [
+    1000,
+    300
+  ],
+  "glance-5-download": [
+    1000,
+    300
+  ],
+  "glance-6-message": [
+    1000,
+    300
+  ],
+  "glance-7-stopwatch": [
+    1000,
+    300
+  ],
+  "glance-8-today": [
+    1000,
+    300
+  ],
+  "command-1-empty": [
+    1568,
+    712
+  ],
+  "command-2-timer": [
+    1568,
+    536
+  ],
+  "command-3-sum": [
+    1568,
+    536
+  ],
+  "command-4-reminder": [
+    1568,
+    536
+  ],
+  "command-5-toggle": [
+    1568,
+    536
+  ],
+  "11-open-nook-empty": [
+    1568,
+    536
+  ],
+  "81-open-nook-outputs": [
+    1568,
+    536
+  ],
+  "84-open-nook-live-levels": [
+    1568,
+    536
+  ],
+  "93-open-nook-weather-notes": [
+    1568,
+    536
+  ],
+  "96-open-nook-timer-toggles": [
+    1568,
+    536
+  ],
+  "98-open-nook-shortcuts-calendar": [
+    1568,
+    536
+  ],
+  "widget-mirror": [
+    1568,
+    536
+  ],
+  "widget-notes": [
+    1568,
+    536
+  ],
+  "widget-shortcuts": [
+    1568,
+    536
+  ],
+  "13-open-tray-dropping": [
+    1568,
+    536
+  ],
+  "92-open-tray-selected": [
+    1568,
+    536
+  ],
+  "14-open-focus-notes": [
+    1568,
+    536
+  ],
+  "97-open-focus-busy": [
+    1568,
+    536
+  ],
+  "91-open-control-bluetooth": [
+    1568,
+    536
+  ],
+  "16-open-nook-glass": [
+    1568,
+    536
+  ],
+  "17-open-focus-glass": [
+    1568,
+    536
+  ],
+  "18-open-control-pink-round": [
+    1568,
+    536
+  ],
+  "19-open-tray-teal-square": [
+    1568,
+    536
+  ],
+  "accent-blue-control": [
+    1568,
+    536
+  ],
+  "accent-green-control": [
+    1568,
+    536
+  ],
+  "accent-orange-control": [
+    1568,
+    536
+  ],
+  "accent-red-control": [
+    1568,
+    536
+  ],
+  "accent-yellow-control": [
+    1568,
+    536
+  ],
+  "accent-graphite-control": [
+    1568,
+    536
+  ],
+  "capture-1-selection": [
+    1600,
+    1000
+  ],
+  "capture-2-editor-dark": [
+    1600,
+    1000
+  ],
+  "capture-4-pinned-dark": [
+    1400,
+    860
+  ],
+  "settings-1-general-dark": [
+    1600,
+    1164
+  ],
+  "settings-1-general-light": [
+    1600,
+    1164
+  ],
+  "settings-2-appearance-dark": [
+    1600,
+    1164
+  ],
+  "settings-2-appearance-light": [
+    1600,
+    1164
+  ],
+  "settings-3-activities-dark": [
+    1600,
+    1164
+  ],
+  "settings-3-activities-light": [
+    1600,
+    1164
+  ],
+  "settings-4-nook-dark": [
+    1600,
+    1164
+  ],
+  "settings-4-nook-light": [
+    1600,
+    1164
+  ],
+  "settings-5-tray-dark": [
+    1600,
+    1164
+  ],
+  "settings-5-tray-light": [
+    1600,
+    1164
+  ],
+  "settings-6-focus-dark": [
+    1600,
+    1164
+  ],
+  "settings-6-focus-light": [
+    1600,
+    1164
+  ],
+  "settings-7-permissions-dark": [
+    1600,
+    1164
+  ],
+  "settings-7-permissions-light": [
+    1600,
+    1164
+  ],
+  "settings-8-about-dark": [
+    1600,
+    1164
+  ],
+  "settings-8-about-light": [
+    1600,
+    1164
+  ],
+  "settings-profiles-dark": [
+    1600,
+    1164
+  ],
+  "welcome-1-notch-dark": [
+    1520,
+    1440
+  ],
+  "welcome-1-notch-light": [
+    1520,
+    1440
+  ],
+  "welcome-2-highlights-dark": [
+    1520,
+    1440
+  ],
+  "welcome-2-highlights-light": [
+    1520,
+    1440
+  ],
+  "welcome-3-permissions-dark": [
+    1520,
+    1440
+  ],
+  "welcome-3-permissions-light": [
+    1520,
+    1440
+  ],
+  "welcome-4-done-dark": [
+    1520,
+    1440
+  ],
+  "welcome-4-done-light": [
+    1520,
+    1440
+  ]
+}
