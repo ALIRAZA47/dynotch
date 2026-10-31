@@ -137,6 +137,10 @@ struct GeneralSettings: View {
                 SettingsCard {
                     SwitchRow(title: "Open it with ⌃⌥K", detail: "From anywhere, ready to type", symbol: "magnifyingglass",
                               isOn: $settings.commandShortcut)
+                    CardDivider()
+                    SwitchRow(title: "Suggest what you use",
+                              detail: "An empty field lists your recent and frequent commands first. It counts the command, never what you type, and turning this off forgets the count.",
+                              symbol: "sparkles", isOn: $settings.learnsCommands)
                 }
             }
 

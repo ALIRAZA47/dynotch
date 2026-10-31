@@ -3,7 +3,7 @@ title: Command field
 description: Timers, notes, reminders, toggles and sums, all from one field.
 ---
 
-Press <Keys k="⌃⌥K" /> from anywhere, or click **Type a command** in the open notch's header. With nothing typed, it suggests one of each thing it can do.
+Press <Keys k="⌃⌥K" /> from anywhere, or click **Type a command** in the open notch's header. With nothing typed, it lists what you use most, then one of each thing it can do.
 
 <Shot name="command-1-empty" eager alt="The command field open and empty, suggesting a timer, a note, a reminder, Dark Mode, a profile and a sum." />
 
@@ -70,6 +70,14 @@ Answers show up as you type, and Return copies them.
 | <Keys k="Return" /> | Runs it |
 | <Keys k="Esc" /> | Clears what's typed, and then leaves |
 
+## What you use comes first
+
+The commands you've run lately and run often rise to the top of the empty field, so <Keys k="⌃⌥K" /> then <Keys k="Return" /> repeats the one you use most. Only the command is counted, like **Keep the Mac awake** or a Shortcut by its name, with how often and when you last ran it. What you type is never kept: `tea 4m` counts as a timer, and a note counts as a note.
+
+Clearing the Tray and disconnecting a device never show up there, so a stray <Keys k="Return" /> can't do them. Nor do outputs and connecting a device.
+
 ## Turning it off
 
 **Open it with <Keys k="⌃⌥K" />** in <Path to="Settings → General → Command field" /> turns off the shortcut. The field is still there in the open notch's header.
+
+**Suggest what you use**, in the same place, goes back to the same six suggestions and forgets what it counted.

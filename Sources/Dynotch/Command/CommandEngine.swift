@@ -21,6 +21,8 @@ struct CommandResult: Identifiable {
     var hint: String?
     /// Nil for a row that only says something, like that nothing matched.
     var action: (@MainActor (NotchViewModel) -> CommandOutcome)?
+    /// On an empty field, here because it's been used rather than to show what can be typed.
+    var isLearned = false
 }
 
 /// Turns what's typed into the command field into things to do: timers, notes, reminders, toggles,
@@ -33,7 +35,7 @@ enum CommandEngine {
 
     static func results(for query: String, in viewModel: NotchViewModel) -> [CommandResult] {
         let text = query.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else { return suggestions }
+        guard !text.isEmpty else { return suggestions() }
         let lower = text.lowercased()
         var results: [CommandResult] = []
 
@@ -100,12 +102,7 @@ enum CommandEngine {
             results.append(contentsOf: profiles(matching: lower))
             results.append(contentsOf: shortcuts(matching: lower, all: false))
         }
-        if ["settings", "preferences"].contains(where: { $0.hasPrefix(lower) }) {
-            results.append(CommandResult(id: "settings", symbol: "gearshape.fill", tint: .gray, title: "Open Settings") { _ in
-                SettingsWindowController.shared.show()
-                return .close
-            })
-        }
+        if ["settings", "preferences"].contains(where: { $0.hasPrefix(lower) }) { results.append(openSettings) }
 
         // And the notes and files that mention it.
         if text.count >= 2 {
@@ -122,35 +119,99 @@ enum CommandEngine {
 
     // MARK: Suggestions
 
-    /// With nothing typed: one of each kind of command, and what to type for it.
-    private static var suggestions: [CommandResult] {
+    /// One of each kind of command, and what to type for it.
+    private static var starters: [CommandResult] {
         let toggles = QuickToggles.shared
         return [
-            CommandResult(id: "try-timer", symbol: "timer", tint: .orange, title: "Start a timer", hint: "tea 4m") { _ in
+            CommandResult(id: "timer", symbol: "timer", tint: .orange, title: "Start a timer", hint: "tea 4m") { _ in
                 .fill("tea 4m")
             },
-            CommandResult(id: "try-note", symbol: "note.text", tint: .yellow, title: "New note", hint: "note Buy coffee") { _ in
+            CommandResult(id: "note", symbol: "note.text", tint: .yellow, title: "New note", hint: "note Buy coffee") { _ in
                 .fill("note ")
             },
-            CommandResult(id: "try-remind", symbol: "checklist", tint: .blue, title: "Remind me",
+            CommandResult(id: "remind", symbol: "checklist", tint: .blue, title: "Remind me",
                           hint: "remind Call Sam 5pm") { _ in
                 .fill("remind ")
             },
-            CommandResult(id: "try-dark", symbol: "moon.fill", tint: .indigo,
+            CommandResult(id: "dark", symbol: "moon.fill", tint: .indigo,
                           title: toggles.isDarkMode ? "Turn off Dark Mode" : "Turn on Dark Mode", hint: "dark") { _ in
                 toggles.toggleDarkMode()
                 return .close
             },
-            CommandResult(id: "try-profile", symbol: "person.crop.circle", tint: .green, title: "Switch profile",
+            CommandResult(id: "profile", symbol: "person.crop.circle", tint: .green, title: "Switch profile",
                           hint: "profile Work") { _ in
                 .fill("profile ")
             },
-            CommandResult(id: "try-sum", symbol: "plus.forwardslash.minus", tint: .gray, title: "Calculate or convert",
+            CommandResult(id: "sum", symbol: "plus.forwardslash.minus", tint: .gray, title: "Calculate or convert",
                           hint: "18% of 240") { _ in
                 .fill("18% of 240")
             },
         ]
     }
+
+    /// Commands that take a value, which come back asking for it.
+    private static var valueCommands: [CommandResult] {
+        [
+            CommandResult(id: "volume", symbol: "speaker.wave.2.fill", tint: .blue, title: "Set the volume", hint: "vol 30") { _ in
+                .fill("vol ")
+            },
+            CommandResult(id: "brightness", symbol: "sun.max.fill", tint: .yellow, title: "Set the brightness", hint: "bright 60") { _ in
+                .fill("bright ")
+            },
+        ]
+    }
+
+    /// With nothing typed: what's been used, then the starters, as far as there's room.
+    private static func suggestions() -> [CommandResult] {
+        let starters = starters
+        let learned = AppSettings.shared.learnsCommands ? learnedRows(CommandHistory.ranked(), starters: starters) : []
+        let others = starters.filter { starter in !learned.contains { $0.id == starter.id } }
+        return Array((learned + others).prefix(maximumResults))
+    }
+
+    /// The commands in the history that can still run: a shortcut that's been deleted doesn't come back.
+    private static func learnedRows(_ ids: [String], starters: [CommandResult]) -> [CommandResult] {
+        let rows = toggles(matching: "") + starters + valueCommands + tabs(matching: "") + [openSettings]
+        let shown = ids.lazy.compactMap { id -> CommandResult? in
+            var row = rows.first { $0.id == id } ?? named(id)
+            row?.isLearned = true
+            return row
+        }
+        return Array(shown.prefix(maximumResults))
+    }
+
+    /// A row whose ID holds what it's for: a shortcut, a profile or a page of Settings.
+    private static func named(_ id: String) -> CommandResult? {
+        if id.hasPrefix(shortcutPrefix) {
+            let name = String(id.dropFirst(shortcutPrefix.count))
+            return ShortcutsService.shared.all.contains(name) ? shortcut(name) : nil
+        }
+        if let profile = ProfileStore.shared.profiles.first(where: { profileID($0) == id }) { return row(for: profile) }
+        return SettingsPage.allCases.first { settingsID($0) == id }.map(row(for:))
+    }
+
+    /// Counts a row that's been run, as the command it belongs to. What a clip, a note or a file is
+    /// was typed, or it's gone by the next look, so those aren't counted, and neither is a number an
+    /// output or a device goes by, which doesn't last. Nor is anything that can't be taken back,
+    /// since a row on an empty field is one Return away.
+    static func noteUse(of id: String, now: Date = .now) {
+        guard AppSettings.shared.learnsCommands, let command = learnedID(of: id) else { return }
+        CommandHistory.record(command, now: now)
+    }
+
+    private static let learnedCommands: Set<String> = [
+        "timer", "note", "remind", "dark", "awake", "mic", "pomodoro", "stopwatch", "color", "screenshot", "sleep",
+        "play", "next", "previous", "join", "volume", "brightness", "settings",
+    ]
+
+    /// What goes in the history for a row. Answers all count as the one row that offers them.
+    static func learnedID(of id: String) -> String? {
+        if answerIDs.contains(id) { return "sum" }
+        if learnedCommands.contains(id) { return id }
+        return ["tab-", "settings-", shortcutPrefix, "profile-"].contains { id.hasPrefix($0) } ? id : nil
+    }
+
+    private static let answerIDs: Set<String> = ["sum", "convert"]
 
     // MARK: Commands
 
@@ -356,16 +417,27 @@ enum CommandEngine {
             }
     }
 
+    private static var openSettings: CommandResult {
+        CommandResult(id: "settings", symbol: "gearshape.fill", tint: .gray, title: "Open Settings") { _ in
+            SettingsWindowController.shared.show()
+            return .close
+        }
+    }
+
     private static func settingsPages(matching text: String) -> [CommandResult] {
         SettingsPage.allCases
             .filter { $0.title.lowercased().contains(text) }
             .prefix(3)
-            .map { page in
-                CommandResult(id: "settings-\(page.rawValue)", symbol: page.symbol, tint: page.tint, title: "Open \(page.title) Settings") { _ in
-                    SettingsWindowController.shared.show(page: page)
-                    return .close
-                }
-            }
+            .map(row(for:))
+    }
+
+    private static func settingsID(_ page: SettingsPage) -> String { "settings-\(page.rawValue)" }
+
+    private static func row(for page: SettingsPage) -> CommandResult {
+        CommandResult(id: settingsID(page), symbol: page.symbol, tint: page.tint, title: "Open \(page.title) Settings") { _ in
+            SettingsWindowController.shared.show(page: page)
+            return .close
+        }
     }
 
     private static func tabs(matching text: String) -> [CommandResult] {
@@ -390,33 +462,40 @@ enum CommandEngine {
     }
 
     private static func profiles(matching text: String) -> [CommandResult] {
-        let store = ProfileStore.shared
-        return store.profiles
+        ProfileStore.shared.profiles
             .filter { text.isEmpty || $0.name.lowercased().hasPrefix(text) }
             .prefix(3)
-            .map { profile in
-                CommandResult(id: "profile-\(profile.id)", symbol: profile.symbol, tint: profile.tint,
-                              title: "Switch to \(profile.name)", hint: profile.id == store.activeID ? "on" : nil) { _ in
-                    store.switchTo(named: profile.name)
-                    return .close
-                }
-            }
+            .map(row(for:))
+    }
+
+    private static func profileID(_ profile: Profile) -> String { "profile-\(profile.id)" }
+
+    private static func row(for profile: Profile) -> CommandResult {
+        let store = ProfileStore.shared
+        return CommandResult(id: profileID(profile), symbol: profile.symbol, tint: profile.tint,
+                             title: "Switch to \(profile.name)", hint: profile.id == store.activeID ? "on" : nil) { _ in
+            store.switchTo(named: profile.name)
+            return .close
+        }
     }
 
     /// The user's shortcuts. `all` lists every one while nothing's typed after "run".
     private static func shortcuts(matching text: String, all: Bool) -> [CommandResult] {
         guard all || !text.isEmpty else { return [] }
-        let service = ShortcutsService.shared
-        return service.all
+        return ShortcutsService.shared.all
             .filter { text.isEmpty || $0.lowercased().hasPrefix(text) || (text.count >= 3 && $0.lowercased().contains(text)) }
             .prefix(3)
-            .map { name in
-                CommandResult(id: "shortcut-\(name)", symbol: "square.stack.3d.up.fill", tint: .pink, title: "Run \(name)",
-                              hint: "shortcut") { _ in
-                    service.run(name)
-                    return .close
-                }
-            }
+            .map(shortcut)
+    }
+
+    private static let shortcutPrefix = "shortcut-"
+
+    private static func shortcut(_ name: String) -> CommandResult {
+        CommandResult(id: shortcutPrefix + name, symbol: "square.stack.3d.up.fill", tint: .pink, title: "Run \(name)",
+                      hint: "shortcut") { _ in
+            ShortcutsService.shared.run(name)
+            return .close
+        }
     }
 
     /// The clips with these words in them, pinned first. It never turns the history on: with that off

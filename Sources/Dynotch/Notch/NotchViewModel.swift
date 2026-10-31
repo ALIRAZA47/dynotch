@@ -340,7 +340,11 @@ final class NotchViewModel: ObservableObject {
         isCommandMode = true
         // The shortcuts are commands too, and they're only listed once asked for.
         if ShortcutsService.shared.all.isEmpty {
-            Task { await ShortcutsService.shared.reload() }
+            Task {
+                await ShortcutsService.shared.reload()
+                // One of them may be among what's offered on an empty field.
+                if isCommandMode, commandQuery.isEmpty { commandResults = CommandEngine.results(for: "", in: self) }
+            }
         }
     }
 
@@ -365,10 +369,13 @@ final class NotchViewModel: ObservableObject {
         guard let action = result.action else { return }
         switch action(self) {
         case .close:
+            CommandEngine.noteUse(of: result.id)
             close()
         case .stay:
+            CommandEngine.noteUse(of: result.id)
             withAnimation(.notchTab) { endCommand() }
         case .fill(let text):
+            // It's only asked for more: what comes of that is what counts.
             commandQuery = text
         }
     }

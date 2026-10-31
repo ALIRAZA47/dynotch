@@ -243,6 +243,13 @@ final class AppSettings: ObservableObject {
     @Published var commandShortcut: Bool = AppSettings.value("commandShortcut", true) {
         didSet { save("commandShortcut", commandShortcut) }
     }
+    /// An empty command field lists what's used most. Turning this off forgets what it's counted.
+    @Published var learnsCommands: Bool = AppSettings.value("learnsCommands", true) {
+        didSet {
+            save("learnsCommands", learnsCommands)
+            if !learnsCommands { CommandHistory.forget() }
+        }
+    }
     @Published var swipeGestures: Bool = AppSettings.value("swipeGestures", true) {
         didSet { save("swipeGestures", swipeGestures) }
     }
