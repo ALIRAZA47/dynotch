@@ -29,6 +29,8 @@ Dynotch has no account, no analytics and no server of its own. It runs on your M
 | Notes | `~/Library/Application Support/Dynotch/Notes`, or the folder you chose. If that's iCloud Drive, they sync through it |
 | The Tray's list | `~/Library/Application Support/Dynotch/tray.json` |
 | Tray files | `~/Library/Application Support/Dynotch/Tray`, for copies with **Keep copies** on, and for files made from dropped images, links and text |
+| The last Claude usage numbers | The preferences domain, as percentages and reset times |
+| Copies from Terminal setup | `~/Library/Application Support/Dynotch/setup-backups`: the last five of `~/.zshrc` and `~/.claude/settings.json`, from before each change |
 
 ## Notifications
 
@@ -49,5 +51,8 @@ Peeks stay hidden while a Focus is on and while a display is mirrored. Dynotch c
 - The app is signed with the hardened runtime, which keeps other processes from loading code into it. `Support/Dynotch.entitlements` lists what it may still reach: the camera, location, calendars and Apple events.
 - Downloaded updates are checked against the certificate of the copy you have.
 - `dynotch://` links can only do what you could see and undo. See [What links can't do](/links/#what-links-cant-do).
+- The socket behind [`dynotch progress`](/dynotch-command/#how-it-talks-to-the-app) and the Claude Code hooks is a Unix domain socket in a folder only your user can open, never a network port, and Dynotch checks who's on the other end of each connection. Nothing sent to it can run anything.
+- A button back to a terminal can only bring forward an app on Dynotch's own list. Nothing from a link or a hook ever becomes script source.
+- `gh` comes from a fixed list of folders, never from a request, and only if nobody else can write to it.
 
 To report a security problem, see the [security policy](https://github.com/ALIRAZA47/dynotch/blob/main/.github/SECURITY.md).

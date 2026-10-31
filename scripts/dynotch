@@ -15,6 +15,8 @@
 #                         [--tint COLOR] [--quiet-after SECONDS] [--button TITLE --url https://...]
 #   dynotch status [--json]
 #   dynotch ci [--repo OWNER/NAME] [--branch NAME] [--sha SHA] [--stop]
+#   dynotch statusline [--then COMMAND]
+#   dynotch hook
 #
 # COLOR is red, orange, yellow, green, mint, teal, cyan, blue, indigo, purple,
 # pink, white or gray, or a hex value such as #FF6B5C. A notice from here carries
@@ -23,10 +25,11 @@
 # line is keyed by NAME, and goes away if its script is quiet for two minutes.
 # --terminal and the options after it say where a command ran, for a button on the
 # notice that goes back there. A terminal Dynotch doesn't know gets no button.
+# statusline and hook are for Claude Code to run, and read its JSON on their input.
 set -euo pipefail
 
 usage() {
-    sed -n '5,25p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '5,28p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
