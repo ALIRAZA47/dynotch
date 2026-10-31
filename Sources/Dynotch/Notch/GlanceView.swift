@@ -11,9 +11,14 @@ enum GlanceContent: Equatable {
     case notice(LiveNotice)
     case event(CalendarService.Event)
     case today
+    /// The recent list, with this many rows.
+    case recent(rows: Int)
 
     /// Each side of the glance beside the camera.
     static let earWidth: CGFloat = 100
+    /// The most the recent list shows.
+    static let recentRows = 4
+    private static let recentRowHeight: CGFloat = 30
 
     @MainActor
     init(activity: ClosedActivity) {
@@ -59,6 +64,7 @@ enum GlanceContent: Equatable {
         case .pomodoro, .countdown, .stopwatch, .event: 54
         case .download, .notice: 50
         case .today: 52
+        case .recent(let rows): CGFloat(rows) * Self.recentRowHeight + 10
         }
     }
 
@@ -84,14 +90,15 @@ struct GlanceView: View {
         let band = viewModel.geometry.closedSize.height
         Group {
             switch viewModel.glanceContent {
-            case .music: MusicGlance(band: band)
+            case .music: MusicGlance(viewModel: viewModel, band: band)
             case .pomodoro: PomodoroGlance(band: band)
             case .countdown(let countdown): CountdownGlance(countdown: countdown, band: band)
             case .stopwatch: StopwatchGlance(band: band)
             case .download: DownloadGlance(band: band)
-            case .notice(let notice): NoticeGlance(notice: notice, band: band)
+            case .notice(let notice): NoticeGlance(notice: notice, viewModel: viewModel, band: band)
             case .event(let event): EventGlance(event: event, band: band)
             case .today: TodayGlance(viewModel: viewModel, band: band)
+            case .recent: RecentGlance(viewModel: viewModel, band: band)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -257,9 +264,11 @@ private struct GlanceFigure: View {
 // MARK: Glances
 
 private struct MusicGlance: View {
+    @ObservedObject var viewModel: NotchViewModel
     let band: CGFloat
     @ObservedObject private var media = NowPlayingService.shared
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var center = LiveActivityCenter.shared
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
@@ -275,7 +284,17 @@ private struct MusicGlance: View {
                 IconButton(symbol: "forward.fill", size: 12, help: "Next", action: media.next)
             }
         } center: {
-            GlanceLines(title: media.track?.title ?? "Nothing playing", subtitle: media.track?.artist ?? "")
+            HStack(spacing: 0) {
+                GlanceLines(title: media.track?.title ?? "Nothing playing", subtitle: media.track?.artist ?? "")
+                Spacer(minLength: 0)
+                // The music fills the glance while it plays, so the recent list needs a way in here too.
+                if center.unseenRecents > 0 {
+                    GlanceChip(symbol: "bell.fill", tint: theme.secondary, text: "\(center.unseenRecents)") {
+                        viewModel.showRecent()
+                    }
+                    .padding(.leading, 8)
+                }
+            }
         } bottom: {
             PlaybackScrubber(tint: tint)
         }
@@ -413,11 +432,13 @@ private struct DownloadGlance: View {
 
 private struct NoticeGlance: View {
     let notice: LiveNotice
+    @ObservedObject var viewModel: NotchViewModel
     let band: CGFloat
+    @ObservedObject private var thumbnails = ThumbnailCache.shared
 
     var body: some View {
         GlanceLayout(band: band) {
-            GlanceDisc(symbol: notice.symbol, tint: notice.tint)
+            picture
                 // A script's notice keeps its terminal badge, so it can't pass for one of Dynotch's own.
                 .overlay(alignment: .bottomTrailing) {
                     if notice.fromScript { ScriptBadge().scaleEffect(1.6, anchor: .bottomTrailing) }
@@ -425,10 +446,129 @@ private struct NoticeGlance: View {
         } trailing: {
             EmptyView()
         } center: {
-            // A notice with only a detail, like a screenshot's, gives it the title's line.
-            GlanceLines(title: notice.text.isEmpty ? (notice.detail ?? "") : notice.text,
-                        subtitle: notice.text.isEmpty ? nil : notice.detail)
+            HStack(spacing: 0) {
+                // A notice with only a detail, like a screenshot's, gives it the title's line.
+                GlanceLines(title: notice.text.isEmpty ? (notice.detail ?? "") : notice.text,
+                            subtitle: notice.text.isEmpty ? nil : notice.detail)
+                Spacer(minLength: 0)
+                ForEach(Array(buttons.enumerated()), id: \.offset) { index, action in
+                    NoticeButton(action: action, isMain: index == 0) { action.perform(in: viewModel) }
+                        .padding(.leading, 8)
+                }
+            }
         }
+    }
+
+    /// Two at most. A code keeps the room for itself, so the line beside the button can show it.
+    private var buttons: [NoticeAction] {
+        if case .copyCode = notice.actions.first?.kind { return Array(notice.actions.prefix(1)) }
+        return Array(notice.actions.prefix(2))
+    }
+
+    /// The file a notice is about, which drags out of the glance, or else its symbol.
+    @ViewBuilder
+    private var picture: some View {
+        if let file = notice.actions.file {
+            Image(nsImage: thumbnails.image(for: file))
+                .resizable()
+                .aspectRatio(contentMode: .fit)
+                .frame(width: glancePicture, height: glancePicture)
+                .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
+                .onDrag {
+                    viewModel.isDraggingOut = true
+                    return NSItemProvider(contentsOf: file) ?? NSItemProvider()
+                }
+                .help("Drag \(file.lastPathComponent) out")
+        } else {
+            GlanceDisc(symbol: notice.symbol, tint: notice.tint)
+        }
+    }
+}
+
+/// A button on a notice. The main one is the accent's jewel, in ink; another is glass.
+private struct NoticeButton: View {
+    let action: NoticeAction
+    var isMain = true
+    var height: CGFloat = 28
+    let run: () -> Void
+    @Environment(\.notchTheme) private var theme
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button(action: run) {
+            Text(action.title)
+                .font(NotchFont.bodyStrong)
+                .foregroundStyle(isMain ? theme.onAccent : theme.primary)
+                .lineLimit(1)
+                .padding(.horizontal, 12)
+                .frame(height: height)
+                .glass(isMain ? .lens(theme.accent) : .control, in: Capsule(), isLit: hovering)
+                .contentShape(Capsule())
+        }
+        .buttonStyle(PressableButtonStyle(scale: 0.95))
+        .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: hovering)
+        .fixedSize()
+        .help(action.title)
+    }
+}
+
+/// The last few notices, newest first. A notification is only its app's name here: what it said
+/// was shown and forgotten.
+private struct RecentGlance: View {
+    @ObservedObject var viewModel: NotchViewModel
+    let band: CGFloat
+    @ObservedObject private var center = LiveActivityCenter.shared
+    @Environment(\.notchTheme) private var theme
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 30)) { context in
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    Text("Recent")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(theme.primary)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 16)
+                .frame(height: band)
+                ForEach(center.recents.prefix(GlanceContent.recentRows)) { recent in
+                    row(recent, at: context.date)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+    }
+
+    private func row(_ recent: RecentNotice, at now: Date) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: recent.symbol)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(recent.tint)
+                .frame(width: 18)
+            Text(recent.count > 1 ? "\(recent.title) × \(recent.count)" : recent.title)
+                .font(NotchFont.bodyStrong)
+                .foregroundStyle(theme.primary)
+                .lineLimit(1)
+                .layoutPriority(1)
+            if let detail = recent.detail {
+                Text(detail)
+                    .font(NotchFont.body)
+                    .foregroundStyle(theme.secondary)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 4)
+            Text(Format.ago(recent.date, from: now))
+                .font(NotchFont.caption)
+                .foregroundStyle(theme.tertiary)
+                .lineLimit(1)
+                .fixedSize()
+            if let action = recent.actions.first {
+                NoticeButton(action: action, isMain: false, height: 24) { action.perform(in: viewModel) }
+            }
+        }
+        .padding(.horizontal, 14)
+        .frame(height: 30)
     }
 }
 
@@ -484,6 +624,8 @@ private struct TodayGlance: View {
     @ObservedObject private var calendar = CalendarService.shared
     @ObservedObject private var tray = TrayStore.shared
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var center = LiveActivityCenter.shared
+    @ObservedObject private var toggles = QuickToggles.shared
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
@@ -507,12 +649,13 @@ private struct TodayGlance: View {
                 }
                 .padding(.horizontal, 16)
                 .frame(height: band)
-                // The weather gives up its description first, then the Tray its chip, so the row
-                // never runs past the glance's edges.
+                // The weather gives up its description first, then the Tray and Keep Awake their chips,
+                // so the row never runs past the glance's edges.
                 ViewThatFits(in: .horizontal) {
-                    chips(at: context.date, describesSky: true, showsTray: true)
-                    chips(at: context.date, describesSky: false, showsTray: true)
-                    chips(at: context.date, describesSky: false, showsTray: false)
+                    chips(at: context.date, describesSky: true, showsTray: true, showsAwake: true)
+                    chips(at: context.date, describesSky: false, showsTray: true, showsAwake: true)
+                    chips(at: context.date, describesSky: false, showsTray: false, showsAwake: true)
+                    chips(at: context.date, describesSky: false, showsTray: false, showsAwake: false)
                 }
                 .padding(.horizontal, 14)
             }
@@ -521,8 +664,13 @@ private struct TodayGlance: View {
         }
     }
 
-    private func chips(at now: Date, describesSky: Bool, showsTray: Bool) -> some View {
+    private func chips(at now: Date, describesSky: Bool, showsTray: Bool, showsAwake: Bool) -> some View {
         HStack(spacing: 6) {
+            if center.unseenRecents > 0 {
+                chip(symbol: "bell.fill", tint: theme.accent, text: "\(center.unseenRecents) recent") {
+                    viewModel.showRecent()
+                }
+            }
             if let conditions = weather.conditions {
                 let sky = Sky(code: conditions.code, isDay: conditions.isDay)
                 let temperature = WeatherService.format(conditions.temperature, units: settings.weatherUnits)
@@ -535,12 +683,18 @@ private struct TodayGlance: View {
                     viewModel.open(tab: .home)
                 }
             }
+            if showsAwake, toggles.isKeepingAwake {
+                chip(symbol: "cup.and.saucer.fill", tint: .orange, text: toggles.keepAwakeDescription) {
+                    viewModel.open(tab: .stats)
+                }
+            }
             if showsTray, !tray.items.isEmpty {
                 chip(symbol: "tray.full.fill", tint: theme.secondary, text: "Tray \(tray.items.count)") {
                     viewModel.open(tab: .tray)
                 }
             }
-            if weather.conditions == nil, nextEvent(at: now) == nil, tray.items.isEmpty {
+            if weather.conditions == nil, nextEvent(at: now) == nil, tray.items.isEmpty, center.unseenRecents == 0,
+               !toggles.isKeepingAwake {
                 chip(symbol: "sparkles", tint: theme.secondary, text: "Nothing coming up") { viewModel.open() }
             }
         }

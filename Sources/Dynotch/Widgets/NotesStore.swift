@@ -87,7 +87,8 @@ final class NotesStore: ObservableObject {
         watch()
         if folderWasMissing {
             LiveActivityCenter.shared.post(LiveNotice(key: "notes", symbol: "note.text", tint: .yellow, text: "Notes",
-                                                      detail: "The notes folder is gone; using Dynotch's own"), for: 5)
+                                                      detail: "The notes folder is gone; using Dynotch's own",
+                                                      timing: .waits), for: 5)
         }
         terminationObserver = NotificationCenter.default.addObserver(forName: NSApplication.willTerminateNotification,
                                                                      object: nil, queue: .main) { _ in

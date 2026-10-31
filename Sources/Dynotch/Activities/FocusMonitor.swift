@@ -118,10 +118,11 @@ final class FocusMonitor: ObservableObject {
         guard AppSettings.shared.liveFocus else { return }
         let notice: LiveNotice
         if let next {
-            notice = LiveNotice(key: "focus", symbol: next.symbol, tint: next.tint, text: "On", detail: next.name)
+            notice = LiveNotice(key: "focus", symbol: next.symbol, tint: next.tint, text: "On", detail: next.name,
+                                timing: .perishes)
         } else if let previous {
             notice = LiveNotice(key: "focus", symbol: previous.symbol, tint: Color.white.opacity(0.6), text: "Off",
-                                detail: previous.name)
+                                detail: previous.name, timing: .perishes)
         } else {
             return
         }

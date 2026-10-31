@@ -26,7 +26,17 @@ macOS has no public API for other apps' notifications, so Dynotch reads them fro
 
 <Path to="Settings → Live Activities → Notifications" /> chooses which apps peek. **Other apps** covers everything without a symbol of its own.
 
-Peeks stay hidden while any Focus is on, even for apps that Focus lets through, and while a display is mirrored. Dynotch can't tell when the screen is shared, so **Hide message text**, which shows only the app and the sender, is worth turning on if you share it.
+Peeks stay hidden while any Focus is on, even for apps that Focus lets through, and while a display is mirrored. On a call or with something filling the screen, they [wait](/live-activities/#quiet) and show afterwards. Dynotch can't tell when the screen is shared, so **Hide message text**, which shows only the app and the sender, is worth turning on if you share it.
+
+## Login codes
+
+A notification with a login code in it gets **Copy Code** in the [glance](/glance/). Dynotch looks for 4 to 8 digits in a message that says it's a code, and copies them without any space or dash. The copy is marked so clipboard managers leave it out of their history.
+
+A code doesn't wait out a call, since you're probably signing in, but on a call its text stays off the screen and only the button shows. **Copy login codes** in <Path to="Settings → Live Activities → Notifications" /> turns this off.
+
+## After a Focus
+
+When a Focus ends, one line says what came in while it was on: how many, and from which apps. **Sum up after a Focus**, in the same place, turns it off.
 
 ## Showing only the peek
 
@@ -50,4 +60,4 @@ osascript -e 'display notification "Hello" with title "Test"'
 
 ## Privacy
 
-The database is opened read-only. Dynotch shows a notification and forgets it: nothing a notification says is logged or saved. All it keeps, and only while it runs, is the time of the newest notification it has seen and the row numbers of the last few, so it doesn't show one twice.
+The database is opened read-only. Dynotch shows a notification and forgets it: nothing a notification says is logged or saved. A peek waiting out a call stays in memory until it shows, and [Recent](/glance/#recent) keeps the app's name. All else it keeps, and only while it runs, is how many came from each app during a Focus, the time of the newest notification it has seen and the row numbers of the last few, so it doesn't show one twice.

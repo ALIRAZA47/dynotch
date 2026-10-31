@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import QuickLookThumbnailing
 import SwiftUI
 import UniformTypeIdentifiers
@@ -15,6 +16,10 @@ final class TrayStore: ObservableObject {
         /// The tray created this file (a copy, a dropped image, an archive) and trashes it on removal.
         var isOwned: Bool
         var addedAt: Date
+        /// Stays whatever the tidying says, and through Clear.
+        var isPinned = false
+        /// Came by itself, as a screenshot or a download, so tidying may take it away again.
+        var isAutomatic = false
     }
 
     @Published private(set) var items: [Item] = []
@@ -24,10 +29,16 @@ final class TrayStore: ObservableObject {
     /// ~/Library/Application Support/Dynotch/Tray
     let folder: URL
     private let indexURL: URL
+    private var tidying: Poll?
+    private var cancellables = Set<AnyCancellable>()
 
-    private init() {
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Dynotch", isDirectory: true)
+    private convenience init() {
+        self.init(support: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Dynotch", isDirectory: true))
+    }
+
+    /// `support` holds the Tray's folder and its list. The tests pass one of their own.
+    init(support: URL) {
         folder = support.appendingPathComponent("Tray", isDirectory: true)
         indexURL = support.appendingPathComponent("tray.json")
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -45,16 +56,31 @@ final class TrayStore: ObservableObject {
                 item.isOwned = isInTrayFolder(item.url)
                 return item
             }
+        tidy()
+        tidying = EnergyCoordinator.shared.schedule(.trayTidying) { [weak self] in self?.tidy() }
+        AppSettings.shared.$trayKeeps
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.tidy() }
+            .store(in: &cancellables)
     }
 
-    func add(_ urls: [URL]) {
+    /// Takes away the screenshots and downloads whose time is up, unless they're pinned. Their files
+    /// stay where they are; copies the Tray made go to the Trash, as they do on Remove.
+    func tidy(now: Date = .now) {
+        guard let limit = AppSettings.shared.trayKeeps.seconds else { return }
+        items.filter { $0.isAutomatic && !$0.isPinned && now.timeIntervalSince($0.addedAt) >= limit }
+            .forEach(remove)
+    }
+
+    func add(_ urls: [URL], automatically: Bool = false) {
         let copies = AppSettings.shared.trayCopiesFiles
         var added: [Item] = []
         for url in urls where !items.contains(where: { $0.url == url }) && !added.contains(where: { $0.url == url }) {
             if copies, !isInTrayFolder(url), let copy = try? copyIntoTray(url) {
-                added.append(Item(id: UUID(), url: copy, isOwned: true, addedAt: .now))
+                added.append(Item(id: UUID(), url: copy, isOwned: true, addedAt: .now, isAutomatic: automatically))
             } else {
-                added.append(Item(id: UUID(), url: url, isOwned: isInTrayFolder(url), addedAt: .now))
+                added.append(Item(id: UUID(), url: url, isOwned: isInTrayFolder(url), addedAt: .now, isAutomatic: automatically))
             }
         }
         guard !added.isEmpty else { return }
@@ -78,7 +104,7 @@ final class TrayStore: ObservableObject {
         save()
         let detail = fresh.count == 1 ? "A script added \(fresh[0].lastPathComponent)" : "A script added \(fresh.count) files"
         LiveActivityCenter.shared.post(LiveNotice(key: "tray", symbol: "tray.and.arrow.down.fill", tint: .teal, text: "Tray",
-                                                  detail: detail, fromScript: true), for: 4)
+                                                  detail: detail, fromScript: true, timing: .waits), for: 4)
     }
 
     /// Saves dropped data (an image from a browser, some text) as a file in the tray.
@@ -102,12 +128,19 @@ final class TrayStore: ObservableObject {
         save()
     }
 
+    /// Empties the tray, all but what's pinned.
     func clear() {
-        for item in items where item.isOwned {
+        for item in items where item.isOwned && !item.isPinned {
             try? FileManager.default.trashItem(at: item.url, resultingItemURL: nil)
         }
         selection = nil
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { items.removeAll() }
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { items.removeAll { !$0.isPinned } }
+        save()
+    }
+
+    func togglePin(_ item: Item) {
+        guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
+        items[index].isPinned.toggle()
         save()
     }
 
@@ -142,6 +175,24 @@ final class TrayStore: ObservableObject {
 
     func loadSample(_ urls: [URL]) {
         items = urls.map { Item(id: UUID(), url: $0, isOwned: false, addedAt: .now) }
+    }
+
+    /// Pins the sample at `index`, unpinning the others. Nothing is saved.
+    func loadSample(pinned index: Int?) {
+        for position in items.indices { items[position].isPinned = position == index }
+    }
+}
+
+extension TrayStore.Item {
+    /// Lists saved before pinning have neither flag.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        url = try container.decode(URL.self, forKey: .url)
+        isOwned = try container.decode(Bool.self, forKey: .isOwned)
+        addedAt = try container.decode(Date.self, forKey: .addedAt)
+        isPinned = try container.decodeIfPresent(Bool.self, forKey: .isPinned) ?? false
+        isAutomatic = try container.decodeIfPresent(Bool.self, forKey: .isAutomatic) ?? false
     }
 }
 

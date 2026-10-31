@@ -18,7 +18,7 @@ It follows the closed notch, with the controls that go with whatever's there.
 | A named timer | The time left, with +1 min and pause |
 | The stopwatch | The time so far, with reset and pause |
 | A download | Its name and progress |
-| A notice | The notice |
+| A notice | The notice, with its buttons |
 
 <Shots min={320}>
   <Shot name="glance-2-pomodoro" alt="The glance on the Pomodoro, showing Focus, session 3 of 4, 18:24, with skip and pause buttons." caption="The Pomodoro" />
@@ -29,13 +29,33 @@ It follows the closed notch, with the controls that go with whatever's there.
   <Shot name="glance-4-event" alt="The glance on Design review, in 12 minutes, with a Join button." caption="An event about to start" />
 </Shots>
 
+## A notice's buttons
+
+A notice can have buttons, and this is where they are:
+
+| Notice | Buttons |
+|---|---|
+| A notification | **Open**, which opens its app |
+| A login code | **Copy Code** |
+| A finished download | **Open** and **Show**, and its icon drags out to any app |
+| A screenshot | **Show**, which opens the Tray, and **Open** |
+| An update | **Install**, or **Download** where Dynotch can't replace itself |
+| An event with a call link | **Join** |
+| From a script | Whatever [it asked for](/dynotch-command/#notify), if it's an https link |
+
+A click on a notice with buttons brings up the glance instead of the whole notch, so a stray click can't join a call. The notice stays while the pointer is on it.
+
+## Recent
+
+The last few notices worth keeping stay in memory for a while. A bell with a count shows beside the music, or among the chips with the notch empty, and a click on it lists them. A notification is only its app's name here: what it said was shown and forgotten. The list goes when Dynotch quits.
+
 ## With the notch empty
 
 With nothing in the closed notch but perhaps a volume or brightness meter, the glance takes the first of these:
 
 1. A timed event that's on now or starts within 15 minutes, with **Join** if it has a call link.
 2. A track that's loaded, even a paused one.
-3. The day: the date, the battery, the weather, the next event and the Tray, each a click from its tab.
+3. The day: the date, the battery, the weather, the next event and the Tray, each a click from its tab, with Keep Awake if it's on.
 
 <Shot name="glance-8-today" alt="The glance showing Friday 30, the battery, the next event and five files in the Tray." />
 

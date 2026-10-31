@@ -5,6 +5,7 @@ import SwiftUI
 /// `scripts/dynotch` wraps them for the shell.
 ///
 ///     dynotch://notify?text=Deploy%20done&detail=…&symbol=checkmark.circle.fill&tint=green&seconds=4
+///                      &button=Open&url=https://…   a button in the glance, for an https link
 ///     dynotch://open?tab=tray          home, tray, focus or stats
 ///     dynotch://close
 ///     dynotch://timer/start            start, pause, toggle, reset or skip
@@ -31,7 +32,8 @@ enum URLCommands {
         switch path.first {
         case "notify":
             notify(text: value("text") ?? "", detail: value("detail"), symbol: value("symbol"),
-                   tint: value("tint"), seconds: value("seconds").flatMap(Double.init))
+                   tint: value("tint"), seconds: value("seconds").flatMap(Double.init),
+                   button: button(title: value("button"), url: value("url")))
         case "open":
             NotchManager.shared.open(tab: value("tab").flatMap(tab(named:)))
         case "close":
@@ -53,7 +55,17 @@ enum URLCommands {
         }
     }
 
-    private static func notify(text: String, detail: String?, symbol: String?, tint: String?, seconds: Double?) {
+    /// A button a script asked for. Links only: anything on the Mac can send one of these, and a
+    /// click shouldn't run or open whatever it names.
+    static func button(title: String?, url: String?) -> NoticeAction? {
+        guard let title, !title.isEmpty, let url = url.flatMap(URL.init(string:)), url.scheme?.lowercased() == "https" else {
+            return nil
+        }
+        return NoticeAction(title: String(title.prefix(16)), kind: .openURL(url))
+    }
+
+    private static func notify(text: String, detail: String?, symbol: String?, tint: String?, seconds: Double?,
+                               button: NoticeAction?) {
         var text = String(text.prefix(100))
         var detail = detail.map { String($0.prefix(140)) }.flatMap { $0.isEmpty ? nil : $0 }
         // The ear beside the camera fits a couple of words; longer text goes on the row underneath.
@@ -67,7 +79,8 @@ enum URLCommands {
         }
         let symbol = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) == nil ? nil : $0 } ?? "bell.fill"
         LiveActivityCenter.shared.post(LiveNotice(key: "command", symbol: symbol, tint: color(named: tint) ?? .white,
-                                                  text: text, detail: detail, fromScript: true),
+                                                  text: text, detail: detail, fromScript: true,
+                                                  actions: button.map { [$0] } ?? [], timing: .waits, recall: .whole),
                                        for: min(max(seconds ?? 4, 1), 30))
     }
 

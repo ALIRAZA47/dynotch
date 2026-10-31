@@ -116,7 +116,9 @@ private struct TrayContentView: View {
                         isWorking = false
                     }
                 }
-                ToolbarButton(symbol: "trash", help: "Clear the tray") { tray.clear() }
+                if tray.items.contains(where: { !$0.isPinned }) {
+                    ToolbarButton(symbol: "trash", help: "Clear the tray, all but what's pinned") { tray.clear() }
+                }
             }
         }
     }
@@ -242,6 +244,16 @@ private struct TrayItemView: View {
             }
         }
         .task(id: item.url) { detail = await Self.detail(for: item.url) }
+        .overlay(alignment: .topLeading) {
+            if item.isPinned {
+                Image(systemName: "pin.fill")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(theme.accent)
+                    .padding(7)
+                    .help("Pinned: stays in the Tray")
+                    .accessibilityLabel("Pinned")
+            }
+        }
         .overlay(alignment: .topTrailing) {
             if hovering {
                 Button { TrayStore.shared.remove(item) } label: {
@@ -385,6 +397,7 @@ private struct TrayItemMenu: View {
             }
         }
         Divider()
+        Button(item.isPinned ? "Unpin" : "Pin") { TrayStore.shared.togglePin(item) }
         Button("Remove from Tray") { TrayStore.shared.remove(item) }
     }
 }

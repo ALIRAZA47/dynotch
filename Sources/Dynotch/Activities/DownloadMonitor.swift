@@ -201,9 +201,12 @@ final class DownloadMonitor: ObservableObject {
         let settings = AppSettings.shared
         if settings.liveDownloads {
             LiveActivityCenter.shared.post(LiveNotice(key: "download", symbol: "arrow.down.circle.fill", tint: Self.tint,
-                                                      text: "Downloaded", detail: file.lastPathComponent), for: 4)
+                                                      text: "Downloaded", detail: file.lastPathComponent,
+                                                      actions: [NoticeAction(title: "Open", kind: .openFile(file)),
+                                                                NoticeAction(title: "Show", kind: .reveal(file))],
+                                                      timing: .waits, recall: .whole), for: 4)
         }
-        if settings.downloadsToTray { TrayStore.shared.add([file]) }
+        if settings.downloadsToTray { TrayStore.shared.add([file], automatically: true) }
     }
 
     private func openSource() {

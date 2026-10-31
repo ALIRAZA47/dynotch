@@ -147,7 +147,7 @@ final class TimerStore: ObservableObject {
             ? "\(finished[0].name) · \(TimerText.describe(finished[0].duration))"
             : finished.map(\.name).joined(separator: ", ")
         LiveActivityCenter.shared.post(LiveNotice(key: "countdown", symbol: "bell.fill", tint: Self.tint, text: "Done",
-                                                  detail: detail), for: 8)
+                                                  detail: detail, recall: .whole), for: 8)
     }
 
     // MARK: Snapshots

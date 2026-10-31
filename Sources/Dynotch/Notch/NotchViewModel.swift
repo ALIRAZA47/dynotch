@@ -104,7 +104,12 @@ final class NotchViewModel: ObservableObject {
     }
 
     @Published private(set) var geometry: NotchGeometry
-    @Published private(set) var phase: Phase = .closed
+    @Published private(set) var phase: Phase = .closed {
+        didSet {
+            guard (oldValue == .glance) != (phase == .glance) else { return }
+            LiveActivityCenter.shared.glanceChanged(isGlancing: phase == .glance)
+        }
+    }
     @Published var tab: NotchTab = .home
     /// Files are being dragged toward the notch; the tray shows its drop zones.
     @Published var isDraggingFiles = false
@@ -120,6 +125,9 @@ final class NotchViewModel: ObservableObject {
     }
     /// What the command field offers for `commandQuery`, worked out as it changes.
     @Published private(set) var commandResults: [CommandResult] = []
+
+    /// The glance has turned to the recent list.
+    @Published private(set) var isShowingRecent = false
 
     /// Something was dragged out of the tray and the drag hasn't ended yet.
     @Published var isDraggingOut = false
@@ -165,7 +173,14 @@ final class NotchViewModel: ObservableObject {
 
     /// What the glance shows, from what's live right now.
     var glanceContent: GlanceContent {
-        GlanceContent(activity: activity)
+        if isShowingRecent { return .recent(rows: min(LiveActivityCenter.shared.recents.count, GlanceContent.recentRows)) }
+        return GlanceContent(activity: activity)
+    }
+
+    /// A notice with buttons is showing. They're in the glance, so that's where a click goes.
+    var noticeHasActions: Bool {
+        if case .notice(let notice) = activity { return !notice.actions.isEmpty }
+        return false
     }
 
     /// The open notch with the command field up: tall enough for its rows, at least as tall as the tabs.
@@ -223,9 +238,28 @@ final class NotchViewModel: ObservableObject {
     func open(tab: NotchTab? = nil) {
         if let tab { self.tab = tab }
         guard phase != .open else { return }
-        withAnimation(.notchOpen) { phase = .open }
+        withAnimation(.notchOpen) {
+            phase = .open
+            isShowingRecent = false
+        }
         onOpen?()
         NowPlayingService.shared.refresh()
+    }
+
+    /// A click on the closed notch: the glance, for a notice's buttons, and otherwise the whole notch.
+    func activate() {
+        if noticeHasActions {
+            glance()
+        } else {
+            open()
+        }
+    }
+
+    /// Turns the glance to the recent list.
+    func showRecent() {
+        LiveActivityCenter.shared.markRecentsSeen()
+        glance()
+        withAnimation(.notchGlance) { isShowingRecent = true }
     }
 
     /// Grows the hovered notch into a glance at what's live.
@@ -240,6 +274,7 @@ final class NotchViewModel: ObservableObject {
             phase = .closed
             isDraggingFiles = false
             isCommandMode = false
+            isShowingRecent = false
         }
         commandQuery = ""
     }
@@ -301,8 +336,9 @@ final class NotchViewModel: ObservableObject {
     // MARK: Snapshots
 
     func stage(phase: Phase, activity: ClosedActivity, secondary: CompactActivity? = nil, tab: NotchTab = .home,
-               draggingFiles: Bool = false, command: String? = nil) {
+               draggingFiles: Bool = false, command: String? = nil, showingRecent: Bool = false) {
         self.phase = phase
+        isShowingRecent = showingRecent
         self.activity = activity
         self.secondary = secondary
         self.tab = tab

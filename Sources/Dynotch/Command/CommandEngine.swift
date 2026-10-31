@@ -24,7 +24,8 @@ struct CommandResult: Identifiable {
 }
 
 /// Turns what's typed into the command field into things to do: timers, notes, reminders, toggles,
-/// profiles, tabs, shortcuts, sums and conversions, and the notes and Tray files that match.
+/// the music, volume and brightness, outputs and Bluetooth devices, the next meeting, profiles, tabs,
+/// Settings pages, shortcuts, sums and conversions, and the notes and Tray files that match.
 @MainActor
 enum CommandEngine {
     static let maximumResults = 6
@@ -51,6 +52,30 @@ enum CommandEngine {
         }
         if let body = remainder(of: text, after: ["remind me to", "remind me", "reminder", "remind"]) {
             results.append(reminder(body))
+            saidWhat = true
+        }
+        if let command = LevelCommand.parse(text) {
+            if let result = level(command) { results.append(result) }
+            saidWhat = true
+        }
+        if let spec = remainder(of: text, after: ["keep awake", "stay awake", "awake", "caffeinate"]), !spec.isEmpty {
+            results.append(keepAwake(spec))
+            saidWhat = true
+        }
+        if let name = remainder(of: text, after: ["output", "play through"]) {
+            results.append(contentsOf: outputs(matching: name.lowercased()))
+            saidWhat = true
+        }
+        if let name = remainder(of: text, after: ["connect"]) {
+            results.append(contentsOf: connectable(matching: name.lowercased()))
+            saidWhat = true
+        }
+        if let name = remainder(of: text, after: ["disconnect"]) {
+            results.append(contentsOf: connected(matching: name.lowercased()))
+            saidWhat = true
+        }
+        if let name = remainder(of: text, after: ["settings", "preferences"]), !name.isEmpty {
+            results.append(contentsOf: settingsPages(matching: name.lowercased()))
             saidWhat = true
         }
         if let spec = remainder(of: text, after: ["timer", "start timer"]) {
@@ -191,7 +216,8 @@ enum CommandEngine {
         let mic = MicMonitor.shared
         let pomodoro = PomodoroTimer.shared
         let store = TimerStore.shared
-        let all = [
+        let media = NowPlayingService.shared
+        var all = [
             QuickCommand(id: "dark", words: ["dark mode", "dark", "light mode", "light", "appearance"], symbol: "moon.fill", tint: .indigo,
                    title: toggles.isDarkMode ? "Turn off Dark Mode" : "Turn on Dark Mode", run: toggles.toggleDarkMode),
             QuickCommand(id: "awake", words: ["keep awake", "awake", "caffeinate", "stay awake"], symbol: "cup.and.saucer.fill",
@@ -210,12 +236,128 @@ enum CommandEngine {
             QuickCommand(id: "sleep", words: ["sleep display", "sleep", "display off"], symbol: "moon.zzz.fill", tint: .gray,
                    title: "Sleep the display", run: toggles.sleepDisplay),
         ]
+        if media.player != nil {
+            all += [
+                QuickCommand(id: "play", words: ["pause", "play", "resume"], symbol: media.isPlaying ? "pause.fill" : "play.fill",
+                             tint: .pink, title: media.isPlaying ? "Pause the music" : "Play the music", run: media.playPause),
+                QuickCommand(id: "next", words: ["next", "next track", "next song", "skip"], symbol: "forward.fill",
+                             tint: .pink, title: "Next track", run: media.next),
+                QuickCommand(id: "previous", words: ["previous", "previous track", "previous song", "back"], symbol: "backward.fill",
+                             tint: .pink, title: "Previous track", run: media.previous),
+            ]
+        }
+        if let meeting = nextMeeting(), let url = meeting.meetingURL {
+            all.append(QuickCommand(id: "join", words: ["join", "join meeting", "join call"], symbol: "video.fill", tint: .green,
+                                    title: "Join \(meeting.title)") { NSWorkspace.shared.open(url) })
+        }
+        let tray = TrayStore.shared
+        if tray.items.contains(where: { !$0.isPinned }) {
+            all.append(QuickCommand(id: "clear-tray", words: ["clear tray", "empty tray"], symbol: "trash", tint: .gray,
+                                    title: "Clear the Tray", run: tray.clear))
+        }
         return all.filter { matches(text, $0.words) }.map { toggle in
             CommandResult(id: toggle.id, symbol: toggle.symbol, tint: toggle.tint, title: toggle.title) { _ in
                 toggle.run()
                 return .close
             }
         }
+    }
+
+    /// The meeting on now, or the next one today with a link to join.
+    private static func nextMeeting() -> CalendarService.Event? {
+        let now = Date.now
+        let calendar = CalendarService.shared
+        guard calendar.hasEventAccess else { return nil }
+        return calendar.events(on: now).first { !$0.isAllDay && $0.end > now && $0.meetingURL != nil }
+    }
+
+    private static func level(_ command: LevelCommand) -> CommandResult? {
+        switch command {
+        case .volume(let percent):
+            return CommandResult(id: "volume", symbol: "speaker.wave.2.fill", tint: .blue, title: "Set the volume to \(percent)%") { _ in
+                VolumeMonitor.shared.setVolume(Float(percent) / 100)
+                return .close
+            }
+        case .brightness(let percent):
+            // Only the built-in display, and only where DisplayServices can reach it.
+            guard BrightnessMonitor.shared.level != nil else { return nil }
+            return CommandResult(id: "brightness", symbol: "sun.max.fill", tint: .yellow, title: "Set the brightness to \(percent)%") { _ in
+                BrightnessMonitor.shared.set(Float(percent) / 100)
+                return .close
+            }
+        }
+    }
+
+    private static func keepAwake(_ spec: String) -> CommandResult {
+        let toggles = QuickToggles.shared
+        let symbol = "cup.and.saucer.fill"
+        if ["off", "stop", "end"].contains(spec.lowercased()) {
+            return CommandResult(id: "awake", symbol: symbol, tint: .orange, title: "Let the Mac sleep again") { _ in
+                toggles.stopKeepingAwake()
+                return .close
+            }
+        }
+        guard let end = KeepAwakeText.end(from: spec) else {
+            return CommandResult(id: "awake", symbol: symbol, tint: .orange, title: "Keep the Mac awake", hint: "2h, until 5pm")
+        }
+        let time = end.formatted(date: .omitted, time: .shortened)
+        return CommandResult(id: "awake", symbol: symbol, tint: .orange, title: "Keep the Mac awake until \(time)") { _ in
+            toggles.keepAwake(until: end)
+            announce(symbol: symbol, tint: .orange, text: "Awake", detail: "Until \(time)")
+            return .close
+        }
+    }
+
+    private static func outputs(matching text: String) -> [CommandResult] {
+        let outputs = AudioOutputs.shared
+        return outputs.devices
+            .filter { text.isEmpty || $0.name.lowercased().contains(text) }
+            .prefix(4)
+            .map { device in
+                CommandResult(id: "output-\(device.id)", symbol: device.symbol, tint: .blue, title: "Play through \(device.name)",
+                              hint: device.id == outputs.currentID ? "on" : nil) { _ in
+                    outputs.select(device)
+                    return .close
+                }
+            }
+    }
+
+    private static func connectable(matching text: String) -> [CommandResult] {
+        let monitor = DeviceBatteryMonitor.shared
+        return monitor.paired
+            .filter { text.isEmpty || $0.name.lowercased().contains(text) }
+            .prefix(4)
+            .map { device in
+                CommandResult(id: "connect-\(device.id)", symbol: device.kind.symbol, tint: .teal, title: "Connect \(device.name)") { _ in
+                    monitor.connect(device)
+                    return .close
+                }
+            }
+    }
+
+    private static func connected(matching text: String) -> [CommandResult] {
+        let monitor = DeviceBatteryMonitor.shared
+        return monitor.devices
+            .filter { text.isEmpty || $0.name.lowercased().contains(text) }
+            .prefix(4)
+            .map { device in
+                CommandResult(id: "disconnect-\(device.id)", symbol: device.kind.symbol, tint: .teal, title: "Disconnect \(device.name)") { _ in
+                    monitor.disconnect(device)
+                    return .close
+                }
+            }
+    }
+
+    private static func settingsPages(matching text: String) -> [CommandResult] {
+        SettingsPage.allCases
+            .filter { $0.title.lowercased().contains(text) }
+            .prefix(3)
+            .map { page in
+                CommandResult(id: "settings-\(page.rawValue)", symbol: page.symbol, tint: page.tint, title: "Open \(page.title) Settings") { _ in
+                    SettingsWindowController.shared.show(page: page)
+                    return .close
+                }
+            }
     }
 
     private static func tabs(matching text: String) -> [CommandResult] {
@@ -336,6 +478,35 @@ enum CommandEngine {
 
     private static func announce(symbol: String, tint: Color, text: String, detail: String?) {
         LiveActivityCenter.shared.post(LiveNotice(key: "command", symbol: symbol, tint: tint, text: text, detail: detail), for: 3)
+    }
+}
+
+/// A level as typed, out of 100: "vol 30", "volume 30%", "bright 60", "brightness 100".
+enum LevelCommand: Equatable {
+    case volume(Int)
+    case brightness(Int)
+
+    static func parse(_ text: String) -> LevelCommand? {
+        let words = text.lowercased().split(whereSeparator: \.isWhitespace)
+        guard words.count == 2 else { return nil }
+        let number = words[1].hasSuffix("%") ? words[1].dropLast() : words[1]
+        guard let percent = Int(number), (0...100).contains(percent) else { return nil }
+        switch words[0] {
+        case "vol", "volume": return .volume(percent)
+        case "bright", "brightness": return .brightness(percent)
+        default: return nil
+        }
+    }
+}
+
+/// When Keep Awake should end, as typed: "2h", "30 min", "until 5pm", "till 17:30".
+enum KeepAwakeText {
+    @MainActor
+    static func end(from spec: String, now: Date = .now) -> Date? {
+        if let time = CommandEngine.remainder(of: spec, after: ["until", "till", "til"]) {
+            return ReminderText.parse(time).due
+        }
+        return TimerText.parse(spec).map { now.addingTimeInterval($0.duration) }
     }
 }
 

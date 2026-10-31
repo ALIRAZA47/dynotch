@@ -29,6 +29,13 @@ enum Format {
         return rest == 0 ? "in \(hours)h" : "in \(hours)h \(rest)m"
     }
 
+    /// "now", "5m ago", "2h ago"
+    static func ago(_ date: Date, from now: Date = .now) -> String {
+        let minutes = Int(now.timeIntervalSince(date) / 60)
+        if minutes < 1 { return "now" }
+        return minutes < 60 ? "\(minutes)m ago" : "\(minutes / 60)h ago"
+    }
+
     static func bytes(_ count: Int64) -> String {
         ByteCountFormatter.string(fromByteCount: count, countStyle: .file)
     }

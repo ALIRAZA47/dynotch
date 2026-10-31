@@ -19,6 +19,9 @@ final class NotificationMirror: ObservableObject {
     private var isStarted = false
     private var isWatching = false
     private var names: [String: String] = [:]
+    /// How many came from each app during the Focus that's on. Never what they said.
+    private var missed: [String: Int] = [:]
+    private var focusName: String?
     private var cancellables = Set<AnyCancellable>()
 
     private init() {
@@ -35,6 +38,10 @@ final class NotificationMirror: ObservableObject {
         // Coming back from System Settings, where Full Disk Access is turned on.
         NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
             .sink { [weak self] _ in self?.refreshAccess() }
+            .store(in: &cancellables)
+        FocusMonitor.shared.$mode
+            .removeDuplicates()
+            .sink { [weak self] mode in self?.focusChanged(to: mode) }
             .store(in: &cancellables)
     }
 
@@ -107,17 +114,38 @@ final class NotificationMirror: ObservableObject {
         isUnsupported = problem == .unsupported
     }
 
-    /// The newest notification wins; the ones before it already had their moment.
     private func show(_ entries: [NotificationReader.Entry]) {
         let settings = AppSettings.shared
+        guard settings.liveNotifications else { return }
+        let shown = entries.filter { $0.bundleID != Bundle.main.bundleIdentifier && isShown($0.bundleID) }
         // What macOS holds its own banners back for: a Focus, and a display that's mirrored or
         // shared. Mirroring can be seen from here; sharing can't, which is what Hide message text is for.
-        guard settings.liveNotifications, FocusMonitor.shared.mode == nil, !Self.isAnyDisplayMirrored,
-              let entry = entries.last(where: { $0.bundleID != Bundle.main.bundleIdentifier && isShown($0.bundleID) })
-        else { return }
-        let notice = NotificationPeek.notice(for: entry, appName: appName(for: entry.bundleID),
-                                             hideText: settings.notificationHideText)
-        LiveActivityCenter.shared.post(notice, for: 5)
+        if FocusMonitor.shared.mode != nil {
+            for entry in shown { missed[appName(for: entry.bundleID), default: 0] += 1 }
+            return
+        }
+        guard !Self.isAnyDisplayMirrored else { return }
+        // macOS saves a burst in one go. They take turns; a long burst leaves its oldest to the banners.
+        for entry in shown.suffix(3) {
+            let notice = NotificationPeek.notice(for: entry, appName: appName(for: entry.bundleID),
+                                                 hideText: settings.notificationHideText,
+                                                 findsCodes: settings.notificationCodes, isQuiet: QuietMonitor.shared.isQuiet)
+            LiveActivityCenter.shared.post(notice, for: 5)
+        }
+    }
+
+    /// When a Focus ends, one line on what came in during it.
+    private func focusChanged(to mode: FocusMode?) {
+        if let mode {
+            focusName = mode.name
+            return
+        }
+        defer {
+            missed = [:]
+            focusName = nil
+        }
+        guard let focusName, !missed.isEmpty, AppSettings.shared.notificationDigest else { return }
+        LiveActivityCenter.shared.post(NotificationPeek.digest(of: missed, during: focusName), for: 8)
     }
 }
 
@@ -168,16 +196,34 @@ enum NotificationPeek {
     }
 
     /// The sender beside the camera and the text underneath. With `hideText`, the row names the app
-    /// instead, so only the app and the sender show.
-    static func notice(for entry: NotificationReader.Entry, appName: String, hideText: Bool) -> LiveNotice {
+    /// instead, so only the app and the sender show. A login code gets a button and doesn't wait: it's
+    /// for the sign-in you're doing, so on a call it shows anyway, with its text off the screen.
+    static func notice(for entry: NotificationReader.Entry, appName: String, hideText: Bool,
+                       findsCodes: Bool = false, isQuiet: Bool = false) -> LiveNotice {
+        let code = findsCodes ? OneTimeCode.find(in: [entry.title, entry.subtitle, entry.body].joined(separator: " ")) : nil
+        let hideText = hideText || (code != nil && isQuiet)
         let source = source(for: entry.bundleID)
         let sender = entry.title.isEmpty ? appName : entry.title
         var line = [entry.subtitle, entry.body].filter { !$0.isEmpty }.joined(separator: " · ")
         // A bell doesn't say which app it was, so the text does.
         if source == nil, !line.isEmpty { line = "\(appName): \(line)" }
         let detail = hideText || line.isEmpty ? (sender == appName ? nil : appName) : String(line.prefix(160))
-        return LiveNotice(key: "notification", symbol: source?.symbol ?? "bell.badge.fill", tint: source?.tint ?? .white,
-                          text: shortened(sender, to: 16), detail: detail)
+        var actions = [NoticeAction(title: "Open", kind: .openApp(bundleID: entry.bundleID))]
+        if let code { actions.insert(NoticeAction(title: "Copy Code", kind: .copyCode(code)), at: 0) }
+        // Keyed by who it's from, so a second message from them updates the first, and anyone else's waits its turn.
+        return LiveNotice(key: "notification-\(entry.bundleID)-\(sender)", symbol: source?.symbol ?? "bell.badge.fill",
+                          tint: source?.tint ?? .white, text: shortened(sender, to: 16), detail: detail, actions: actions,
+                          timing: code == nil ? .waits : .always, recall: .name(appName))
+    }
+
+    /// "12" beside the camera, and "While you were in Work: Slack 8, Mail 3" underneath.
+    static func digest(of missed: [String: Int], during focus: String) -> LiveNotice {
+        let total = missed.values.reduce(0, +)
+        let apps = missed.sorted { ($0.value, $1.key) > ($1.value, $0.key) }
+            .map { "\($0.key) \($0.value)" }
+            .joined(separator: ", ")
+        return LiveNotice(key: "missed", symbol: "bell.badge.fill", tint: .indigo, text: "\(total)",
+                          detail: "While you were in \(focus): \(apps)", timing: .waits, recall: .whole)
     }
 
     /// For previews and snapshots.

@@ -519,7 +519,7 @@ private struct VirtualNotchSketch: View {
 enum LiveActivityKind: String, CaseIterable, Identifiable {
     case music, trackPeek, timer, levels, charging, lowBattery, events, devices
     case micMuted, countdowns, downloads, focusMode
-    case notifications
+    case notifications, keepAwake
 
     var id: String { rawValue }
 
@@ -538,6 +538,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .downloads: "Downloads"
         case .focusMode: "Focus"
         case .notifications: "Notifications"
+        case .keepAwake: "Keep Awake"
         }
     }
 
@@ -556,6 +557,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .downloads: "Progress as a file downloads, and a notice when it's done"
         case .focusMode: "Your Focus's symbol while one is on, and a notice when it changes"
         case .notifications: "Messages, Mail, Slack and more as they arrive"
+        case .keepAwake: "A cup while the Mac is being kept awake"
         }
     }
 
@@ -574,6 +576,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .downloads: "arrow.down.circle.fill"
         case .focusMode: "moon.fill"
         case .notifications: "bell.badge.fill"
+        case .keepAwake: "cup.and.saucer.fill"
         }
     }
 
@@ -592,6 +595,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .downloads: DownloadMonitor.tint
         case .focusMode: .indigo
         case .notifications: .indigo
+        case .keepAwake: .orange
         }
     }
 
@@ -611,6 +615,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .downloads: \.liveDownloads
         case .focusMode: \.liveFocus
         case .notifications: \.liveNotifications
+        case .keepAwake: \.liveKeepAwake
         }
     }
 
@@ -634,7 +639,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .devices:
             .notice(LiveNotice(key: "device", symbol: "airpodspro", tint: .white, text: "80%", detail: "AirPods Pro connected"))
         case .notifications: .notice(NotificationPeek.sample())
-        case .micMuted: .idle
+        case .micMuted, .keepAwake: .idle
         case .countdowns: .countdown(Self.sampleCountdown)
         case .downloads: .download
         case .focusMode: .idle
@@ -648,6 +653,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         switch self {
         case .micMuted: .micMuted
         case .focusMode: .focus(FocusMode(id: "sample", name: "Do Not Disturb", symbol: "moon.fill", tint: .indigo))
+        case .keepAwake: .keepAwake
         default: nil
         }
     }
@@ -668,6 +674,10 @@ struct ActivitySettings: View {
                      symbol: "mic.fill", tint: .orange, setting: \.micShortcut),
         SwitchOption(title: "Downloads to the Tray", detail: "Put each finished download in the Tray",
                      symbol: "tray.and.arrow.down.fill", tint: .teal, setting: \.downloadsToTray),
+        SwitchOption(title: "Quiet on calls", detail: "Notices wait while the mic or a camera is in use",
+                     symbol: "phone.fill", tint: .green, setting: \.quietOnCalls),
+        SwitchOption(title: "Quiet in full screen", detail: "Notices wait while a slideshow or a film fills the screen",
+                     symbol: "arrow.up.left.and.arrow.down.right", tint: .indigo, setting: \.quietInFullScreen),
     ]
 
     /// The activities, then a tile that shows a sample in the real notch.
@@ -1245,6 +1255,10 @@ struct TraySettings: View {
                     CaptureActionRow()
                 }
             }
+            SettingsSection(title: "Tidying",
+                            footer: "Screenshots and downloads leave after this long. Their files stay where they are. Pin one from its right-click menu to keep it; anything you put in the Tray yourself stays until you remove it.") {
+                SettingsCard { TrayKeepsRow() }
+            }
             SettingsSection(title: "In the tray", footer: "Click an item and press Space to preview it, as in Finder. The arrow keys move between items.") {
                 HStack(spacing: 16) {
                     FileStack(urls: Array(tray.urls.prefix(4)))
@@ -1267,6 +1281,36 @@ struct TraySettings: View {
                 .background(CardBackground())
             }
         }
+    }
+}
+
+/// How long screenshots and downloads stay in the Tray.
+private struct TrayKeepsRow: View {
+    @ObservedObject private var settings = AppSettings.shared
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SymbolBadge(symbol: "clock.arrow.circlepath", tint: .teal, size: 26)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Keep screenshots and downloads")
+                    .font(.system(size: 13, weight: .medium))
+                Text("What arrives by itself leaves by itself")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Palette.secondaryText)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 12)
+            HStack(spacing: 6) {
+                ForEach(TrayRetention.allCases) { choice in
+                    ChoiceChip(title: choice.title, symbol: choice.symbol, isSelected: settings.trayKeeps == choice) {
+                        settings.trayKeeps = choice
+                    }
+                    .fixedSize()
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
     }
 }
 

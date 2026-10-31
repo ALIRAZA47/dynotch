@@ -161,7 +161,7 @@ final class NotchWindowController {
         // A glance's own buttons take its clicks; a click anywhere else on it opens the notch from SwiftUI.
         if inside, viewModel.phase == .closed || viewModel.phase == .hovering {
             hoverTask?.cancel()
-            viewModel.open()
+            viewModel.activate()
         } else if !inside, viewModel.isOpen || viewModel.isGlancing, !viewModel.isMenuOpen,
                   !AudioOutputs.shared.isPresentingRoutes {
             dismiss()
@@ -328,8 +328,9 @@ final class NotchWindowController {
         hoverTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard let self, !Task.isCancelled, self.isInside else { return }
-            // A glance first, if that's the setting; a click or a swipe down opens the rest.
-            if AppSettings.shared.hoverShows == .glance {
+            // A glance first, if that's the setting, or for a notice's buttons, which are only there.
+            // A click or a swipe down opens the rest.
+            if AppSettings.shared.hoverShows == .glance || self.viewModel.noticeHasActions {
                 self.viewModel.glance()
             } else {
                 self.viewModel.open()

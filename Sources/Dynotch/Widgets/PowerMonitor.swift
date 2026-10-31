@@ -80,14 +80,16 @@ final class PowerMonitor: ObservableObject {
         guard hasBattery, announce else { return }
 
         if isPluggedIn, !wasPluggedIn, AppSettings.shared.liveCharging {
-            LiveActivityCenter.shared.post(LiveNotice(key: "power", symbol: "bolt.fill", tint: .green, text: "\(level)%"), for: 3)
+            LiveActivityCenter.shared.post(LiveNotice(key: "power", symbol: "bolt.fill", tint: .green, text: "\(level)%",
+                                                      timing: .perishes), for: 3)
         }
         if isPluggedIn {
             warnedLevels.removeAll()
         } else if AppSettings.shared.lowBatteryAlerts {
             for threshold in [20, 10] where level <= threshold && warnedLevels.insert(threshold).inserted {
                 LiveActivityCenter.shared.post(LiveNotice(key: "power", symbol: "battery.25percent", tint: threshold == 10 ? .red : .orange,
-                                                          text: "\(level)%", detail: "Low battery. Plug in soon."), for: 5)
+                                                          text: "\(level)%", detail: "Low battery. Plug in soon.",
+                                                          recall: .whole), for: 5)
                 break
             }
         }

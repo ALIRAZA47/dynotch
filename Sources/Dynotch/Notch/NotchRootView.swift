@@ -157,7 +157,7 @@ struct ClosedNotchView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .clipped()
         .contentShape(Rectangle())
-        .onTapGesture { viewModel.open() }
+        .onTapGesture { viewModel.activate() }
     }
 
     private var tint: Color {

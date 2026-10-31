@@ -452,6 +452,10 @@ private struct ClosedPreview: View {
                 .padding(1.5 * scale)
         case .focus(let mode):
             FocusGlyph(mode: mode, size: ClosedLayout.glyphSize * scale)
+        case .held(let count):
+            HeldBadge(count: count, size: ClosedLayout.glyphSize * scale)
+        case .keepAwake:
+            KeepAwakeGlyph(size: ClosedLayout.glyphSize * scale)
         }
     }
 }
