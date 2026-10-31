@@ -39,12 +39,18 @@ enum CommandEngine {
         let lower = text.lowercased()
         var results: [CommandResult] = []
 
-        // A sum or a conversion answers straight away.
-        if let answer = Calculator.answer(text) {
+        // An answer comes straight away. A date goes first: 2026-10-31 would read as a sum.
+        if let date = DateText.answer(text) {
+            results.append(copyable(id: "date", symbol: "calendar", value: date.value, title: date.text))
+        } else if let answer = Calculator.answer(text) {
             results.append(copyable(id: "sum", symbol: "equal", value: answer, title: "= \(answer)"))
         } else if let conversion = UnitConversion.convert(text) {
             results.append(copyable(id: "convert", symbol: "arrow.left.arrow.right", value: conversion.value,
                                     title: conversion.text))
+        } else if let time = WorldTime.answer(text) {
+            results.append(copyable(id: "time", symbol: "globe", value: time.value, title: time.text))
+        } else if let color = ColorText.convert(text) {
+            results.append(copyable(id: "color-value", symbol: "paintpalette.fill", tint: color.color, value: color.value, title: color.text))
         }
 
         // A first word that says what to do.
@@ -211,7 +217,7 @@ enum CommandEngine {
         return ["tab-", "settings-", shortcutPrefix, "profile-"].contains { id.hasPrefix($0) } ? id : nil
     }
 
-    private static let answerIDs: Set<String> = ["sum", "convert"]
+    private static let answerIDs: Set<String> = ["sum", "convert", "date", "time", "color-value"]
 
     // MARK: Commands
 
@@ -551,9 +557,9 @@ enum CommandEngine {
 
     // MARK: Helpers
 
-    /// A sum's or a conversion's answer, copied on Return.
-    private static func copyable(id: String, symbol: String, value: String, title: String) -> CommandResult {
-        CommandResult(id: id, symbol: symbol, tint: .gray, title: title, hint: "copy") { _ in
+    /// An answer, copied on Return.
+    private static func copyable(id: String, symbol: String, tint: Color = .gray, value: String, title: String) -> CommandResult {
+        CommandResult(id: id, symbol: symbol, tint: tint, title: title, hint: "copy") { _ in
             NSPasteboard.dynotch.clearContents()
             NSPasteboard.dynotch.setString(value, forType: .string)
             announce(symbol: "doc.on.clipboard.fill", tint: .white, text: value, detail: "Copied to the clipboard")
@@ -772,7 +778,8 @@ enum Calculator {
     }
 }
 
-/// "5 km to mi", "70 f in c", "2 cups in ml": length, mass, temperature, volume and speed.
+/// "5 km to mi", "70 f in c", "2 cups in ml", "1.5 gb to mb": length, mass, temperature, volume, speed
+/// and data sizes. Sizes go in thousands, as macOS counts them, and `mib` and `gib` in 1,024s.
 enum UnitConversion {
     static func convert(_ text: String) -> (text: String, value: String)? {
         let pattern = #"^\s*(-?\d+(?:\.\d+)?)\s*([a-z°/]+)\s+(?:to|in|as)\s+([a-z°/]+)\s*$"#
@@ -788,11 +795,22 @@ enum UnitConversion {
               from.kind == to.kind else { return nil }
         let base = from.unit.converter.baseUnitValue(fromValue: amount)
         let result = to.unit.converter.value(fromBaseUnitValue: base)
-        let value = Calculator.format((result * 100).rounded() / 100)
+        // A size can be a tiny part of the next one up, which two places would round to nothing.
+        let value = from.kind == .information ? size(result) : Calculator.format((result * 100).rounded() / 100)
         return ("\(Calculator.format(amount)) \(from.unit.symbol) = \(value) \(to.unit.symbol)", value)
     }
 
-    private enum Kind { case length, mass, temperature, volume, speed }
+    /// To nine figures, however large or small.
+    private static func size(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.usesSignificantDigits = true
+        formatter.maximumSignificantDigits = 9
+        formatter.usesGroupingSeparator = false
+        return formatter.string(from: NSNumber(value: value)) ?? String(value)
+    }
+
+    private enum Kind { case length, mass, temperature, volume, speed, information }
 
     private static let units: [String: (unit: Dimension, kind: Kind)] = {
         var table: [String: (unit: Dimension, kind: Kind)] = [:]
@@ -825,6 +843,20 @@ enum UnitConversion {
         add(UnitSpeed.milesPerHour, .speed, "mph")
         add(UnitSpeed.metersPerSecond, .speed, "m/s", "mps")
         add(UnitSpeed.knots, .speed, "kn", "knot", "knots")
+        add(UnitInformationStorage.bits, .information, "bit", "bits")
+        add(UnitInformationStorage.bytes, .information, "b", "byte", "bytes")
+        add(UnitInformationStorage.kilobytes, .information, "kb", "kilobyte", "kilobytes")
+        add(UnitInformationStorage.megabytes, .information, "mb", "megabyte", "megabytes")
+        add(UnitInformationStorage.gigabytes, .information, "gb", "gigabyte", "gigabytes")
+        add(UnitInformationStorage.terabytes, .information, "tb", "terabyte", "terabytes")
+        add(UnitInformationStorage.petabytes, .information, "pb", "petabyte", "petabytes")
+        add(UnitInformationStorage.kibibytes, .information, "kib", "kibibyte", "kibibytes")
+        add(UnitInformationStorage.mebibytes, .information, "mib", "mebibyte", "mebibytes")
+        add(UnitInformationStorage.gibibytes, .information, "gib", "gibibyte", "gibibytes")
+        add(UnitInformationStorage.tebibytes, .information, "tib", "tebibyte", "tebibytes")
+        add(UnitInformationStorage.kilobits, .information, "kbit", "kilobit", "kilobits")
+        add(UnitInformationStorage.megabits, .information, "mbit", "megabit", "megabits")
+        add(UnitInformationStorage.gigabits, .information, "gbit", "gigabit", "gigabits")
         return table
     }()
 }

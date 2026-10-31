@@ -795,6 +795,10 @@ struct NookSettings: View {
                             footer: "Forecasts come from Open-Meteo. Rain alerts use its 15-minute forecast where there is one, and the hourly forecast elsewhere.") {
                 WeatherSettings()
             }
+            SettingsSection(title: "World clock", trailing: "\(settings.worldClockCities.count) of \(WorldClockCities.limit)",
+                            footer: "Up to four cities in the World clock widget. Click one to take it off.") {
+                WorldClockCities()
+            }
             SettingsSection(title: "Pinned shortcuts", trailing: "\(settings.pinnedShortcuts.count) of 4",
                             footer: "Pin up to four. They show in the Shortcuts widget.") {
                 ShortcutPins()
@@ -1163,6 +1167,60 @@ private struct ShortcutPins: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(CardBackground())
         .task { await shortcuts.reload() }
+    }
+}
+
+/// The cities in the World clock widget, and a field to add one by name. It's all on the Mac: a city
+/// is either in `WorldTime`'s table or it isn't.
+private struct WorldClockCities: View {
+    static let limit = 4
+
+    @ObservedObject private var settings = AppSettings.shared
+    @ViewState private var draft = ""
+    @ViewState private var isUnknown = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            FlowLayout(spacing: 7) {
+                ForEach(settings.worldClockCities, id: \.self) { city in
+                    PinChip(title: city, isPinned: true) { settings.worldClockCities.removeAll { $0 == city } }
+                }
+            }
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                TextField("Add a city", text: $draft, prompt: Text(""))
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12.5))
+                    .fieldPlaceholder("Add a city", isEmpty: draft.isEmpty, font: .system(size: 12.5), color: Palette.secondaryText)
+                    .onSubmit(add)
+                if isUnknown {
+                    Text("No such city here")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Palette.secondaryText)
+                }
+            }
+            .padding(.horizontal, 11)
+            .frame(height: 28)
+            .background(FieldWell())
+            .opacity(settings.worldClockCities.count < Self.limit ? 1 : 0.4)
+            .disabled(settings.worldClockCities.count >= Self.limit)
+            .onChange(of: draft) { isUnknown = false }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CardBackground())
+    }
+
+    private func add() {
+        guard let place = WorldTime.place(draft), !place.isInitials else {
+            isUnknown = !draft.isEmpty
+            return
+        }
+        draft = ""
+        if !settings.worldClockCities.contains(place.name) { settings.worldClockCities.append(place.name) }
     }
 }
 

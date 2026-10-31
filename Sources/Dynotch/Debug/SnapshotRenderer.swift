@@ -297,6 +297,17 @@ enum SnapshotRenderer {
             Scene(name: "command-9-settings", phase: .open, command: "settings tray"),
             Scene(name: "command-10-join", phase: .open, command: "join"),
             Scene(name: "command-11-music", phase: .open, command: "ne"),
+            Scene(name: "command-15-time", phase: .open, command: "5pm pst in lahore"),
+            Scene(name: "command-16-days", phase: .open, command: "days until 25 dec"),
+            Scene(name: "command-17-size", phase: .open, command: "1.5 gb to mb"),
+            Scene(name: "command-18-color", phase: .open, command: "#a894ff to rgb"),
+            Scene(name: "command-19-date", phase: .open, command: "2026-10-31"),
+            // What's been used comes first, and the suggestions fill the rest.
+            Scene(name: "command-20-learned", phase: .open, command: "", setUp: {
+                for (id, uses) in [("stopwatch", 4), ("tab-tray", 3), ("awake", 2)] {
+                    for _ in 0..<uses { CommandHistory.record(id) }
+                }
+            }),
             // Glances: resting the pointer on the notch.
             Scene(name: "glance-1-music", phase: .glance, activity: .music),
             Scene(name: "glance-2-pomodoro", phase: .glance, activity: .timer),
@@ -870,6 +881,7 @@ enum SnapshotRenderer {
         TrayStore.shared.loadSample(pinned: nil)
         ScreenRecorder.shared.loadSample(.idle)
         loadClips([], isOn: false)
+        CommandHistory.forget()
     }
 
     /// A recording this long running, or its file being saved. It holds nothing.
@@ -1017,7 +1029,7 @@ enum SnapshotRenderer {
     private static func widgetScenes() -> [Scene] {
         let stacks: [(name: String, first: HomeWidget, second: HomeWidget)] = [
             ("notes", .notes, .mirror), ("shortcuts", .shortcuts, .mirror),
-            ("mirror", .mirror, .notes), ("toggles", .toggles, .mirror),
+            ("mirror", .mirror, .notes), ("toggles", .toggles, .mirror), ("clock", .clock, .mirror),
         ]
         return stacks.flatMap { stack in
             [nil, NotchTheme(material: .glass)].map { theme in

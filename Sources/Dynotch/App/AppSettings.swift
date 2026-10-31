@@ -103,7 +103,7 @@ enum HoverShows: String, CaseIterable, Identifiable {
 
 /// Widgets that can sit next to the media player on the Nook tab.
 enum HomeWidget: String, CaseIterable, Identifiable {
-    case calendar, mirror, shortcuts, timer, devices, toggles, notes, weather, none
+    case calendar, mirror, shortcuts, timer, devices, toggles, notes, weather, clock, none
 
     var id: String { rawValue }
 
@@ -117,6 +117,7 @@ enum HomeWidget: String, CaseIterable, Identifiable {
         case .toggles: "Quick toggles"
         case .notes: "Notes"
         case .weather: "Weather"
+        case .clock: "World clock"
         case .none: "Nothing"
         }
     }
@@ -131,6 +132,7 @@ enum HomeWidget: String, CaseIterable, Identifiable {
         case .toggles: "switch.2"
         case .notes: "note.text"
         case .weather: "cloud.sun.fill"
+        case .clock: "globe"
         case .none: "minus.circle"
         }
     }
@@ -416,6 +418,10 @@ final class AppSettings: ObservableObject {
     }
     @Published var pinnedShortcuts: [String] = AppSettings.value("pinnedShortcuts", [String]()) {
         didSet { save("pinnedShortcuts", pinnedShortcuts) }
+    }
+    /// The World clock widget's cities, as `WorldTime.place` knows them.
+    @Published var worldClockCities: [String] = AppSettings.value("worldClockCities", ["London", "New York", "Tokyo"]) {
+        didSet { save("worldClockCities", worldClockCities) }
     }
     @Published var showAllDayEvents: Bool = AppSettings.value("showAllDayEvents", true) {
         didSet { save("showAllDayEvents", showAllDayEvents) }

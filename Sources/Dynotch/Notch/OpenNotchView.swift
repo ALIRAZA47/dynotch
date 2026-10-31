@@ -283,6 +283,7 @@ struct HomeWidgetView: View {
         case .toggles: QuickTogglesWidget()
         case .notes: NotesWidget()
         case .weather: WeatherWidget()
+        case .clock: WorldClockWidget()
         case .none: EmptyView()
         }
     }

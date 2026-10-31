@@ -15,7 +15,10 @@ Press <Keys k="⌃⌥K" /> from anywhere, or click **Type a command** in the ope
 | `note Buy coffee` | Adds a note |
 | `remind Call Sam 5pm` | Adds a reminder |
 | `18% of 240` | Answers, and Return copies it |
-| `5 km to mi` | Converts, and Return copies it |
+| `5 km to mi`, `1.5 gb to mb` | Converts, and Return copies it |
+| `5pm pst in lahore`, `time in tokyo` | Says what time that is somewhere else |
+| `2026-10-31`, `days until 25 dec` | Says which day that is, or counts the days to it |
+| `#a894ff to rgb` | Writes a color another way |
 | `dark` | Flips Dark Mode |
 | `awake` | Keeps the Mac awake |
 | `awake 2h`, `awake until 5pm`, `awake off` | Keeps it awake for a while, or stops |
@@ -58,9 +61,25 @@ The reminder goes to the Reminders app, so it needs the Reminders permission. Th
 
 ## Sums and conversions
 
-Answers show up as you type, and Return copies them.
+Answers show up as you type, and Return copies them. All of it is worked out on your Mac.
 
 <Shot name="command-3-sum" alt="The command field with 18% of 240 typed in, answering 43.2." />
+
+Conversions cover length, mass, temperature, volume, speed and data sizes. Sizes go in thousands, as macOS counts them, so `1 gb to mb` is 1000. For 1,024s, use `kib`, `mib`, `gib` and `tib`.
+
+## Times, dates and colors
+
+| Type | And Dynotch |
+|---|---|
+| `5pm pst in lahore` | The same moment in Lahore, with the day if it's a different one |
+| `3:30pm london to tokyo` | The same, from one place to another |
+| `noon in nyc` | Your noon, there |
+| `time in tokyo`, `tokyo time` | The time there now |
+| `2026-10-31` | Which day that is, and how far off |
+| `days until 25 dec`, `days since 1 jan 2020` | How many days. With no year, it's the coming one, or the last one with `since` |
+| `#a894ff to rgb`, `to hsl`, `rgb(168, 148, 255) to hex` | The color written another way |
+
+Any city macOS has a time zone for works, along with a short list of others, like Lahore, San Francisco and Mumbai, and a zone's initials. Initials mean that zone's clock rather than a fixed offset: in summer `pst` is read as PDT, and the answer says PDT.
 
 ## Moving around
 

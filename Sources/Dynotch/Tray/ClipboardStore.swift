@@ -434,7 +434,7 @@ extension ClipboardStore.Clip {
     }
 
     /// `#RGB`, `#RRGGBB` or `#RRGGBBAA`. The # has to be there, or a word like "decade" would be a color.
-    private static func hexColor(_ text: String) -> Kind? {
+    static func hexColor(_ text: String) -> Kind? {
         guard text.utf8.count <= 9, text.first == "#" else { return nil }
         let digits = text.dropFirst()
         guard [3, 6, 8].contains(digits.count), digits.allSatisfy(\.isHexDigit) else { return nil }
