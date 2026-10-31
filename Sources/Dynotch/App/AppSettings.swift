@@ -6,6 +6,13 @@ extension UserDefaults {
     nonisolated(unsafe) static var dynotch: UserDefaults = .standard
 }
 
+/// The clipboard, or a pasteboard of its own while a snapshot, a self-test, the energy probe or a test
+/// runs. Everything in Dynotch goes through this rather than `.general`, so none of those can read
+/// what the user copied or overwrite it, whatever they click.
+extension NSPasteboard {
+    nonisolated(unsafe) static var dynotch: NSPasteboard = .general
+}
+
 enum DisplayMode: String, CaseIterable, Identifiable {
     case notched, main, all
 

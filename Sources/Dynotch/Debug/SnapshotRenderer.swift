@@ -30,6 +30,7 @@ enum SnapshotRenderer {
         ]
         for (key, value) in samples { defaults.set(value, forKey: key) }
         UserDefaults.dynotch = defaults
+        NSPasteboard.dynotch = NSPasteboard(name: NSPasteboard.Name("app.dynotch.scratch.\(ProcessInfo.processInfo.processIdentifier)"))
     }
 
     static func discardScratchDefaults() {
@@ -37,6 +38,7 @@ enum SnapshotRenderer {
         // An emptied domain still leaves its file behind, and every run has its own.
         UserDefaults.dynotch.synchronize()
         try? FileManager.default.removeItem(atPath: scratchDomain + ".plist")
+        NSPasteboard.dynotch.releaseGlobally()
     }
 
     private struct Scene {

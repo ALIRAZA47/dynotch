@@ -9,14 +9,14 @@ enum DynotchApp {
         MainActor.assumeIsolated {
             // Before anything reads a setting: a snapshot run works against scratch defaults with
             // sample values, never the real ones, and needs somewhere to put the images. The
-            // capture self-test runs the whole app, so it works against the scratch defaults too.
+            // capture self-test and the energy probe work against the scratch defaults too.
             if let index = CommandLine.arguments.firstIndex(of: "--snapshot") {
                 guard CommandLine.arguments.count > index + 1 else {
                     FileHandle.standardError.write(Data("Usage: Dynotch --snapshot <folder> [--only <prefix>,<prefix>…]\n".utf8))
                     exit(2)
                 }
                 SnapshotRenderer.useScratchDefaults()
-            } else if CommandLine.arguments.contains("--capture-self-test") {
+            } else if CommandLine.arguments.contains("--capture-self-test") || CommandLine.arguments.contains("--energy-probe") {
                 SnapshotRenderer.useScratchDefaults()
             }
             let app = NSApplication.shared
@@ -54,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let index = arguments.firstIndex(of: "--energy-probe") {
             // `--energy-probe notch` measures only the closed notch: seconds rather than minutes.
             EnergyProbe.run(notchOnly: arguments.dropFirst(index + 1).first == "notch")
+            SnapshotRenderer.discardScratchDefaults()
             NSApp.terminate(nil)
             return
         }

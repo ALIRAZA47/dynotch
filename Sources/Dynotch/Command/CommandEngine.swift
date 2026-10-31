@@ -464,8 +464,8 @@ enum CommandEngine {
     /// A sum's or a conversion's answer, copied on Return.
     private static func copyable(id: String, symbol: String, value: String, title: String) -> CommandResult {
         CommandResult(id: id, symbol: symbol, tint: .gray, title: title, hint: "copy") { _ in
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(value, forType: .string)
+            NSPasteboard.dynotch.clearContents()
+            NSPasteboard.dynotch.setString(value, forType: .string)
             announce(symbol: "doc.on.clipboard.fill", tint: .white, text: value, detail: "Copied to the clipboard")
             return .close
         }

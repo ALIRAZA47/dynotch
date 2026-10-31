@@ -55,7 +55,7 @@ struct NoticeAction: Equatable {
 
     /// `pasteboard` is for the tests, which leave the real clipboard alone.
     @MainActor
-    static func copy(_ code: String, to pasteboard: NSPasteboard = .general) {
+    static func copy(_ code: String, to pasteboard: NSPasteboard = .dynotch) {
         pasteboard.clearContents()
         pasteboard.setString(code, forType: .string)
         pasteboard.setData(Data(), forType: concealedType)

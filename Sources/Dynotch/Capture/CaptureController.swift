@@ -43,7 +43,7 @@ final class CaptureController: ObservableObject {
     /// Tests park the overlays off screen, so a self-test never covers the desktop.
     var placesOverlaysOffScreen = false
     /// Where Copy puts the capture. A test uses a pasteboard of its own, leaving the clipboard alone.
-    var pasteboard = NSPasteboard.general
+    var pasteboard = NSPasteboard.dynotch
     /// Where Save puts the file instead of the Screenshot app's folder, for tests.
     var saveFolderOverride: URL?
 

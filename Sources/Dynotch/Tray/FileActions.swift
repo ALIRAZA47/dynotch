@@ -31,7 +31,7 @@ enum FileActions {
     }
 
     static func copyToPasteboard(_ urls: [URL]) {
-        let pasteboard = NSPasteboard.general
+        let pasteboard = NSPasteboard.dynotch
         pasteboard.clearContents()
         pasteboard.writeObjects(urls as [NSURL])
     }

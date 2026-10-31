@@ -124,7 +124,7 @@ final class ClipboardStore: ObservableObject {
 
     private convenience init() {
         self.init(support: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Dynotch", isDirectory: true), pasteboard: .general, energy: .shared)
+            .appendingPathComponent("Dynotch", isDirectory: true), pasteboard: .dynotch, energy: .shared)
     }
 
     /// `support` holds `clipboard.json`. The tests pass a folder, a named pasteboard and a coordinator
