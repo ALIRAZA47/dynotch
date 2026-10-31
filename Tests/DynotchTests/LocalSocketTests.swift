@@ -353,6 +353,7 @@ struct SocketRouterTests {
         let router = SocketRouter()
         #expect(router.ops.isEmpty)
         ScriptActivityStore(post: { _, _ in }).start(on: router)
-        #expect(router.ops == ["progress"])
+        AgentDeck(post: { _, _ in }).start(on: router)
+        #expect(router.ops == ["hook", "progress"])
     }
 }
