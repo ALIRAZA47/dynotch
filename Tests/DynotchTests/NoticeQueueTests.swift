@@ -87,6 +87,26 @@ struct NoticeQueueTests {
         #expect(queue.waiting.map(\.notice.key) == ["c", "b"])
     }
 
+    @Test func aFullLineKeepsWhatCantWait() {
+        var queue = NoticeQueue()
+        queue.post(entry("first"), isQuiet: false, now: at(0))
+        for index in 0..<NoticeQueue.mostWaiting { queue.post(entry("n\(index)"), isQuiet: false, now: at(0)) }
+        queue.post(entry("code", timing: .always), isQuiet: false, now: at(0))
+        #expect(queue.waiting.first?.notice.key == "code")
+        queue.post(entry("later"), isQuiet: false, now: at(0))
+        #expect(queue.waiting.first?.notice.key == "code")
+        #expect(queue.waiting.count == NoticeQueue.mostWaiting)
+    }
+
+    @Test func aRunOfUpdatesCantKeepOthersWaiting() {
+        var queue = NoticeQueue()
+        queue.post(entry("script", for: 5), isQuiet: false, now: at(0))
+        queue.post(entry("other"), isQuiet: false, now: at(0.5))
+        for tick in 1...3 { queue.post(entry("script", for: 5), isQuiet: false, now: at(Double(tick) * 0.4)) }
+        queue.tick(now: at(NoticeQueue.shortestTurn))
+        #expect(queue.visible?.key == "other")
+    }
+
     @Test func theLineHasAnEnd() {
         var queue = NoticeQueue()
         queue.post(entry("first"), isQuiet: false, now: at(0))
@@ -188,6 +208,16 @@ struct NoticeQueueTests {
         queue.endQuiet(now: at(10))
         #expect(queue.visible?.key == "a")
         #expect(queue.waiting.map(\.notice.key) == ["b"])
+        #expect(queue.held.isEmpty)
+    }
+
+    @Test func whatShouldStayHiddenDoesNotComeOut() {
+        var queue = NoticeQueue()
+        queue.post(entry("peek"), isQuiet: true, now: at(0))
+        queue.post(entry("download"), isQuiet: true, now: at(0))
+        queue.endQuiet(now: at(10), holdingBack: ["peek"])
+        #expect(queue.visible?.key == "download")
+        #expect(queue.waiting.isEmpty)
         #expect(queue.held.isEmpty)
     }
 

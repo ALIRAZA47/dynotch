@@ -136,7 +136,7 @@ enum SnapshotRenderer {
                                                actions: [NoticeAction(title: "Open", kind: .openFile(keynote)),
                                                          NoticeAction(title: "Show", kind: .reveal(keynote))])
         let screenshot = LiveNotice(key: "screenshot", symbol: "camera.viewfinder", tint: .white,
-                                    detail: "Screenshot added to the Tray",
+                                    text: "Screenshot", detail: "Added to the Tray",
                                     actions: [NoticeAction(title: "Show", kind: .openTab(.tray)),
                                               NoticeAction(title: "Open", kind: .openFile(keynote))])
         let update = LiveNotice(key: "update", symbol: "arrow.down.circle.fill", tint: NotchAccent.lavender.color,
@@ -235,7 +235,7 @@ enum SnapshotRenderer {
                   setUp: { AudioLevels.shared.loadSample([0.3, 0.9, 0.55, 0.8]) }),
             // Widgets and the Tray
             Scene(name: "90-closed-screenshot", phase: .closed, activity: .notice(LiveNotice(
-                key: "screenshot", symbol: "camera.viewfinder", tint: .white, detail: "Screenshot added to the Tray"))),
+                key: "screenshot", symbol: "camera.viewfinder", tint: .white, text: "Screenshot", detail: "Added to the Tray"))),
             Scene(name: "91-open-control-bluetooth", phase: .open, tab: .stats, prepare: {
                 DeviceBatteryMonitor.shared.loadSample([], paired: samplePairedDevices,
                                                        connections: ["beats": .connecting, "speaker": .failed("Not in range")])
@@ -759,7 +759,9 @@ enum SnapshotRenderer {
             recent("bell.fill", TimerStore.tint, "Done", detail: "Tea · 4 min", minutes: 24),
             recent("message.fill", .green, "Messages", minutes: 75,
                    actions: [NoticeAction(title: "Open", kind: .openApp(bundleID: "com.apple.MobileSMS"))]),
-        ], unseen: 4)
+            recent("checkmark.circle.fill", .green, "Done", detail: "Resize Images finished", minutes: 96),
+            recent("arrow.down.app.fill", .white, "Updated", detail: "Dynotch is up to date", minutes: 140),
+        ], unseen: 6)
     }
 
     private static func loadOutputs(pickerShown: Bool) {

@@ -54,30 +54,24 @@ enum CommandEngine {
             results.append(reminder(body))
             saidWhat = true
         }
-        if let command = LevelCommand.parse(text) {
-            if let result = level(command) { results.append(result) }
-            saidWhat = true
-        }
-        if let spec = remainder(of: text, after: ["keep awake", "stay awake", "awake", "caffeinate"]), !spec.isEmpty {
-            results.append(keepAwake(spec))
-            saidWhat = true
+        // These only speak for the line if they found something, so a shortcut called Connect VPN or
+        // a timer called Output still get their turn.
+        var found: [CommandResult] = []
+        if let command = LevelCommand.parse(text), let result = level(command) { found.append(result) }
+        if let spec = remainder(of: text, after: ["keep awake", "stay awake", "awake", "caffeinate"]), !spec.isEmpty,
+           let result = keepAwake(spec) {
+            found.append(result)
         }
         if let name = remainder(of: text, after: ["output", "play through"]) {
-            results.append(contentsOf: outputs(matching: name.lowercased()))
-            saidWhat = true
+            found += outputs(matching: name.lowercased())
         }
-        if let name = remainder(of: text, after: ["connect"]) {
-            results.append(contentsOf: connectable(matching: name.lowercased()))
-            saidWhat = true
-        }
-        if let name = remainder(of: text, after: ["disconnect"]) {
-            results.append(contentsOf: connected(matching: name.lowercased()))
-            saidWhat = true
-        }
+        if let name = remainder(of: text, after: ["connect"]) { found += connectable(matching: name.lowercased()) }
+        if let name = remainder(of: text, after: ["disconnect"]) { found += connected(matching: name.lowercased()) }
         if let name = remainder(of: text, after: ["settings", "preferences"]), !name.isEmpty {
-            results.append(contentsOf: settingsPages(matching: name.lowercased()))
-            saidWhat = true
+            found += settingsPages(matching: name.lowercased())
         }
+        results += found
+        saidWhat = saidWhat || !found.isEmpty
         if let spec = remainder(of: text, after: ["timer", "start timer"]) {
             results.append(timer(spec.isEmpty ? nil : spec))
             saidWhat = true
@@ -288,7 +282,7 @@ enum CommandEngine {
         }
     }
 
-    private static func keepAwake(_ spec: String) -> CommandResult {
+    private static func keepAwake(_ spec: String) -> CommandResult? {
         let toggles = QuickToggles.shared
         let symbol = "cup.and.saucer.fill"
         if ["off", "stop", "end"].contains(spec.lowercased()) {
@@ -297,9 +291,7 @@ enum CommandEngine {
                 return .close
             }
         }
-        guard let end = KeepAwakeText.end(from: spec) else {
-            return CommandResult(id: "awake", symbol: symbol, tint: .orange, title: "Keep the Mac awake", hint: "2h, until 5pm")
-        }
+        guard let end = KeepAwakeText.end(from: spec) else { return nil }
         let time = end.formatted(date: .omitted, time: .shortened)
         return CommandResult(id: "awake", symbol: symbol, tint: .orange, title: "Keep the Mac awake until \(time)") { _ in
             toggles.keepAwake(until: end)

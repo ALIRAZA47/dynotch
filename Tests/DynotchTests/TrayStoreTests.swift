@@ -56,6 +56,13 @@ final class TrayStoreTests {
         #expect(store.items.count == 1)
     }
 
+    @Test func addingAScreenshotByHandKeepsIt() {
+        store.add([file], automatically: true)
+        store.add([file])
+        store.tidy(now: later)
+        #expect(store.items.count == 1)
+    }
+
     @Test func aDayIsShorter() {
         AppSettings.shared.trayKeeps = .day
         store.add([file], automatically: true)

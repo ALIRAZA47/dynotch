@@ -128,6 +128,7 @@ final class NotchViewModel: ObservableObject {
 
     /// The glance has turned to the recent list.
     @Published private(set) var isShowingRecent = false
+    private var clickedForGlance = Date.distantPast
 
     /// Something was dragged out of the tray and the drag hasn't ended yet.
     @Published var isDraggingOut = false
@@ -173,8 +174,14 @@ final class NotchViewModel: ObservableObject {
 
     /// What the glance shows, from what's live right now.
     var glanceContent: GlanceContent {
-        if isShowingRecent { return .recent(rows: min(LiveActivityCenter.shared.recents.count, GlanceContent.recentRows)) }
+        if isShowingRecent { return .recent(rows: LiveActivityCenter.shared.recents.count) }
         return GlanceContent(activity: activity)
+    }
+
+    /// A double-click that brought up the glance shouldn't land its second click on a button that
+    /// has just appeared under it, like Join.
+    var acceptsNoticeButtons: Bool {
+        Date.now.timeIntervalSince(clickedForGlance) > NSEvent.doubleClickInterval
     }
 
     /// A notice with buttons is showing. They're in the glance, so that's where a click goes.
@@ -249,6 +256,7 @@ final class NotchViewModel: ObservableObject {
     /// A click on the closed notch: the glance, for a notice's buttons, and otherwise the whole notch.
     func activate() {
         if noticeHasActions {
+            clickedForGlance = .now
             glance()
         } else {
             open()

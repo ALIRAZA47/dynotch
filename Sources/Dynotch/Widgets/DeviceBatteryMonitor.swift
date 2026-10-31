@@ -248,7 +248,7 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
             } else if level <= 15, warnedLow.insert(device.id).inserted {
                 LiveActivityCenter.shared.post(LiveNotice(key: "device", symbol: device.kind.symbol, tint: .orange,
                                                           text: "\(level)%", detail: "\(device.name) is running low",
-                                                          timing: .waits, recall: .whole), for: 5)
+                                                          recall: .whole), for: 5)
             }
         }
     }

@@ -156,13 +156,12 @@ final class ScreenshotWatcher: ObservableObject {
         guard !fresh.isEmpty else { return }
         TrayStore.shared.add(fresh, automatically: true)
         let recording = fresh.count == 1 && Self.isScreenRecording(fresh[0])
-        let detail = fresh.count > 1 ? "\(fresh.count) screen captures added to the Tray"
-            : recording ? "Screen recording added to the Tray" : "Screenshot added to the Tray"
+        let text = fresh.count > 1 ? "\(fresh.count) captures" : recording ? "Screen recording" : "Screenshot"
         var actions = [NoticeAction(title: "Show", kind: .openTab(.tray))]
         if fresh.count == 1 { actions.append(NoticeAction(title: "Open", kind: .openFile(fresh[0]))) }
         LiveActivityCenter.shared.post(LiveNotice(key: "screenshot", symbol: recording ? "record.circle" : "camera.viewfinder",
-                                                  tint: .white, detail: detail, actions: actions, timing: .waits,
-                                                  recall: .whole), for: 2.6)
+                                                  tint: .white, text: text, detail: "Added to the Tray",
+                                                  actions: actions, timing: .waits, recall: .whole), for: 2.6)
     }
 
     /// The visible files in a folder.

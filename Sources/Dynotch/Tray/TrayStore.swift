@@ -47,15 +47,15 @@ final class TrayStore: ObservableObject {
     var urls: [URL] { items.map(\.url) }
 
     func load() {
-        guard let data = try? Data(contentsOf: indexURL),
-              let saved = try? JSONDecoder().decode([Item].self, from: data) else { return }
-        // Anything can edit the index, so what the tray owns (and may trash) comes from the path, not the file.
-        items = saved.filter { $0.url.isFileURL && FileManager.default.fileExists(atPath: $0.url.path) }
-            .map { item in
-                var item = item
-                item.isOwned = isInTrayFolder(item.url)
-                return item
-            }
+        if let data = try? Data(contentsOf: indexURL), let saved = try? JSONDecoder().decode([Item].self, from: data) {
+            // Anything can edit the index, so what the tray owns (and may trash) comes from the path, not the file.
+            items = saved.filter { $0.url.isFileURL && FileManager.default.fileExists(atPath: $0.url.path) }
+                .map { item in
+                    var item = item
+                    item.isOwned = isInTrayFolder(item.url)
+                    return item
+                }
+        }
         tidy()
         tidying = EnergyCoordinator.shared.schedule(.trayTidying) { [weak self] in self?.tidy() }
         AppSettings.shared.$trayKeeps
@@ -74,6 +74,10 @@ final class TrayStore: ObservableObject {
     }
 
     func add(_ urls: [URL], automatically: Bool = false) {
+        // Putting a screenshot in by hand makes it yours, though it got there by itself first.
+        if !automatically {
+            for index in items.indices where urls.contains(items[index].url) { items[index].isAutomatic = false }
+        }
         let copies = AppSettings.shared.trayCopiesFiles
         var added: [Item] = []
         for url in urls where !items.contains(where: { $0.url == url }) && !added.contains(where: { $0.url == url }) {
@@ -83,8 +87,9 @@ final class TrayStore: ObservableObject {
                 added.append(Item(id: UUID(), url: url, isOwned: isInTrayFolder(url), addedAt: .now, isAutomatic: automatically))
             }
         }
-        guard !added.isEmpty else { return }
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { items.append(contentsOf: added) }
+        if !added.isEmpty {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { items.append(contentsOf: added) }
+        }
         save()
     }
 
@@ -104,7 +109,7 @@ final class TrayStore: ObservableObject {
         save()
         let detail = fresh.count == 1 ? "A script added \(fresh[0].lastPathComponent)" : "A script added \(fresh.count) files"
         LiveActivityCenter.shared.post(LiveNotice(key: "tray", symbol: "tray.and.arrow.down.fill", tint: .teal, text: "Tray",
-                                                  detail: detail, fromScript: true, timing: .waits), for: 4)
+                                                  detail: detail, fromScript: true, timing: .waits, recall: .whole), for: 4)
     }
 
     /// Saves dropped data (an image from a browser, some text) as a file in the tray.

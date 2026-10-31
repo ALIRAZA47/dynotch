@@ -16,8 +16,6 @@ enum GlanceContent: Equatable {
 
     /// Each side of the glance beside the camera.
     static let earWidth: CGFloat = 100
-    /// The most the recent list shows.
-    static let recentRows = 4
     private static let recentRowHeight: CGFloat = 30
 
     @MainActor
@@ -452,8 +450,10 @@ private struct NoticeGlance: View {
                             subtitle: notice.text.isEmpty ? nil : notice.detail)
                 Spacer(minLength: 0)
                 ForEach(Array(buttons.enumerated()), id: \.offset) { index, action in
-                    NoticeButton(action: action, isMain: index == 0) { action.perform(in: viewModel) }
-                        .padding(.leading, 8)
+                    NoticeButton(action: action, isMain: index == 0) {
+                        if viewModel.acceptsNoticeButtons { action.perform(in: viewModel) }
+                    }
+                    .padding(.leading, 8)
                 }
             }
         }
@@ -532,7 +532,7 @@ private struct RecentGlance: View {
                 }
                 .padding(.horizontal, 16)
                 .frame(height: band)
-                ForEach(center.recents.prefix(GlanceContent.recentRows)) { recent in
+                ForEach(center.recents) { recent in
                     row(recent, at: context.date)
                 }
             }
@@ -564,7 +564,7 @@ private struct RecentGlance: View {
                 .lineLimit(1)
                 .fixedSize()
             if let action = recent.actions.first {
-                NoticeButton(action: action, isMain: false, height: 24) { action.perform(in: viewModel) }
+                NoticeButton(action: action, isMain: false, height: 24) { action.perform(in: viewModel, fromRecent: true) }
             }
         }
         .padding(.horizontal, 14)

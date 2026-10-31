@@ -18,9 +18,10 @@ struct NoticeAction: Equatable {
     let title: String
     let kind: Kind
 
-    /// Does what the button says, then gets the notice and the glance out of the way.
+    /// Does what the button says, then gets the notice and the glance out of the way. From the recent
+    /// list, the notice showing behind it may be another one entirely, so that stays.
     @MainActor
-    func perform(in viewModel: NotchViewModel) {
+    func perform(in viewModel: NotchViewModel, fromRecent: Bool = false) {
         let center = LiveActivityCenter.shared
         switch kind {
         case .openApp(let bundleID):
@@ -36,17 +37,17 @@ struct NoticeAction: Equatable {
         case .copyCode(let code):
             Self.copy(code)
         case .openTab(let tab):
-            center.dismissNotice()
+            if !fromRecent { center.dismissNotice() }
             viewModel.open(tab: tab)
             return
         case .installUpdate:
             UpdateChecker.shared.installAvailableRelease()
         case .showRecent:
-            center.dismissNotice()
+            if !fromRecent { center.dismissNotice() }
             viewModel.showRecent()
             return
         }
-        center.dismissNotice()
+        if !fromRecent { center.dismissNotice() }
         viewModel.close()
     }
 

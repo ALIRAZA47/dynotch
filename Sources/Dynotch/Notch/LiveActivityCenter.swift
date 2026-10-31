@@ -43,6 +43,9 @@ struct LiveNotice: Equatable {
     var timing: Timing = .always
     var recall: Recall = .nothing
 
+    /// A notification from another app, rather than something of Dynotch's own.
+    var isPeek: Bool { key.hasPrefix(NotificationPeek.keyPrefix) }
+
     /// What to call it in a list of several.
     var sourceName: String? {
         if case .name(let name) = recall { return name }
@@ -138,7 +141,7 @@ final class LiveActivityCenter: ObservableObject {
     /// The main activity.
     var activity: ClosedActivity { content.activity }
 
-    static let mostRecents = 10
+    static let mostRecents = 6
 
     private var queue = NoticeQueue()
     private var clock: Task<Void, Never>?
@@ -233,7 +236,8 @@ final class LiveActivityCenter: ObservableObject {
         if quiet {
             queue.goQuiet(now: .now)
         } else {
-            queue.endQuiet(now: .now)
+            let hidden = queue.held.map(\.notice).filter(NotificationMirror.shared.holdsBack)
+            queue.endQuiet(now: .now, holdingBack: Set(hidden.map(\.key)))
         }
         settle()
     }

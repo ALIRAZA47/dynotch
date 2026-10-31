@@ -49,9 +49,15 @@ struct NoticeQueue {
     mutating func post(_ entry: Entry, isQuiet: Bool, now: Date) {
         if isQuiet, entry.notice.timing != .always {
             if entry.notice.timing == .waits { hold(entry) }
-        } else if showing == nil || showing?.notice.key == entry.notice.key {
-            // The same key updates in place, with its time starting over.
+        } else if showing == nil {
             show(entry, now: now)
+        } else if showing?.notice.key == entry.notice.key {
+            // The same key updates in place. Its time starts over, unless that would keep others waiting.
+            if waiting.isEmpty {
+                show(entry, now: now)
+            } else {
+                showing = entry
+            }
         } else {
             wait(entry, now: now)
         }
@@ -102,8 +108,9 @@ struct NoticeQueue {
     }
 
     /// The Mac is free again: what was held comes out, one by one if it's little, as one notice if not.
-    mutating func endQuiet(now: Date) {
-        let released = held
+    /// `holdingBack` names what shouldn't show after all, as what's true now may not be what was true then.
+    mutating func endQuiet(now: Date, holdingBack keys: Set<String> = []) {
+        let released = held.filter { !keys.contains($0.notice.key) }
         held = []
         if released.count > Self.mostReplayed {
             post(Entry(notice: Self.summary(of: released.map(\.notice)), duration: 6), isQuiet: false, now: now)
@@ -148,7 +155,10 @@ struct NoticeQueue {
         } else {
             waiting.append(entry)
         }
-        if waiting.count > Self.mostWaiting { waiting.removeFirst(waiting.count - Self.mostWaiting) }
+        if waiting.count > Self.mostWaiting {
+            // The oldest that can wait goes, never one that can't.
+            waiting.remove(at: waiting.firstIndex { $0.notice.timing != .always } ?? waiting.count - 1)
+        }
         // The notice showing makes way once it's had a moment.
         let latest = max(now, shownAt.addingTimeInterval(Self.shortestTurn))
         if let end = endsAt {

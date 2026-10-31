@@ -26,7 +26,7 @@ final class ShortcutsService: ObservableObject {
                                                       symbol: succeeded ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
                                                       tint: succeeded ? .green : .orange,
                                                       detail: succeeded ? "\(name) finished" : "\(name) didn't finish",
-                                                      timing: .waits), for: 2.5)
+                                                      recall: .whole), for: 2.5)
         }
     }
 }

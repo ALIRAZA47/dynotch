@@ -100,6 +100,8 @@ final class NotchWindowController {
     func tearDown() {
         hoverTask?.cancel()
         closeTask?.cancel()
+        // A glance holds the notice it's showing, so it can't just go away with its display.
+        viewModel.close()
         cancellables.removeAll()
         panel.orderOut(nil)
         panel.close()

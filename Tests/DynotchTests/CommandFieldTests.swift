@@ -65,6 +65,15 @@ struct CommandEngineTests {
         #expect(results.contains { $0.id == "timer" } == false)
     }
 
+    @Test func wordsItCantReadStillReachTheTimers() {
+        #expect(ids("connect 5m").contains("timer"))
+        #expect(ids("output 5m").contains("timer"))
+    }
+
+    @Test func aKeepAwakeItCantReadOffersNothingEmpty() {
+        #expect(!CommandEngine.results(for: "awake mode", in: viewModel).contains { $0.action == nil && $0.id == "awake" })
+    }
+
     @Test func aKeepAwakeWithNoLengthStillToggles() {
         #expect(ids("awake").contains("awake"))
     }

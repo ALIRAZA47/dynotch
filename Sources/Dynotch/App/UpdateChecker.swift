@@ -67,7 +67,7 @@ final class UpdateChecker: ObservableObject {
                                                           tint: NotchAccent.lavender.color, text: "Updated",
                                                           detail: "Dynotch \(Self.currentVersion)",
                                                           actions: [NoticeAction(title: "What's New", kind: .openURL(Self.releasesPage))],
-                                                          timing: .waits), for: 4)
+                                                          timing: .waits, recall: .whole), for: 4)
             }
         }
     }
@@ -84,10 +84,11 @@ final class UpdateChecker: ObservableObject {
         running = nil
     }
 
-    /// Installs the newest release from a notice's button, with Settings up to show how it's going.
+    /// Installs the newest release from a notice's button, with Settings up to show how it's going,
+    /// or what stands in its way.
     func installAvailableRelease() {
-        guard case .available(let release) = status else { return }
         SettingsWindowController.shared.show(page: .about)
+        guard case .available(let release) = status else { return }
         UpdateInstaller.shared.install(release)
     }
 

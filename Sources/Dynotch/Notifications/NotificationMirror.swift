@@ -125,6 +125,7 @@ final class NotificationMirror: ObservableObject {
             return
         }
         guard !Self.isAnyDisplayMirrored else { return }
+        QuietMonitor.shared.look()
         // macOS saves a burst in one go. They take turns; a long burst leaves its oldest to the banners.
         for entry in shown.suffix(3) {
             let notice = NotificationPeek.notice(for: entry, appName: appName(for: entry.bundleID),
@@ -132,6 +133,17 @@ final class NotificationMirror: ObservableObject {
                                                  findsCodes: settings.notificationCodes, isQuiet: QuietMonitor.shared.isQuiet)
             LiveActivityCenter.shared.post(notice, for: 5)
         }
+    }
+
+    /// Whether a peek that waited out a call should stay hidden after all: a Focus came on while it
+    /// waited, in which case it counts as missed, or a display is mirrored now.
+    func holdsBack(_ notice: LiveNotice) -> Bool {
+        guard notice.isPeek else { return false }
+        if FocusMonitor.shared.mode != nil {
+            if case .name(let app) = notice.recall { missed[app, default: 0] += 1 }
+            return true
+        }
+        return Self.isAnyDisplayMirrored
     }
 
     /// When a Focus ends, one line on what came in during it.
@@ -152,6 +164,9 @@ final class NotificationMirror: ObservableObject {
 /// How a notification looks in the notch. Apps with a symbol of their own are listed in `sources`;
 /// any other app gets a bell.
 enum NotificationPeek {
+    /// What a peek's key starts with. The rest is who it's from.
+    static let keyPrefix = "notification-"
+
     struct Source: Identifiable, Sendable {
         let name: String
         let symbol: String
@@ -200,18 +215,20 @@ enum NotificationPeek {
     /// for the sign-in you're doing, so on a call it shows anyway, with its text off the screen.
     static func notice(for entry: NotificationReader.Entry, appName: String, hideText: Bool,
                        findsCodes: Bool = false, isQuiet: Bool = false) -> LiveNotice {
-        let code = findsCodes ? OneTimeCode.find(in: [entry.title, entry.subtitle, entry.body].joined(separator: " ")) : nil
+        let code = findsCodes ? OneTimeCode.find(title: entry.title, subtitle: entry.subtitle, body: entry.body) : nil
         let hideText = hideText || (code != nil && isQuiet)
         let source = source(for: entry.bundleID)
-        let sender = entry.title.isEmpty ? appName : entry.title
+        // Some apps put the code in the title, so with the text hidden the sender goes too.
+        let sender = entry.title.isEmpty || (code != nil && hideText) ? appName : entry.title
         var line = [entry.subtitle, entry.body].filter { !$0.isEmpty }.joined(separator: " · ")
         // A bell doesn't say which app it was, so the text does.
         if source == nil, !line.isEmpty { line = "\(appName): \(line)" }
-        let detail = hideText || line.isEmpty ? (sender == appName ? nil : appName) : String(line.prefix(160))
+        let detail = code != nil && hideText ? "Login code"
+            : hideText || line.isEmpty ? (sender == appName ? nil : appName) : String(line.prefix(160))
         var actions = [NoticeAction(title: "Open", kind: .openApp(bundleID: entry.bundleID))]
         if let code { actions.insert(NoticeAction(title: "Copy Code", kind: .copyCode(code)), at: 0) }
         // Keyed by who it's from, so a second message from them updates the first, and anyone else's waits its turn.
-        return LiveNotice(key: "notification-\(entry.bundleID)-\(sender)", symbol: source?.symbol ?? "bell.badge.fill",
+        return LiveNotice(key: "\(keyPrefix)\(entry.bundleID)-\(sender)", symbol: source?.symbol ?? "bell.badge.fill",
                           tint: source?.tint ?? .white, text: shortened(sender, to: 16), detail: detail, actions: actions,
                           timing: code == nil ? .waits : .always, recall: .name(appName))
     }
