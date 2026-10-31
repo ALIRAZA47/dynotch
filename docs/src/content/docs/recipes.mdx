@@ -17,6 +17,7 @@ Any command that runs for 30 seconds or more then ends with a **Done** or **Fail
 |---|---|---|
 | `DYNOTCH_LONG_COMMAND` | The threshold, in seconds | `30` |
 | `DYNOTCH_LONG_COMMAND_DETAIL` | Set it to `full` to show the command's arguments too | Off |
+| `DYNOTCH_CI_AFTER_PUSH` | Set it to `0` to stop [following CI](/ci/#after-every-push) after a `git push` | On |
 
 The notice names the command alone, `make` say, since its arguments can hold tokens, and the notch is on screen when you share it.
 

@@ -123,6 +123,9 @@ final class EnergyCoordinator: ObservableObject {
         return poll
     }
 
+    /// What's being polled right now.
+    var scheduled: [Cadence] { polls.map(\.cadence) }
+
     /// How long between polls right now, with someone looking.
     func interval(for cadence: Cadence) -> TimeInterval {
         conditions.lowPowerMode ? cadence.lowPower : conditions.onBattery ? cadence.onBattery : cadence.every

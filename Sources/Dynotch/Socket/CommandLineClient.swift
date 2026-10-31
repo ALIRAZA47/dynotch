@@ -121,13 +121,21 @@ enum CommandLineClient {
             if let detail = script["detail"] as? String { line += " · \(detail)" }
             lines.append(line)
         }
+        let ci = report["ci"] as? [String: Any]
+        for watch in ci?["watching"] as? [[String: Any]] ?? [] {
+            var line = "CI: \(watch["repository"] as? String ?? "") on \(watch["branch"] as? String ?? "")"
+            if let workflow = watch["workflow"] as? String { line += " · \(workflow)" }
+            lines.append(line)
+        }
+        if let reviews = ci?["reviews"] as? Int, reviews > 0 { lines.append("Reviews waiting: \(reviews)") }
         return lines.joined(separator: "\n") + "\n"
     }
 
     private static func wrongUse(_ io: IO) -> Int32 {
         io.error("Usage: dynotch progress NAME [PERCENT|done|fail|clear] [--detail TEXT] [--symbol SF_SYMBOL] [--tint COLOR]\n"
             + "                        [--quiet-after SECONDS] [--button TITLE --url https://...]\n"
-            + "       dynotch status [--json]\n")
+            + "       dynotch status [--json]\n"
+            + "       dynotch ci [--repo OWNER/NAME] [--branch NAME] [--sha SHA] [--stop]\n")
         return usage
     }
 }

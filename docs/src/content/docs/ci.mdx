@@ -1,0 +1,93 @@
+---
+title: CI
+description: GitHub Actions on your branch in the closed notch, through to pass or fail.
+---
+
+While GitHub Actions runs on your branch, the closed notch shows the workflow's name on the left and how it's going on the right. When it's over, a notice says **Passed** or **Failed**, with a button that opens the run. The glance also counts the pull requests waiting for your review.
+
+## What it needs
+
+GitHub's [`gh` command](https://cli.github.com), signed in. Dynotch stores no token: it uses your own `gh` login, and only asks it to read.
+
+```bash
+brew install gh
+gh auth login
+```
+
+Dynotch looks for `gh` in `/opt/homebrew/bin`, `/usr/local/bin`, `/opt/local/bin`, `/usr/bin` and `/run/current-system/sw/bin`. One installed anywhere else isn't found, and neither is one another account on the Mac could change.
+
+## Following a push
+
+In a repository on GitHub:
+
+```bash
+dynotch ci
+```
+
+It works out the repository, the branch and the head commit from the folder you're in, and says what it's watching. HTTPS and SSH remotes both work, and so do SSH host aliases from `~/.ssh/config`.
+
+| Option | What it does |
+|---|---|
+| `--repo OWNER/NAME` | Another repository |
+| `--branch NAME` | Another branch |
+| `--sha SHA` | Another commit. For a branch that isn't checked out here, it's the newest run's commit unless you say |
+| `--stop` | Stops following, without a notice. `--repo` or `--branch` narrows it to those |
+
+Outside a repository, or with no remote on GitHub, it says so and exits with 1. So it does if Dynotch isn't running.
+
+`dynotch status` lists what's being followed.
+
+## After every push
+
+If you source `notify-long-commands.zsh` from `~/.zshrc`, as in [the recipe](/recipes/#when-a-long-command-finishes), each `git push` that works starts this for you, in the background and without a word, however quick the push was. It sees through wrappers like `sudo`, aliases, and a push at the end of a line like `git commit -m wip && git push`. It leaves out dry runs and deletes, and does nothing without `gh` on your `PATH`.
+
+To leave it out, add this to `~/.zshrc`:
+
+```bash
+export DYNOTCH_CI_AFTER_PUSH=0
+```
+
+## What it shows
+
+The right ear says **Queued**, **Waiting** or **Running**, then how long the run has been going. With several workflows on one push, it says how many are over instead, like **1 of 3**. None of it ticks: it changes when Dynotch looks, every 15 seconds on power, 30 on battery and 60 in Low Power Mode. Nothing looks while [nobody's at the Mac](/energy/), and it catches up when someone is.
+
+The [glance](/glance/) shows the workflow, the branch, how long it's been going and how many runs there are, with **Open** for the run on GitHub.
+
+## How a push ends
+
+A push can start several workflows, and every run for its head commit counts.
+
+| What came of the runs | What the notch says |
+|---|---|
+| One failed, timed out, couldn't start or needs an approval | **Failed**, at once, without waiting for the rest |
+| One was cancelled, and none failed | **Cancelled**, since it neither passed nor failed |
+| All succeeded, leaving out any skipped or neutral | **Passed** |
+| All skipped or neutral | **Skipped** |
+
+The notice has **Open Run** in the glance, and in [Recent](/glance/#recent) once it's gone. During a call it [waits](/live-activities/#quiet), like other notices.
+
+A run takes a few seconds to appear after a push. If none has after two minutes, Dynotch stops without a word, so a repository with no workflows costs nothing.
+
+A new push to the same branch replaces the one being followed, and the older commit's result goes unsaid. Another branch or repository is followed alongside it, up to four at once. Nothing is remembered if Dynotch quits.
+
+## When something's in the way
+
+| What's wrong | What happens |
+|---|---|
+| `gh` isn't installed | One notice, **Needs gh**, and it stops |
+| `gh` isn't signed in | One notice, **Signed out**, and it stops |
+| `gh` can't see the repository | One notice, **Not found**, and it stops following that one |
+| The network or GitHub is down | It keeps trying for a while, then says **No answer** |
+| A run is still going after six hours | It says **Still running**, and lets go |
+
+## Reviews waiting
+
+Once you've used `dynotch ci`, Dynotch also counts the open pull requests waiting for your review, every 15 minutes, 30 on battery and 60 in Low Power Mode. The count is a chip in the glance, **3 reviews**, which opens [your review requests](https://github.com/pulls/review-requested) on GitHub. Dynotch calls `gh` by itself only once you've asked for CI.
+
+## Turning it off
+
+Switch off **CI runs** in <Path to="Settings → Live Activities" />. That stops whatever is being followed and the count of reviews, and `dynotch ci` then says it's off.
+
+## What Dynotch runs
+
+Dynotch may hold [Full Disk Access](/permissions/#full-disk-access), and a program it starts would hold it too. So all it ever runs for this is `gh`, from the places above, and never anything a command names. A request can only name a repository, a branch and a commit, and each is checked first. `gh` gets an environment of its own, with `HOME` and a fixed `PATH`, so a `GH_TOKEN` in your shell doesn't reach it. **Open Run** only ever opens https links on `github.com`.
