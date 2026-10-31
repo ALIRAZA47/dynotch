@@ -1,6 +1,6 @@
 # Dynotch docs
 
-The site at <https://aliraza47.github.io/dynotch/>, built with [Astro](https://astro.build) and
+The site at <https://dynotch.alirazakhan.me/>, built with [Astro](https://astro.build) and
 deployed to GitHub Pages by `.github/workflows/docs.yml`. Its design lives on the
 [Dynotch Docs canvas](https://claude.ai/artifact/VvtyYe8hJrocCB245R4ds3).
 
@@ -8,7 +8,7 @@ It needs Node 22.23.4 or later (`.nvmrc` says which one CI uses).
 
 ```bash
 npm install
-npm run dev       # http://localhost:4321/dynotch/
+npm run dev       # http://localhost:4321/
 npm run build     # the site and its search index, in dist/
 npm run preview   # the built site, which is the only place search works
 ```

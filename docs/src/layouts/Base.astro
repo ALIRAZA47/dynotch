@@ -44,7 +44,7 @@ const socialImage = new URL(`${base}social.png`, Astro.site);
     <meta property="og:url" content={canonical} />
     <meta property="og:image" content={socialImage} />
     <meta name="twitter:card" content="summary_large_image" />
-    <script is:inline>
+    <script is:inline define:vars={{ onHome: !current }}>
       // Before the first paint, so a light page never flashes dark.
       (() => {
         let theme = null;
@@ -54,7 +54,7 @@ const socialImage = new URL(`${base}social.png`, Astro.site);
         document.documentElement.dataset.theme =
           theme ?? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
         // On a phone the browser's bar takes this color. The home page starts on the black notch.
-        const light = document.documentElement.dataset.theme === 'light' && location.pathname.split('/').length > 3;
+        const light = document.documentElement.dataset.theme === 'light' && !onHome;
         document.querySelector('meta[name="theme-color"]').content = light ? '#f4f2fa' : '#000000';
       })();
     </script>
