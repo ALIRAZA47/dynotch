@@ -13,6 +13,8 @@ enum CaptureSelfTest {
     static func run(into folder: URL) -> Bool {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         failures = []
+        // A test shouldn't click at whoever is sitting at the Mac.
+        AppSettings.shared.shutterSound = false
         let controller = CaptureController.shared
         controller.placesOverlaysOffScreen = true
         controller.pasteboard = NSPasteboard(name: NSPasteboard.Name("app.dynotch.capture-self-test"))

@@ -57,6 +57,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        // `--capture-self-test <folder>` drives the capture tools with synthesized events, writes what
+        // it made there, and quits. Like a snapshot it starts no services, so it never reads the real
+        // Tray or the notes.
+        if let index = arguments.firstIndex(of: "--capture-self-test") {
+            let folder = arguments.count > index + 1 ? arguments[index + 1] : FileManager.default.temporaryDirectory.path
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    let passed = CaptureSelfTest.run(into: URL(fileURLWithPath: folder))
+                    SnapshotRenderer.discardScratchDefaults()
+                    exit(passed ? 0 : 1)
+                }
+            }
+            return
+        }
 
         NSApp.mainMenu = Self.makeMainMenu()
         // Paces every service's polls, so it knows from the start whether anyone's looking.
@@ -130,19 +144,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // `--capture-test` opens the capture editor over a made-up picture of each display, so the
-        // tools can be tried without Screen Recording access. `--capture-self-test <folder>` drives
-        // them with synthesized events, writes what it made there, and quits.
+        // tools can be tried without Screen Recording access.
         if arguments.contains("--capture-test") {
             CaptureController.shared.beginTest()
-        } else if let index = arguments.firstIndex(of: "--capture-self-test") {
-            let folder = arguments.count > index + 1 ? arguments[index + 1] : FileManager.default.temporaryDirectory.path
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    let passed = CaptureSelfTest.run(into: URL(fileURLWithPath: folder))
-                    SnapshotRenderer.discardScratchDefaults()
-                    exit(passed ? 0 : 1)
-                }
-            }
         }
 
         // On the next turn, once the notch has settled: one opened before that would close again.
