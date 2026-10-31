@@ -127,6 +127,11 @@ final class MicMonitor: ObservableObject {
             if wasMuted, previous != kAudioObjectUnknown, previous != input {
                 apply(muted: false, to: previous)
                 apply(muted: true, to: input)
+                // Otherwise the badge just goes away, and you'd think you were still muted.
+                if !currentlyMuted() {
+                    LiveActivityCenter.shared.post(LiveNotice(key: "mic", symbol: "mic.fill", tint: .orange, text: "",
+                                                              detail: "This microphone can't be muted."), for: 3)
+                }
             }
             let watched = [Self.muteAddress, Self.deviceRunningAddress]
                 + Self.volumeElements(of: input).map(Self.volumeAddress(element:))
@@ -215,6 +220,11 @@ final class MicMonitor: ObservableObject {
             return (Self.readUInt32(input, Self.muteAddress) ?? 0) != 0
         }
         guard let uid = Self.uid(of: input), savedVolumes[uid] != nil else { return false }
+        // Nothing to turn down means nothing was muted, whatever was saved.
+        if Self.volumeElements(of: input).isEmpty {
+            savedVolumes[uid] = nil
+            return false
+        }
         // Turned back up somewhere else, which counts as unmuting.
         if let volume = Self.volume(of: input), volume > 0.001 {
             savedVolumes[uid] = nil
