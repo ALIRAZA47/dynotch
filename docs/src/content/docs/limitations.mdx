@@ -33,7 +33,11 @@ Liquid Glass is on macOS 26 and later. On earlier versions, the open notch is bl
 
 ## The first Copy Text can take a while
 
-The first time Dynotch reads text, macOS prepares its models for it, which took up to half a minute on a busy Mac. The capture closes at once, and the notice comes when that's done. After that, a read takes a fraction of a second.
+The first time Dynotch reads text, macOS prepares its models for it, which took up to half a minute on a busy Mac. The capture closes at once, and the notch says it's reading until that's done. After that, a read takes a fraction of a second.
+
+## Copy Text can miss small text
+
+In testing on a very busy Mac, about one first read in twelve went wrong: macOS's text reader came back with only the biggest text on the page, and kept doing that. It looks like it's in how macOS stores the models it prepared, not in Dynotch, and what sets it off isn't known. If Copy Text only finds a page's title, quit Dynotch, delete its `com.apple.e5rt.e5bundlecache` folder from `~/Library/Caches`, and open Dynotch again.
 
 ## A cut-out is in sRGB
 
