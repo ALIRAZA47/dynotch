@@ -142,11 +142,15 @@ drives them with synthesized events off screen, prints a line per check and leav
 ## Scripting
 
 Dynotch answers `dynotch://` links, and `scripts/dynotch` wraps them for the shell.
-The app carries a copy in `Dynotch.app/Contents/Resources/dynotch`; link it onto your
-`PATH` to use it anywhere:
+The app carries a copy in `Dynotch.app/Contents/Resources/dynotch`.
+**Settings → General → Terminal setup** links it onto your `PATH`, adds the long-command hook to
+`~/.zshrc`, and merges the Claude Code hooks and status line into `~/.claude/settings.json`. It
+shows each change first, leaves everything else in those files as it is, and can undo what it did.
+To link the command by hand:
 
 ```bash
-sudo ln -s /Applications/Dynotch.app/Contents/Resources/dynotch /usr/local/bin/dynotch
+mkdir -p ~/.local/bin
+ln -s /Applications/Dynotch.app/Contents/Resources/dynotch ~/.local/bin/dynotch
 ```
 
 | Command | What it does |
@@ -159,13 +163,20 @@ sudo ln -s /Applications/Dynotch.app/Contents/Resources/dynotch /usr/local/bin/d
 | `dynotch tray --show report.pdf` | Adds files to the Tray, and opens it with `--show`. The items point at the files where they are, never copies; nothing under `~/Library` is taken; and the notch says what a script added. |
 | `dynotch profile Work` | Switches to a saved profile by name. The notch says which, or that there's no such profile. |
 | `dynotch capture` | Freezes the screen to capture a region, like ⌃⌥S. |
+| `dynotch progress deploy 40 --detail Uploading` | Draws a thin line along the foot of the closed notch, with the percentage in the glance. Each name is its own, so two scripts don't overwrite each other. `done` and `fail` end it with a notice, `clear` ends it quietly, and a script that goes quiet for two minutes (`--quiet-after` changes that) is taken down and says so. |
+| `dynotch status --json` | Reads back what the notch is showing, and each script's progress. Only ever the kind of notice, never what it says. |
+
+`progress` and `status` go over a Unix domain socket, since a link can't answer back. It sits in a
+folder only your user can open, never on a network port, and Dynotch checks who's on the other end
+of each connection. The socket can tell the notch something or ask what it's showing. It can't run
+anything. If Dynotch isn't running, these two say so and exit with 1.
 
 Other apps can open the same links, for example
 `dynotch://notify?text=Hello&tint=orange`, `dynotch://timer/start`, `dynotch://profile?name=Work` or
 `dynotch://capture`.
 
-**When a long command finishes.** Source `notify-long-commands.zsh` (it sits next to
-`dynotch` in the app) from `~/.zshrc`. Any command that runs for 30 seconds or more
+**When a long command finishes.** Terminal setup does this, or source
+`notify-long-commands.zsh` (it sits next to `dynotch` in the app) from `~/.zshrc`. Any command that runs for 30 seconds or more
 then ends with a "Done" or "Failed" notice. `DYNOTCH_LONG_COMMAND` changes the threshold.
 The notice names the command alone, `make` say, since its arguments can hold tokens;
 `DYNOTCH_LONG_COMMAND_DETAIL=full` includes them.
