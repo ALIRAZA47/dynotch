@@ -31,6 +31,14 @@ Its location and layout have changed between macOS versions before. If they chan
 
 Liquid Glass is on macOS 26 and later. On earlier versions, the open notch is black.
 
+## The first Copy Text can take a while
+
+The first time Dynotch reads text, macOS prepares its models for it, which took up to half a minute on a busy Mac. The capture closes at once, and the notice comes when that's done. After that, a read takes a fraction of a second.
+
+## A cut-out is in sRGB
+
+Vision hands back a cut-out's subject in sRGB, whatever the photo was in. Colors that sRGB can't hold, which a phone's photos can have, come out a little less vivid.
+
 ## Not notarized
 
 Dynotch isn't notarized by Apple, so the first launch needs [one extra step](/install/#get-past-the-first-launch).

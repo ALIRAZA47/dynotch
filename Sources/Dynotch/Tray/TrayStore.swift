@@ -119,6 +119,15 @@ final class TrayStore: ObservableObject {
         add([url])
     }
 
+    /// Takes away what a drop saved in the Tray's folder once it's been used, so that a file there
+    /// always has an item. What came from anywhere else, or has an item of its own, stays.
+    func removeLeftovers(of urls: [URL]) {
+        let kept = Set(self.urls.map(\.standardizedFileURL))
+        for url in urls where isInTrayFolder(url) && !kept.contains(url.standardizedFileURL) {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
     func relocate(_ item: Item, to url: URL) {
         guard let index = items.firstIndex(where: { $0.id == item.id }) else { return }
         items[index].url = url
@@ -227,9 +236,37 @@ final class ThumbnailCache: ObservableObject {
     }
 }
 
+/// Whether a drag holds an image, looked at once per drag. The drag pasteboard is read on every drag
+/// event, and its items come from the app the drag started in.
+struct DragImageCheck {
+    private var changeCount: Int?
+    private var holdsImages = false
+
+    mutating func holdsImages(on pasteboard: NSPasteboard, look: (NSPasteboard) -> Bool = TrayDrop.holdsImages) -> Bool {
+        if pasteboard.changeCount != changeCount {
+            changeCount = pasteboard.changeCount
+            holdsImages = look(pasteboard)
+        }
+        return holdsImages
+    }
+}
+
 /// Turns whatever was dropped on the notch into file URLs.
 enum TrayDrop {
     static let types: [UTType] = [.fileURL, .image, .url, .plainText]
+
+    /// Whether an image is among what's on the pasteboard, going by each item as `urls` will when it's
+    /// dropped: a file by its type, and anything else by its data. In that order, as a file can carry
+    /// a picture of its icon, which doesn't make a PDF an image. Finder's file URLs are reference URLs,
+    /// which have no extension to go by until they're turned into paths.
+    static func holdsImages(_ pasteboard: NSPasteboard) -> Bool {
+        (pasteboard.pasteboardItems ?? []).contains { item in
+            guard let link = item.string(forType: .fileURL) else {
+                return item.types.contains(.png) || item.types.contains(.tiff)
+            }
+            return (URL(string: link) as NSURL?)?.filePathURL.map(FileActions.isImage) == true
+        }
+    }
 
     @MainActor
     static func urls(from providers: [NSItemProvider]) async -> [URL] {

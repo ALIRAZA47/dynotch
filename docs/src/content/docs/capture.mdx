@@ -44,6 +44,7 @@ There are eight colors and a width from 1 to 16 points, which the text's size fo
 | Action | Key | What it does |
 |---|---|---|
 | Copy | <Keys k="⌘C" /> | Puts a PNG on the clipboard |
+| Copy Text | <Keys k="O" /> | Puts the text in the selection on the clipboard |
 | Save | <Keys k="⌘S" /> | Writes a PNG into the folder the Screenshot app saves to, named as macOS names its own, so it lands in the Tray too |
 | Add to Tray | | Does that and opens the Tray |
 | Pin | | Floats the capture above every window |
@@ -51,6 +52,16 @@ There are eight colors and a width from 1 to 16 points, which the text's size fo
 | | <Keys k="Esc" /> | Cancels |
 
 The result is drawn at the display's scale, pixel for pixel what was on screen.
+
+## Copying text
+
+<Keys k="O" /> closes the capture and reads the selection, and the notch says how many lines it copied. It reads the capture as you marked it up, so what a Blur mark hides stays out of the text too. If it finds no text, the notch says so and the clipboard stays as it was.
+
+### QR codes
+
+Copy Text reads QR, Micro QR, Aztec and Data Matrix codes as well, and copies what they hold.
+
+A web link also gets a notice saying where it goes, with an **Open** button in the [glance](/glance/). It stays in the glance's [Recent](/glance/#recent) list if you don't get to it in time. Dynotch never opens a code by itself, as anyone can stick one over another. Only a plain `http` or `https` link gets the button, and one with a name or password in it doesn't, as `https://paypal.com@evil.example/` shows one domain and goes to another. Everything else is only ever text.
 
 ## Pinned captures
 

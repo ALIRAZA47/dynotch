@@ -63,12 +63,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Tray or the notes.
         if let index = arguments.firstIndex(of: "--capture-self-test") {
             let folder = arguments.count > index + 1 ? arguments[index + 1] : FileManager.default.temporaryDirectory.path
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    let passed = CaptureSelfTest.run(into: URL(fileURLWithPath: folder))
-                    SnapshotRenderer.discardScratchDefaults()
-                    exit(passed ? 0 : 1)
-                }
+            Task { @MainActor in
+                let passed = await CaptureSelfTest.run(into: URL(fileURLWithPath: folder))
+                SnapshotRenderer.discardScratchDefaults()
+                exit(passed ? 0 : 1)
             }
             return
         }

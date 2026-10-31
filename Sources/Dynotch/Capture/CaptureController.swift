@@ -46,6 +46,8 @@ final class CaptureController: ObservableObject {
     var pasteboard = NSPasteboard.dynotch
     /// Where Save puts the file instead of the Screenshot app's folder, for tests.
     var saveFolderOverride: URL?
+    /// The last Copy Text, which goes on after the overlay has closed. A test waits for it.
+    private(set) var reading: Task<Void, Never>?
 
     private static let shutterPath = "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Grab.aif"
 
@@ -207,7 +209,8 @@ final class CaptureController: ObservableObject {
             }
         }
         tearDown()
-        if AppSettings.shared.shutterSound { playShutter() }
+        // Copy Text takes no picture, so there's nothing for the shutter to mark.
+        if finish != .copyText, AppSettings.shared.shutterSound { playShutter() }
         let size = "\(Int(output.pointSize.width)) × \(Int(output.pointSize.height))"
         switch finish {
         case .copy:
@@ -235,6 +238,11 @@ final class CaptureController: ObservableObject {
             NotchManager.shared.open(tab: .tray)
         case .pin:
             PinnedCaptureWindow.pin(output, near: place, isParked: placesOverlaysOffScreen)
+        case .copyText:
+            // Read from what was rendered, so what a Blur mark hides stays out of the text too. The
+            // overlay has gone by now, which makes it feel instant, and the notice follows.
+            let pasteboard = pasteboard
+            reading = Task { ImageActions.deliver(await ImageReader.read(output.image), to: pasteboard) }
         }
     }
 

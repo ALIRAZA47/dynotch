@@ -120,7 +120,11 @@ final class NotchViewModel: ObservableObject {
     /// What's typed in the Clipboard side's search field.
     @Published var clipSearch = ""
     /// Files are being dragged toward the notch; the tray shows its drop zones.
-    @Published var isDraggingFiles = false
+    @Published var isDraggingFiles = false {
+        didSet { if !isDraggingFiles { isDraggingImages = false } }
+    }
+    /// An image is among them, so the tray offers what can be done with one. It ends with the drag.
+    @Published var isDraggingImages = false
     @Published private(set) var activity: ClosedActivity
     /// A second activity, shown as a glyph at the end of the right ear.
     @Published private(set) var secondary: CompactActivity?
@@ -356,7 +360,7 @@ final class NotchViewModel: ObservableObject {
 
     func stage(phase: Phase, activity: ClosedActivity, secondary: CompactActivity? = nil, tab: NotchTab = .home,
                traySide: TraySide = .files, clipSearch: String = "",
-               draggingFiles: Bool = false, command: String? = nil, showingRecent: Bool = false) {
+               draggingFiles: Bool = false, draggingImages: Bool = false, command: String? = nil, showingRecent: Bool = false) {
         self.phase = phase
         isShowingRecent = showingRecent
         self.activity = activity
@@ -365,6 +369,7 @@ final class NotchViewModel: ObservableObject {
         self.traySide = traySide
         self.clipSearch = clipSearch
         isDraggingFiles = draggingFiles
+        isDraggingImages = draggingImages
         isCommandMode = command != nil
         commandQuery = command ?? ""
     }

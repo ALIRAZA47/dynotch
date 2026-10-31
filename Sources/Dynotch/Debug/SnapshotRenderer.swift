@@ -52,6 +52,8 @@ enum SnapshotRenderer {
         /// Typed into the Clipboard side's search field.
         var clipSearch = ""
         var draggingFiles = false
+        /// An image is among them, so the Tray offers Copy Text and Cut Out too.
+        var draggingImages = false
         /// One drop target has the files over it. See `snapshotDrop`.
         var targetsDrop = false
         var hasTrack = true
@@ -153,6 +155,20 @@ enum SnapshotRenderer {
         let scriptButton = LiveNotice(key: "command", symbol: "checkmark.circle.fill", tint: .green, text: "Deployed",
                                       detail: "api · 2m 14s", fromScript: true,
                                       actions: [NoticeAction(title: "Open", kind: .openURL(URL(string: "https://example.com")!))])
+        // The real notices, from the code that makes them, kept rather than shown.
+        var read: [LiveNotice] = []
+        let scratchBoard = NSPasteboard(name: .init("app.dynotch.snapshot"))
+        ImageActions.deliver(ImageReader.Reading(lines: ["Quarterly notes", "Ship it on Friday"]), to: scratchBoard) { notice, _ in read.append(notice) }
+        ImageActions.deliver(ImageReader.Reading(), to: scratchBoard) { notice, _ in read.append(notice) }
+        ImageActions.deliver(ImageReader.Reading(codes: ["https://github.com/ALIRAZA47/dynotch/releases/tag/v1.5.0"]), to: scratchBoard) { notice, _ in read.append(notice) }
+        ImageActions.deliver(ImageReader.Reading(codes: ["https://paypal.com.accounts.verify.signin.evil.example/account/login"]), to: scratchBoard) { notice, _ in read.append(notice) }
+        scratchBoard.releaseGlobally()
+        let (copiedText, noText, qrCode, qrCodeLongHost) = (read[0], read[1], read[2], read[3])
+        let cutOut = LiveNotice(key: "cutout", symbol: "scissors", tint: .white, text: "Cut out", detail: "Keynote draft (cut out).png",
+                                actions: [NoticeAction(title: "Open", kind: .openFile(keynote)), NoticeAction(title: "Show", kind: .reveal(keynote))],
+                                recall: .whole)
+        // As narrow as a virtual notch can be set, which is the least room a glance ever has.
+        let narrowNotch = NotchGeometry(screenFrame: virtualNotch.screenFrame, closedSize: CGSize(width: 140, height: 24), hasHardwareNotch: false)
         let digest = NotificationPeek.digest(of: ["Slack": 8, "Mail": 3, "Messages": 1], during: "Work")
         let held = NoticeQueue.summary(of: [peek, downloaded, code, scriptNotice])
         let doNotDisturb = FocusMode(id: "dnd", name: "Do Not Disturb", symbol: "moon.fill", tint: .indigo)
@@ -175,6 +191,7 @@ enum SnapshotRenderer {
             Scene(name: "11-open-nook-empty", phase: .open, tab: .home, hasTrack: false),
             Scene(name: "12-open-tray", phase: .open, tab: .tray),
             Scene(name: "13-open-tray-dropping", phase: .open, tab: .tray, draggingFiles: true),
+            Scene(name: "13-open-tray-dropping-image", phase: .open, tab: .tray, draggingFiles: true, draggingImages: true),
             Scene(name: "14-open-focus", phase: .open, tab: .focus),
             Scene(name: "14-open-focus-notes", phase: .open, tab: .focus, focusShowsNotes: true),
             Scene(name: "15-open-control", phase: .open, tab: .stats),
@@ -298,6 +315,23 @@ enum SnapshotRenderer {
             Scene(name: "glance-13-update", phase: .glance, activity: .notice(update)),
             Scene(name: "glance-14-join", phase: .glance, activity: .notice(meeting)),
             Scene(name: "glance-15-script-button", phase: .glance, activity: .notice(scriptButton)),
+            // Reading an image and cutting one out. A long host keeps the end that says whose it is.
+            Scene(name: "glance-19-qr-code", phase: .glance, activity: .notice(qrCode)),
+            Scene(name: "glance-20-qr-code-long-host", phase: .glance, activity: .notice(qrCodeLongHost)),
+            Scene(name: "glance-21-cut-out", phase: .glance, activity: .notice(cutOut)),
+            Scene(name: "glance-22-recent-qr-code", phase: .glance, showingRecent: true, setUp: {
+                LiveActivityCenter.shared.loadSample(recents: [], unseen: 0)
+                LiveActivityCenter.shared.remember(qrCodeLongHost)
+                LiveActivityCenter.shared.remember(qrCode)
+                LiveActivityCenter.shared.remember(cutOut)
+            }),
+            Scene(name: "glance-23-recent-qr-code-narrow", phase: .glance, geometry: narrowNotch, showingRecent: true, setUp: {
+                LiveActivityCenter.shared.loadSample(recents: [], unseen: 0)
+                LiveActivityCenter.shared.remember(qrCodeLongHost)
+            }),
+            Scene(name: "85-closed-copied-text", phase: .closed, activity: .notice(copiedText)),
+            Scene(name: "86-closed-no-text", phase: .closed, activity: .notice(noText)),
+            Scene(name: "87-closed-qr-code", phase: .closed, activity: .notice(qrCodeLongHost)),
             // The recent list, and the two ways in.
             Scene(name: "glance-16-recent", phase: .glance, showingRecent: true, setUp: { loadRecents() }),
             Scene(name: "glance-17-today-recent-awake", phase: .glance, hasTrack: false, setUp: {
@@ -358,7 +392,7 @@ enum SnapshotRenderer {
             let viewModel = NotchViewModel(geometry: sceneGeometry)
             viewModel.stage(phase: scene.phase, activity: scene.activity, secondary: scene.secondary, tab: scene.tab,
                             traySide: scene.traySide, clipSearch: scene.clipSearch, draggingFiles: scene.draggingFiles,
-                            command: scene.command, showingRecent: scene.showingRecent)
+                            draggingImages: scene.draggingImages, command: scene.command, showingRecent: scene.showingRecent)
             // The command field can make the notch taller than the setting.
             let height = max(size.height, viewModel.metrics.height + 40)
             let content = ZStack(alignment: .top) {
@@ -1005,6 +1039,8 @@ enum SnapshotRenderer {
                 }),
                 Scene(name: "size-\(label)-3-tray", phase: .open, tab: .tray, openSize: size),
                 Scene(name: "size-\(label)-4-tray-dropping", phase: .open, tab: .tray, draggingFiles: true, openSize: size),
+                Scene(name: "size-\(label)-4-tray-dropping-image", phase: .open, tab: .tray, draggingFiles: true,
+                      draggingImages: true, openSize: size),
                 Scene(name: "size-\(label)-5-focus", phase: .open, tab: .focus, openSize: size),
                 Scene(name: "size-\(label)-6-focus-notes", phase: .open, tab: .focus, focusShowsNotes: true, openSize: size),
                 Scene(name: "size-\(label)-7-control", phase: .open, tab: .stats, openSize: size),

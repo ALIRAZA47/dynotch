@@ -8,7 +8,7 @@ import SwiftUI
 final class CaptureEditor: ObservableObject {
     /// What becomes of the finished capture.
     enum Finish: Equatable {
-        case copy, save, copyAndSave, addToTray, pin
+        case copy, save, copyAndSave, addToTray, pin, copyText
 
         init(_ action: CaptureAction) {
             switch action {
@@ -433,6 +433,10 @@ final class CaptureEditor: ObservableObject {
             tool = nil
             return true
         }
+        if key == "o" {
+            finish(.copyText)
+            return true
+        }
         if let picked = AnnotationTool(rawValue: key) {
             tool = picked
             return true
@@ -697,7 +701,7 @@ private struct CaptureGlass<S: InsettableShape>: View {
 /// size so the editor can place it and know where it is. It floats on glass, its tools pieces of
 /// the notch's glass, the one in hand a jewel of the accent.
 struct CaptureToolbar: View {
-    static let size = CGSize(width: 596, height: 84)
+    static let size = CGSize(width: 628, height: 84)
 
     @ObservedObject var editor: CaptureEditor
     @ObservedObject var document: AnnotationDocument
@@ -735,6 +739,7 @@ struct CaptureToolbar: View {
                 ToolbarButton(symbol: "pin", title: "Pin", editor: editor) { editor.finish(.pin) }
                 ToolbarButton(symbol: "tray.and.arrow.down", title: "Add to Tray", editor: editor) { editor.finish(.addToTray) }
                 ToolbarButton(symbol: "square.and.arrow.down", title: "Save", key: "⌘S", editor: editor) { editor.finish(.save) }
+                ToolbarButton(symbol: "text.viewfinder", title: "Copy Text", key: "O", editor: editor) { editor.finish(.copyText) }
                 ToolbarButton(symbol: "doc.on.clipboard", title: "Copy", key: "⌘C", editor: editor) { editor.finish(.copy) }
                 ToolbarButton(symbol: "xmark", title: "Close", key: "Esc", editor: editor) { editor.cancel() }
             }

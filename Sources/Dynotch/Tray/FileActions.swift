@@ -45,7 +45,7 @@ enum FileActions {
         service.perform(withItems: urls)
     }
 
-    static func isImage(_ url: URL) -> Bool {
+    nonisolated static func isImage(_ url: URL) -> Bool {
         UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true
     }
 
@@ -163,8 +163,8 @@ enum FileActions {
     }
 
     /// Next to the source when that folder is writable, otherwise the tray's own folder.
-    private static func outputFolder(near url: URL) -> URL {
+    static func outputFolder(near url: URL, tray: TrayStore? = nil) -> URL {
         let folder = url.deletingLastPathComponent()
-        return FileManager.default.isWritableFile(atPath: folder.path) ? folder : TrayStore.shared.folder
+        return FileManager.default.isWritableFile(atPath: folder.path) ? folder : (tray ?? .shared).folder
     }
 }

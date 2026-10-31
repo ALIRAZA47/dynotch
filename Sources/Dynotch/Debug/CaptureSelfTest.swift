@@ -4,14 +4,15 @@ import SwiftUI
 /// `Dynotch --capture-self-test <folder>` drives the capture editor with synthesized events over a
 /// made-up display parked off screen: selects, moves and resizes a region, draws with every tool,
 /// types a text mark, undoes and redoes from the keyboard and the toolbar, then copies to a
-/// pasteboard of its own, saves into the folder and pins. On a display that lists its windows it
-/// hovers them and clicks them. It prints a line per check and leaves the finished capture in the
-/// folder.
+/// pasteboard of its own, saves into the folder, pins and reads the text. On a display that lists
+/// its windows it hovers them and clicks them. It prints a line per check and leaves the finished
+/// capture in the folder.
 @MainActor
 enum CaptureSelfTest {
     private static var failures: [String] = []
 
-    static func run(into folder: URL) -> Bool {
+    /// Async so it can wait for Copy Text's reading, rather than guess how long Vision takes.
+    static func run(into folder: URL) async -> Bool {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         failures = []
         // A test shouldn't click at whoever is sitting at the Mac.
@@ -176,6 +177,7 @@ enum CaptureSelfTest {
         key("\u{1b}", controller.editor!, keyCode: 53)
         check(!controller.isActive, "Esc cancels the capture")
         checkWindows(controller)
+        await checkCopyText(on: display)
         return finish()
     }
 
@@ -276,6 +278,66 @@ enum CaptureSelfTest {
         settle(0.2)
         check(stacked() == [ours[0], ours[1]], "and follows a window to the front")
         controller.cancel()
+    }
+
+    /// Copy Text, from O and from the button, over the made-up page of text. What's read goes on the
+    /// test's pasteboard, and a Blur mark keeps what's under it out of the text too.
+    private static func checkCopyText(on display: CaptureDisplay) async {
+        let controller = CaptureController.shared
+        let page = (from: CGPoint(x: 170, y: 225), to: CGPoint(x: 740, y: 405))
+        controller.pasteboard.clearContents()
+
+        guard let editor = openEditor(on: display, selecting: page) else { return }
+        if let close = editor.controlFrames["Close"], let toolbar = editor.toolbarFrame(on: display.id) {
+            check(close.maxX <= toolbar.maxX - 8, "the toolbar fits its buttons (Close ends at \(close.maxX), the toolbar at \(toolbar.maxX))")
+        } else {
+            check(false, "the toolbar reported where its last button is")
+        }
+        key("b", editor)
+        drag(controller.overlays[0], from: CGPoint(x: 180, y: 314), to: CGPoint(x: 730, y: 340))
+        key("s", editor)
+        key("o", editor)
+        check(!controller.isActive, "O closes the editor at once, before anything's read")
+        await controller.reading?.value
+        var copied = controller.pasteboard.string(forType: .string) ?? ""
+        check(copied.contains("quick brown fox") && copied.contains("Sphinx"), "O copies the text in the selection (\"\(copied)\")")
+        check(!copied.contains("liquor"), "what a Blur mark hides stays out of the text")
+        check(controller.pasteboard.data(forType: .png) == nil, "and only text goes on the pasteboard")
+        check(noticeSays("Copied", detail: "\(copied.split(separator: "\n").count) lines"), "a notice says how many lines")
+
+        guard let second = openEditor(on: display, selecting: page) else { return }
+        press("Copy Text", second, controller.overlays[0])
+        check(!controller.isActive, "the Copy Text button closes the editor")
+        await controller.reading?.value
+        copied = controller.pasteboard.string(forType: .string) ?? ""
+        check(copied.contains("liquor"), "the Copy Text button reads the whole selection (\"\(copied)\")")
+
+        // Nothing but sky.
+        let before = controller.pasteboard.changeCount
+        guard let third = openEditor(on: display, selecting: (CGPoint(x: 900, y: 60), CGPoint(x: 1200, y: 160))) else { return }
+        key("o", third)
+        await controller.reading?.value
+        check(controller.pasteboard.changeCount == before, "with no text found, the pasteboard stays as it was")
+        check(noticeSays("No text found"), "and a notice says so")
+    }
+
+    /// The editor over `display`, with a region dragged out.
+    private static func openEditor(on display: CaptureDisplay, selecting region: (from: CGPoint, to: CGPoint)) -> CaptureEditor? {
+        let controller = CaptureController.shared
+        controller.beginTest(displays: [display])
+        guard let editor = controller.editor, let window = controller.overlays.first else {
+            check(false, "the editor opens")
+            return nil
+        }
+        settle(0.5)
+        drag(window, from: region.from, to: region.to)
+        settle(0.2)
+        return editor
+    }
+
+    private static func noticeSays(_ text: String, detail: String? = nil) -> Bool {
+        guard case .notice(let notice) = LiveActivityCenter.shared.activity else { return false }
+        return notice.text == text && notice.detail == detail
     }
 
     private static func finish() -> Bool {

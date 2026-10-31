@@ -186,6 +186,8 @@ final class NotchWindowController {
         if reach.contains(point) {
             cancelClose()
             setInteractive(true)
+            let images = NotchManager.shared.isDraggingImages
+            if viewModel.isDraggingImages != images { viewModel.isDraggingImages = images }
             if !viewModel.isDraggingFiles { viewModel.isDraggingFiles = true }
             if !viewModel.isOpen {
                 Haptics.tap()

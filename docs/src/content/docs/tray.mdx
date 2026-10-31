@@ -23,6 +23,8 @@ Drag files toward the notch and it opens with four drop zones. Let go on the one
 | Compress | Makes a .zip |
 | Copy to… | Asks for a folder, and copies them there |
 
+With an image in the drag there are two more, **Copy Text** and **Cut Out**. See [Images](#images).
+
 Only files and images open the notch as you drag. With the Tray already open, you can drop links and text on it too, and they become files, as dropped images do. The last tile, which takes whatever room the files leave, adds files from an Open panel.
 
 ## Previewing
@@ -38,10 +40,24 @@ Right-click a file for the full list:
 - Quick Look, Open, Open With and Show in Finder
 - Copy, AirDrop and Share
 - Compress and Extract
+- Copy Text and Cut Out, for images
 - Convert Image to PNG, JPEG or HEIC, and Make Smaller
 - Copy to…, Move to… and Remove
 
 The toolbar above the shelf AirDrops, shares, compresses or clears everything at once.
+
+## Images
+
+Right-click an image for **Copy Text** and **Cut Out**, or drop one on their zones. The zones appear only while the drag holds an image. With other files in the same drag, they use just the images.
+
+| Action | What it does |
+|---|---|
+| Copy Text | Puts the text in the image on the clipboard, as [Capture](/capture/#copying-text) does, QR codes included |
+| Cut Out | Saves just the subject of the image, with transparency around it |
+
+A cut-out is a PNG named `<name> (cut out).png`, beside the original, or in the Tray's folder if that folder can't be written to. It never replaces a file, and the original stays as it was. It lands in the Tray, and a notice names it, with **Open** and **Show** buttons. If nothing stands out in the picture, the notch says **No subject found** and no file is made.
+
+An image dragged out of a browser works too. Its cut-out lands in the Tray, and the copy of the image Dynotch used to read it is removed afterwards.
 
 ## Screenshots
 

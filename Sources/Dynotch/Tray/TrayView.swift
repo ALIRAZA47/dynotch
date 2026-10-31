@@ -383,6 +383,12 @@ private struct TrayItemMenu: View {
             }
         }
         if FileActions.isImage(item.url) {
+            Button("Copy Text") {
+                Task { await ImageActions.copyText(from: [item.url]) }
+            }
+            Button("Cut Out") {
+                Task { await ImageActions.cutOut([item.url]) }
+            }
             Menu("Convert Image") {
                 ForEach(FileActions.ImageFormat.allCases) { format in
                     Button("To \(format.title)") {
@@ -422,8 +428,10 @@ private struct TrayDropZones: View {
     @ObservedObject var viewModel: NotchViewModel
 
     var body: some View {
-        HStack(spacing: 10) {
-            DropZone(title: "Keep in Tray", subtitle: "Stash them for later", symbol: "tray.and.arrow.down",
+        // Six zones still fit the smallest notch, with a little less between them and fewer words.
+        let hasImages = viewModel.isDraggingImages
+        HStack(spacing: hasImages ? 6 : 10) {
+            DropZone(title: "Keep in Tray", subtitle: hasImages ? "Stash for later" : "Stash them for later", symbol: "tray.and.arrow.down",
                      isWide: true, viewModel: viewModel) { urls in
                 TrayStore.shared.add(urls)
             }
@@ -436,6 +444,16 @@ private struct TrayDropZones: View {
             DropZone(title: "Copy to…", subtitle: "Pick a folder", symbol: "folder.badge.plus", viewModel: viewModel) { urls in
                 if let folder = FileActions.chooseFolder(prompt: "Copy Here") {
                     _ = FileActions.transfer(urls, to: folder, move: false)
+                }
+            }
+            if hasImages {
+                DropZone(title: "Copy Text", subtitle: "Read the image", symbol: "text.viewfinder", viewModel: viewModel) { urls in
+                    await ImageActions.copyText(from: urls)
+                    TrayStore.shared.removeLeftovers(of: urls)
+                }
+                DropZone(title: "Cut Out", subtitle: "Lift the subject", symbol: "scissors", viewModel: viewModel) { urls in
+                    await ImageActions.cutOut(urls)
+                    TrayStore.shared.removeLeftovers(of: urls)
                 }
             }
         }
@@ -470,18 +488,22 @@ private struct DropZone: View {
             DropKey(symbol: symbol, side: 38, glyph: .system(size: 17, weight: .semibold), isOnLens: isTargeted)
                 .symbolEffect(.bounce, value: isTargeted)
                 .padding(.bottom, 2)
+            // The narrowest zone holds these with a point or so to spare, and a font that runs a
+            // little wider on another macOS should shrink to fit rather than lose its last letters.
             Text(title)
                 .font(NotchFont.headline)
                 .foregroundStyle(isTargeted ? theme.onAccent : theme.primary)
                 .lineLimit(1)
+                .minimumScaleFactor(0.9)
             if let subtitle {
                 Text(subtitle)
                     .font(NotchFont.caption)
                     .foregroundStyle(isTargeted ? theme.onAccent.opacity(0.8) : theme.secondary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.9)
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 6)
         .frame(maxWidth: isWide ? .infinity : 124, maxHeight: .infinity)
         .background(DropWell(cornerRadius: theme.cardRadius, isTargeted: isTargeted))
         // One layer, so the notch's shadow falls behind the zone rather than from its ink onto its face.
