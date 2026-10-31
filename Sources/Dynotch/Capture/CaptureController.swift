@@ -242,7 +242,7 @@ final class CaptureController: ObservableObject {
             // Read from what was rendered, so what a Blur mark hides stays out of the text too. The
             // overlay has gone by now, which makes it feel instant, and the notice follows.
             let pasteboard = pasteboard
-            reading = Task { ImageActions.deliver(await ImageReader.read(output.image), to: pasteboard) }
+            reading = Task { await ImageActions.copyText(in: output.image, to: pasteboard) }
         }
     }
 

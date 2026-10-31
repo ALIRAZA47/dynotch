@@ -16,25 +16,54 @@ enum ImageActions {
 
     /// Long enough to get the pointer to the notch for the button, which also waits in Recent after this.
     private static let linkSeconds: TimeInterval = 8
+    /// How long work goes on before the notch says so. Most reads are over well before this.
+    private nonisolated static let patience: TimeInterval = 0.7
+    /// A notice that says work's going on, until the one with the result takes its place. Longer than any read.
+    private static let workingSeconds: TimeInterval = 120
 
     static func show(_ notice: LiveNotice, for seconds: TimeInterval) {
         LiveActivityCenter.shared.post(notice, for: seconds)
     }
 
+    /// Runs `work`, and says so in the notch if it takes a moment. The first read after an install can
+    /// take half a minute while macOS prepares its models, and with the overlay gone that would look
+    /// like nothing happened. `notice` has the key of the one that follows, which takes its place.
+    static func saying<Result>(_ notice: LiveNotice, after delay: TimeInterval = patience, notify: @escaping Notify = show,
+                               while work: () async -> Result) async -> Result {
+        let saying = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(delay))
+            if !Task.isCancelled { notify(notice, workingSeconds) }
+        }
+        defer { saying.cancel() }
+        return await work()
+    }
+
+    private static let reading = LiveNotice(key: "capture", symbol: "text.viewfinder", tint: .white, text: "Reading",
+                                            detail: "The first time takes a while")
+    private static let cuttingOut = LiveNotice(key: "cutout", symbol: "scissors", tint: .white, text: "Cutting out",
+                                               detail: "The first time takes a while")
+
     // MARK: Copy Text
 
+    /// Copies the text in a picture, from Capture, which has it in hand already.
+    static func copyText(in image: CGImage, to pasteboard: NSPasteboard, notify: @escaping Notify = show) async {
+        deliver(await saying(reading, notify: notify) { await ImageReader.read(image) }, to: pasteboard, notify: notify)
+    }
+
     /// Copies the text in the images among `urls`, which are read in turn as one.
-    static func copyText(from urls: [URL], to pasteboard: NSPasteboard = .general, notify: Notify = show) async {
+    static func copyText(from urls: [URL], to pasteboard: NSPasteboard = .dynotch, notify: @escaping Notify = show) async {
         let images = urls.filter(FileActions.isImage)
         var reading = ImageReader.Reading()
         var unreadable: [URL] = []
-        for url in images {
-            do {
-                let found = try await ImageReader.read(contentsOf: url)
-                reading.lines += found.lines
-                reading.codes += found.codes
-            } catch {
-                unreadable.append(url)
+        await saying(Self.reading, notify: notify) {
+            for url in images {
+                do {
+                    let found = try await ImageReader.read(contentsOf: url)
+                    reading.lines += found.lines
+                    reading.codes += found.codes
+                } catch {
+                    unreadable.append(url)
+                }
             }
         }
         if unreadable.count == images.count {
@@ -52,14 +81,14 @@ enum ImageActions {
         }
         pasteboard.clearContents()
         pasteboard.setString(reading.text, forType: .string)
-        // A QR code and nothing else has only the link to tell of.
+        // A QR code and nothing else has only the link to tell of, in the place of any Reading.
         if !reading.lines.isEmpty || reading.link == nil {
             let lines = reading.lineCount == 1 ? "1 line" : "\(reading.lineCount) lines"
             notify(LiveNotice(key: "capture", symbol: "doc.on.clipboard.fill", tint: skipped == 0 ? .white : .orange, text: "Copied",
                               detail: skipped == 0 ? lines : "\(lines), but \(skipped == 1 ? "one image" : "\(skipped) images") couldn't be read"), 3)
         }
         if let link = reading.link {
-            notify(LiveNotice(key: "qr", symbol: "qrcode", tint: .white, text: "QR code", detail: destination(of: link),
+            notify(LiveNotice(key: reading.lines.isEmpty ? "capture" : "qr", symbol: "qrcode", tint: .white, text: "QR code", detail: destination(of: link),
                               actions: [NoticeAction(title: "Open", kind: .openURL(link))], recall: .whole), linkSeconds)
         }
     }
@@ -74,27 +103,29 @@ enum ImageActions {
 
     /// Cuts the subject out of each image among `urls`, as a PNG beside it, and puts those in the Tray.
     /// The originals are never touched.
-    static func cutOut(_ urls: [URL], tray: TrayStore? = nil, notify: Notify = show) async {
+    static func cutOut(_ urls: [URL], tray: TrayStore? = nil, notify: @escaping Notify = show) async {
         let tray = tray ?? .shared
         let images = urls.filter(FileActions.isImage)
         var made: [URL] = []
         var unreadable: [URL] = []
         var unwritable: URL?
-        for url in images {
-            let name = url.deletingPathExtension().lastPathComponent + " (cut out).png"
-            let target = FileActions.outputFolder(near: url, tray: tray).appendingPathComponent(name)
-            do {
-                let subject = try await ImageReader.cutOut(contentsOf: url)
+        await saying(cuttingOut, notify: notify) {
+            for url in images {
+                let name = url.deletingPathExtension().lastPathComponent + " (cut out).png"
+                let target = FileActions.outputFolder(near: url, tray: tray).appendingPathComponent(name)
                 do {
-                    made.append(try await save(subject, as: target))
+                    let subject = try await ImageReader.cutOut(contentsOf: url)
+                    do {
+                        made.append(try await save(subject, as: target))
+                    } catch {
+                        unwritable = target.deletingLastPathComponent()
+                    }
+                } catch ImageReader.Failure.undecodable {
+                    unreadable.append(url)
                 } catch {
-                    unwritable = target.deletingLastPathComponent()
+                    // Nothing stands out in this one, which the notice says if none of the others had better luck.
+                    continue
                 }
-            } catch ImageReader.Failure.undecodable {
-                unreadable.append(url)
-            } catch {
-                // Nothing stands out in this one, which the notice says if none of the others had better luck.
-                continue
             }
         }
         if !made.isEmpty { tray.add(made) }
@@ -107,7 +138,7 @@ enum ImageActions {
                 return LiveNotice(key: "cutout", symbol: "exclamationmark.triangle.fill", tint: .orange, text: "Not saved",
                                   detail: "Couldn't write to \(unwritable.lastPathComponent)")
             }
-            guard unreadable.isEmpty else { return cantRead(unreadable) }
+            guard unreadable.isEmpty else { return cantRead(unreadable, key: "cutout") }
             return LiveNotice(key: "cutout", symbol: "scissors", tint: .orange, text: "No subject found")
         }
         return LiveNotice(key: "cutout", symbol: "scissors", tint: made.count == total ? .white : .orange, text: "Cut out",
@@ -147,8 +178,8 @@ enum ImageActions {
 
     /// A plain word about a file that turned out not to be readable, like an SVG, or a drop with no
     /// image in it after all.
-    private static func cantRead(_ urls: [URL]) -> LiveNotice {
+    private static func cantRead(_ urls: [URL], key: String = "capture") -> LiveNotice {
         let detail = urls.count == 1 ? "Couldn't open \(urls[0].lastPathComponent)" : urls.isEmpty ? "There's no image in that" : "Couldn't open those images"
-        return LiveNotice(key: "capture", symbol: "exclamationmark.triangle.fill", tint: .orange, text: "Can't read", detail: detail)
+        return LiveNotice(key: key, symbol: "exclamationmark.triangle.fill", tint: .orange, text: "Can't read", detail: detail)
     }
 }

@@ -746,4 +746,25 @@ struct DraggingImagesTests {
         viewModel.isDraggingFiles = false
         #expect(!viewModel.isDraggingImages)
     }
+
+    // MARK: Saying so
+
+    @Test func quickWorkSaysNothing() async {
+        var shown: [String] = []
+        let result = await ImageActions.saying(LiveNotice(key: "capture", symbol: "text.viewfinder", tint: .white, text: "Reading"),
+                                               after: 5, notify: { notice, _ in shown.append(notice.text) }) { 42 }
+        try? await Task.sleep(for: .milliseconds(50))
+        #expect(result == 42)
+        #expect(shown.isEmpty)
+    }
+
+    /// The first read after an install can take half a minute, with the overlay already gone.
+    @Test func slowWorkSaysSo() async {
+        var shown: [String] = []
+        await ImageActions.saying(LiveNotice(key: "capture", symbol: "text.viewfinder", tint: .white, text: "Reading"),
+                                  after: 0.01, notify: { notice, _ in shown.append(notice.text) }) {
+            try? await Task.sleep(for: .milliseconds(300))
+        }
+        #expect(shown == ["Reading"])
+    }
 }
