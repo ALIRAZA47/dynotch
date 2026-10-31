@@ -1492,6 +1492,15 @@ struct FocusSettings: View {
             SettingsSection(title: "Behavior") {
                 SwitchGrid(options: behavior)
             }
+            SettingsSection(title: "Turn on a Focus",
+                            footer: "macOS doesn't let apps turn a Focus on, so use a Shortcut with a Set Focus action in it. "
+                                + "The end runs however a session ends, unless Dynotch quits first.") {
+                SettingsCard {
+                    SessionShortcutRow(title: "When a session starts", symbol: "play.fill", selection: $settings.focusStartShortcut)
+                    CardDivider()
+                    SessionShortcutRow(title: "When it ends", symbol: "stop.fill", selection: $settings.focusEndShortcut)
+                }
+            }
         }
     }
 
@@ -1502,6 +1511,39 @@ struct FocusSettings: View {
         let hours = minutes / 60, rest = minutes % 60
         if hours == 0 { return "\(rest) min" }
         return rest == 0 ? "\(hours) h" : "\(hours) h \(rest) min"
+    }
+}
+
+/// Picks the Shortcut for one end of a focus session.
+private struct SessionShortcutRow: View {
+    let title: String
+    let symbol: String
+    @Binding var selection: String
+    @ObservedObject private var shortcuts = ShortcutsService.shared
+    @Environment(\.isSnapshot) private var isSnapshot
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SymbolBadge(symbol: symbol, tint: .pink, isActive: !selection.isEmpty, size: 26)
+            Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .accessibilityHidden(true)
+            Spacer(minLength: 12)
+            Picker(title, selection: $selection) {
+                Text("None").tag("")
+                // One that's since been deleted stays listed, so it can be seen and changed.
+                ForEach(shortcuts.all + (selection.isEmpty || shortcuts.all.contains(selection) ? [] : [selection]), id: \.self) { name in
+                    Text(name).tag(name)
+                }
+            }
+            .labelsHidden()
+            .fixedSize()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .task {
+            if !isSnapshot { await shortcuts.reload() }
+        }
     }
 }
 

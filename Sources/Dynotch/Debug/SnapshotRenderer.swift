@@ -31,13 +31,18 @@ enum SnapshotRenderer {
         for (key, value) in samples { defaults.set(value, forKey: key) }
         UserDefaults.dynotch = defaults
         NSPasteboard.dynotch = NSPasteboard(name: NSPasteboard.Name("app.dynotch.scratch.\(ProcessInfo.processInfo.processIdentifier)"))
+        URL.dynotchSupport = scratchSupport
+        try? FileManager.default.removeItem(at: scratchSupport)
     }
+
+    private static let scratchSupport = URL(fileURLWithPath: scratchDomain + ".support", isDirectory: true)
 
     static func discardScratchDefaults() {
         UserDefaults.dynotch.removePersistentDomain(forName: scratchDomain)
         // An emptied domain still leaves its file behind, and every run has its own.
         UserDefaults.dynotch.synchronize()
         try? FileManager.default.removeItem(atPath: scratchDomain + ".plist")
+        try? FileManager.default.removeItem(at: scratchSupport)
         NSPasteboard.dynotch.releaseGlobally()
     }
 
@@ -400,7 +405,9 @@ enum SnapshotRenderer {
                 (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.shortcuts, .calendar)
                 AppSettings.shared.pinnedShortcuts = ["Morning routine", "Log a glass of water", "Focus playlist"]
             }),
-            Scene(name: "99-open-focus-empty", phase: .open, tab: .focus, hasTimers: false, prepare: {
+            Scene(name: "99-open-focus-empty", phase: .open, tab: .focus, hasTimers: false, setUp: {
+                FocusHistory.shared.loadSample(days: [])
+            }, prepare: {
                 CalendarService.shared.loadSample(events: [], reminders: [])
                 NotesStore.shared.loadSample([""])
             }),
@@ -885,6 +892,7 @@ enum SnapshotRenderer {
         ScreenRecorder.shared.loadSample(.idle)
         loadClips([], isOn: false)
         CommandHistory.forget()
+        FocusHistory.shared.loadSample(days: sampleFocusDays)
     }
 
     /// A recording this long running, or its file being saved. It holds nothing.
@@ -963,6 +971,7 @@ enum SnapshotRenderer {
                 .init(id: "c", title: "Water the plants", dueDate: nil, color: .green),
             ])
         PomodoroTimer.shared.loadSample(remaining: 18 * 60 + 24, running: true)
+        FocusHistory.shared.loadSample(days: sampleFocusDays)
         TimerStore.shared.loadSample(at: sampleTime)
         SystemMonitor.shared.loadSample()
         DeviceBatteryMonitor.shared.loadSample([
@@ -984,6 +993,9 @@ enum SnapshotRenderer {
         }
         TrayStore.shared.loadSample(urls)
     }
+
+    /// A week of focus, whichever day of it the render lands on.
+    private static let sampleFocusDays = [50, 75, 25, 100, 50, 125, 25]
 
     /// A day with more events and reminders than the cards have room for, and a long title or two.
     private static func loadBusySamples() {

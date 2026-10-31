@@ -79,6 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         TrayStore.shared.load()
         ClipboardStore.shared.start()
         NotesStore.shared.start()
+        FocusHistory.shared.load()
         NowPlayingService.shared.start()
         PowerMonitor.shared.start()
         CalendarService.shared.start()

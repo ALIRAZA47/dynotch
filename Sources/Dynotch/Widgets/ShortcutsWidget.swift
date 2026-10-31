@@ -16,12 +16,14 @@ final class ShortcutsService: ObservableObject {
             .sorted { $0.localizedStandardCompare($1) == .orderedAscending }
     }
 
-    func run(_ name: String) {
+    /// `quietly` says nothing unless it fails, for what runs by itself.
+    func run(_ name: String, quietly: Bool = false) {
         guard running.insert(name).inserted else { return }
         Task {
             let result = await Shell.run("/usr/bin/shortcuts", ["run", name])
             running.remove(name)
             let succeeded = result.status == 0
+            if succeeded, quietly { return }
             LiveActivityCenter.shared.post(LiveNotice(key: "shortcut",
                                                       symbol: succeeded ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
                                                       tint: succeeded ? .green : .orange,

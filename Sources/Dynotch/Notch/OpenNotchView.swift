@@ -338,7 +338,9 @@ private struct FocusListsCard: View {
                           count: calendar.hasReminderAccess && !calendar.reminders.isEmpty ? calendar.reminders.count : nil),
                     .init(value: true, title: "Notes"),
                 ])
+                .fixedSize()
                 Spacer(minLength: 0)
+                FocusStrip()
                 if settings.focusShowsNotes {
                     NotesActions(editor: editor)
                 }

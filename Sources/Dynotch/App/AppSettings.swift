@@ -27,6 +27,13 @@ enum DisplayMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// Where Dynotch keeps what isn't a setting, or a folder of its own while a snapshot, a self-test, the
+/// energy probe or a test runs. New files go through this, so none of those can write to the real ones.
+extension URL {
+    nonisolated(unsafe) static var dynotchSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Dynotch", isDirectory: true)
+}
+
 /// How the closed notch looks on a display without a camera notch.
 enum VirtualNotchStyle: String, CaseIterable, Identifiable {
     /// A black notch hangs from the menu bar, as on a MacBook.
@@ -517,6 +524,15 @@ final class AppSettings: ObservableObject {
     }
     @Published var timerSound: Bool = AppSettings.value("timerSound", true) {
         didSet { save("timerSound", timerSound) }
+    }
+    /// The Shortcut to run as a focus session starts, by name. Empty for none. Apple has no way for an
+    /// app to turn a Focus on, so this is how a Pomodoro does it.
+    @Published var focusStartShortcut: String = AppSettings.value("focusStartShortcut", "") {
+        didSet { save("focusStartShortcut", focusStartShortcut) }
+    }
+    /// The Shortcut to run as one ends, however it ends.
+    @Published var focusEndShortcut: String = AppSettings.value("focusEndShortcut", "") {
+        didSet { save("focusEndShortcut", focusEndShortcut) }
     }
 
     // MARK: Updates

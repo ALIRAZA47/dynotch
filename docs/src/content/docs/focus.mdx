@@ -27,6 +27,25 @@ The rhythm is yours to change in <Path to="Settings → Focus Timer" />:
 
 <Shot name="settings-6-focus" themed alt="The Focus Timer page of Dynotch's Settings, with dials for each duration and switches for Auto-start and Sound." />
 
+### History
+
+Each focus session you finish is kept. Once there's one this week, the top of the second card shows your sessions and minutes for today and the week, with a bar for each day of the week and today's in the Pomodoro's color. The bars stay when the card shows your notes, and a narrow notch keeps only those. Hold the pointer on them to read it all.
+
+A session counts when it reaches zero. Skipping one or resetting it doesn't count.
+
+The history is one line per session in `~/Library/Application Support/Dynotch/focus-history.jsonl`, with when it ended and how many minutes it ran. See [Privacy and network](/privacy/#what-stays-on-your-mac).
+
+### Turning on a Focus
+
+macOS doesn't let apps turn a Focus on, but a Shortcut can. Make one with a **Set Focus** action, and choose it in <Path to="Settings → Focus Timer → Turn on a Focus" />:
+
+| Setting | When it runs |
+|---|---|
+| When a session starts | As a focus session starts, and not when it resumes after a pause |
+| When it ends | As a session reaches zero, or you skip or reset it. Use it to turn the Focus off |
+
+If Dynotch quits during a session, the end doesn't run, so a Focus stays on.
+
 ## Named timers
 
 Beside the Pomodoro, type a name and a time to start a timer:
