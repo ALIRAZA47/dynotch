@@ -1,0 +1,110 @@
+---
+title: Agents
+description: Every Claude Code session in the notch, and tool calls you can answer from it.
+---
+
+Every [Claude Code](https://claude.com/claude-code) session shows up in the notch: what's working, what's waiting for you and what's done. When one asks to run something, you can allow or deny it from the notch, then go back to the session.
+
+It works through Claude Code's hooks, in the terminal and in the desktop app, so nothing shows until they're in place.
+
+## Setting it up
+
+**Terminal setup** in <Path to="Settings → General" /> adds the hooks for you, beside any you already have, and takes them out again.
+
+To do it by hand, add this to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "dynotch hook", "async": true }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "dynotch hook", "async": true }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "dynotch hook", "async": true }] }],
+    "PreToolUse": [{ "hooks": [{ "type": "command", "command": "dynotch hook", "async": true }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "command", "command": "dynotch hook", "async": true }] }],
+    "Notification": [{ "hooks": [{ "type": "command", "command": "dynotch hook", "async": true }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "dynotch hook", "async": true }] }],
+    "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "dynotch hook" }] }]
+  }
+}
+```
+
+This needs the [`dynotch` command](/dynotch-command/) on your `PATH`. Only `PermissionRequest` runs without `async`, since it's the one that waits for your answer.
+
+If Dynotch isn't running, the hooks do nothing and Claude Code carries on as usual.
+
+## In the notch
+
+While something needs you, a count shows at the end of the closed notch's right ear, in orange. It stays there through calls and presentations.
+
+The Agents tab is there while there are sessions, with those waiting for you first. Each has a dot, its project and a quiet line:
+
+| Dot | Line |
+|---|---|
+| Orange | `Wants to run: npm run screens` |
+| The accent | `Running swift build · 4 min` |
+| Green | `Done 2 min ago` |
+| Gray | `Ready`, for one that hasn't been asked anything yet |
+
+**Back** goes to the session. **Review** turns the notch to the tool call in the [glance](/glance/). The project is the name of the folder the session started in.
+
+## Answering a tool call
+
+While a tool call is waiting, the notch goes to the glance rather than opening, whatever you've set resting the pointer to show. The glance has the project, the tool and all of what would happen:
+
+| Tool | What it shows |
+|---|---|
+| Bash | The whole command |
+| Write | The file's path and what it would write |
+| Edit | The file's path, then what would go and what would come |
+| Anything else | The tool's full name and its whole input |
+
+A long one scrolls, and the line under it says so. A subagent's request is marked **Subagent**. With several waiting, they come oldest first, with **1 of 3** in the right ear. Answering one brings up the next.
+
+**Allow** and **Deny** are only ever here. The tab has **Review**, on purpose.
+
+### Your own prompt stays
+
+The hook runs alongside Claude Code's own prompt, so you can answer in either place, and whichever comes first wins. If you answer in the terminal, the notch lets the question go once the tool has finished, or your next prompt is in, or the session stops or ends. Until then it may still show there, and answering it does nothing.
+
+A question nobody answers goes from the notch after a little over ten minutes. Claude Code's prompt is still there, and the session shows as waiting until it moves on.
+
+### Why Allow is hard to press by accident
+
+Allow approves something real, so:
+
+- Allow and Deny are dim and do nothing for 0.6 seconds after a tool call reaches the front, or as long as your double-click speed if that's slower. That starts again for each new one, so a double click on Allow can't approve the one behind it.
+- Nothing allows by itself. There's no key for it, no timeout that allows, and no script, `dynotch://` link or notice button can answer. When in doubt Dynotch says nothing, and Claude Code asks for itself.
+- What's shown can't hide. Control characters, terminal escapes, text-direction overrides and characters that draw nothing show as orange markers, like `<ESC>` or `<U+202E>`, instead of doing what they do. Tabs show as a faint arrow. Nothing is cut short.
+
+## When it tells you
+
+| What happened | The notice |
+|---|---|
+| A tool call is waiting | **Needs you**, with the tool and the project |
+| A session is asking in its own window, and no question reached the notch | **Needs you**, with the project and **Back** |
+| A turn of two minutes or more finishes | **Done**, with the project and how long it took |
+
+Turns shorter than that say nothing, so a busy day of sessions stays quiet. On a call or in a presentation, notices [wait](/live-activities/#quiet) as usual, and one about a question that's gone by then doesn't show.
+
+## How long sessions stay
+
+A session goes when it ends. Dynotch can miss that, and the desktop app keeps idle sessions alive for days, so:
+
+| A session that's | Leaves the list |
+|---|---|
+| Done, or hasn't started anything | An hour after it was last heard from |
+| Working or waiting | After six hours of silence |
+
+Either comes back with the next thing it does.
+
+## What Dynotch keeps
+
+`dynotch hook` leaves your prompts, Claude's replies, what tools print and where the transcript is behind. It passes on which session it is, its folder, the tool, and what names the tool's target, like a command or a file's path. Only a tool call waiting for your answer sends more, so the glance can show it.
+
+Nothing about a session is written to disk. It's all in memory, and goes when you quit.
+
+Rows and notices name a command alone, `swift build` say, since its arguments can hold tokens, and the notch is on screen when you share it. Only the glance shows a whole command. Nothing about a command reaches the [recent list](/glance/#recent) or `dynotch status`, which reports how many sessions are in each state.
+
+## Turning it off
+
+Turn off **Claude Code** in <Path to="Settings → Live Activities" />. The notch shows nothing, and any tool call that's waiting goes back to Claude Code's own prompt. The hooks stay and do nothing, until you take them out in **Terminal setup**.

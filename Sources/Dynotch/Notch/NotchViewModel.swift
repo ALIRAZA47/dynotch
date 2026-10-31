@@ -151,6 +151,8 @@ final class NotchViewModel: ObservableObject {
     /// Something was dragged out of the tray and the drag hasn't ended yet.
     @Published var isDraggingOut = false
     var onOpen: (() -> Void)?
+    /// The open notch is turning to the glance, which is smaller, so the pointer may end up outside it.
+    var onTurnToGlance: (() -> Void)?
     /// A swipe over the Nook's stack of widgets: true for the next card, false for the one before.
     let stackTurns = PassthroughSubject<Bool, Never>()
 
@@ -249,8 +251,11 @@ final class NotchViewModel: ObservableObject {
                                 topRadius: theme.topRadius, bottomRadius: theme.bottomRadius)
         case .glance:
             let closed = geometry.closedSize
-            return NotchMetrics(width: min(settings.openWidth, closed.width + GlanceContent.earWidth * 2),
-                                height: closed.height + glanceContent.extraHeight,
+            let content = glanceContent
+            var width = closed.width + GlanceContent.earWidth * 2
+            // A command shows whole, so the more room it has the fewer lines it takes.
+            if case .approval = content { width = max(width, ApprovalGlance.width) }
+            return NotchMetrics(width: min(settings.openWidth, width), height: closed.height + content.extraHeight,
                                 topRadius: 8, bottomRadius: 22)
         case .closed, .hovering:
             let hovering = phase == .hovering
@@ -301,6 +306,14 @@ final class NotchViewModel: ObservableObject {
     func showUsage() {
         glance()
         withAnimation(.notchGlance) { isShowingUsage = true }
+    }
+
+    /// Turns to the tool call waiting for an answer, which is only ever answered in the glance.
+    func showApproval() {
+        clickedForGlance = .now
+        guard phase == .open else { return glance() }
+        onTurnToGlance?()
+        withAnimation(.notchGlance) { phase = .glance }
     }
 
     /// Grows the hovered notch into a glance at what's live.

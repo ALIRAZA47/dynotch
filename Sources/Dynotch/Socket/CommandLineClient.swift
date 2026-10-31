@@ -115,6 +115,12 @@ enum CommandLineClient {
             lines.append("Closed notch: \(notch["activity"] as? String ?? "idle")")
             if let held = notch["heldNotices"] as? Int, held > 0 { lines.append("Notices waiting: \(held)") }
         }
+        if let agents = report["agents"] as? [String: Any], agents["sessions"] as? Int ?? 0 > 0 {
+            let states = ["waiting", "working", "ready", "done"].compactMap { state in
+                (agents[state] as? Int).flatMap { $0 > 0 ? "\($0) \(state)" : nil }
+            }
+            lines.append("Claude Code: " + states.joined(separator: ", "))
+        }
         for script in report["scripts"] as? [[String: Any]] ?? [] {
             var line = script["key"] as? String ?? ""
             if let percent = script["percent"] as? Int { line += " \(percent)%" }

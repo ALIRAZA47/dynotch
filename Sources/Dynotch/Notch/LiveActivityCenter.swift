@@ -117,7 +117,7 @@ enum CompactActivity: Equatable {
     /// Keep Awake is on.
     case keepAwake
     case script(ScriptActivity)
-    /// Tool calls waiting for an answer.
+    /// Tool calls waiting for an answer, and sessions asking in their own window.
     case agentsWaiting(Int)
     case ci(CIRun)
 
@@ -194,7 +194,7 @@ final class LiveActivityCenter: ObservableObject {
             FocusMonitor.shared.$mode.map { _ in () }.eraseToAnyPublisher(),
             QuickToggles.shared.$isKeepingAwake.map { _ in () }.eraseToAnyPublisher(),
             ScriptActivityStore.shared.$activities.map { _ in () }.eraseToAnyPublisher(),
-            AgentDeck.shared.$approvals.map { _ in () }.eraseToAnyPublisher(),
+            AgentDeck.shared.$waitingCount.map { _ in () }.eraseToAnyPublisher(),
             CIMonitor.shared.$run.map { _ in () }.eraseToAnyPublisher(),
             AppSettings.shared.objectWillChange.map { _ in () }.eraseToAnyPublisher()
         )
@@ -273,7 +273,7 @@ final class LiveActivityCenter: ObservableObject {
         if quiet {
             queue.goQuiet(now: .now)
         } else {
-            let hidden = queue.held.map(\.notice).filter(NotificationMirror.shared.holdsBack)
+            let hidden = queue.held.map(\.notice).filter { NotificationMirror.shared.holdsBack($0) || AgentDeck.shared.hasMovedOn(from: $0) }
             queue.endQuiet(now: .now, holdingBack: Set(hidden.map(\.key)))
         }
         settle()
@@ -359,7 +359,7 @@ final class LiveActivityCenter: ObservableObject {
 
         // The ones with a compact form, most important first.
         var compact: [CompactActivity] = []
-        let waiting = settings.liveAgents ? AgentDeck.shared.approvals.count : 0
+        let waiting = settings.liveAgents ? AgentDeck.shared.waitingCount : 0
         if waiting > 0 { compact.append(.agentsWaiting(waiting)) }
         if settings.liveMicMuted, MicMonitor.shared.isMuted { compact.append(.micMuted) }
         if !queue.held.isEmpty { compact.append(.held(queue.held.count)) }
