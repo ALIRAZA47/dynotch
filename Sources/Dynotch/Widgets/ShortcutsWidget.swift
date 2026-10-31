@@ -25,7 +25,8 @@ final class ShortcutsService: ObservableObject {
             LiveActivityCenter.shared.post(LiveNotice(key: "shortcut",
                                                       symbol: succeeded ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
                                                       tint: succeeded ? .green : .orange,
-                                                      detail: succeeded ? "\(name) finished" : "\(name) didn't finish"), for: 2.5)
+                                                      detail: succeeded ? "\(name) finished" : "\(name) didn't finish",
+                                                      recall: .whole), for: 2.5)
         }
     }
 }

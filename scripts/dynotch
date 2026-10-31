@@ -2,6 +2,7 @@
 # Sends commands to Dynotch through its dynotch:// URL scheme.
 #
 #   dynotch notify TEXT [--detail TEXT] [--symbol SF_SYMBOL] [--tint COLOR] [--seconds N]
+#                       [--button TITLE --url https://...]
 #   dynotch open [home|tray|focus|stats]
 #   dynotch close
 #   dynotch timer [start|pause|toggle|reset|skip]
@@ -16,7 +17,7 @@
 set -euo pipefail
 
 usage() {
-    sed -n '4,15p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '4,16p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -36,7 +37,7 @@ case "$command" in
         shift
         while [ $# -gt 0 ]; do
             case "$1" in
-                --detail|--symbol|--tint|--seconds)
+                --detail|--symbol|--tint|--seconds|--button|--url)
                     [ $# -gt 1 ] || usage 1
                     query+="&${1#--}=$(encode "$2")"
                     shift 2 ;;

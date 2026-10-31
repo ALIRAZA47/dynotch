@@ -14,6 +14,8 @@ struct CompactActivityView: View {
         case .stopwatch: StopwatchGlyph()
         case .download: DownloadGlyph()
         case .focus(let mode): FocusGlyph(mode: mode)
+        case .held(let count): HeldBadge(count: count)
+        case .keepAwake: KeepAwakeGlyph()
         }
     }
 }
@@ -48,6 +50,34 @@ struct MuteBadge: View {
             .frame(width: size, height: size)
             .background(Circle().fill(Color.red))
             .accessibilityLabel("Microphone muted")
+    }
+}
+
+/// How many notices are waiting for a call or a presentation to end.
+struct HeldBadge: View {
+    let count: Int
+    var size: CGFloat = ClosedLayout.glyphSize
+
+    var body: some View {
+        Text(count > 9 ? "9+" : "\(count)")
+            .font(.system(size: size * 0.6, weight: .bold, design: .rounded))
+            .foregroundStyle(.black)
+            .frame(width: size, height: size)
+            .background(Circle().fill(Color.white.opacity(0.85)))
+            .accessibilityLabel(count == 1 ? "1 notice waiting" : "\(count) notices waiting")
+    }
+}
+
+/// A cup, while Keep Awake is on.
+struct KeepAwakeGlyph: View {
+    var size: CGFloat = ClosedLayout.glyphSize
+
+    var body: some View {
+        Image(systemName: "cup.and.saucer.fill")
+            .font(.system(size: size * 0.68, weight: .semibold))
+            .foregroundStyle(Color.orange)
+            .frame(width: size, height: size)
+            .accessibilityLabel("Keep Awake is on")
     }
 }
 

@@ -229,7 +229,8 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
             guard AppSettings.shared.liveDevices else { return }
             let match = devices.first { $0.name == name }
             LiveActivityCenter.shared.post(LiveNotice(key: "device", symbol: match?.kind.symbol ?? "dot.radiowaves.right", tint: .white,
-                                                      text: match?.lowest.map { "\($0)%" } ?? "", detail: "\(name) connected"), for: 3.5)
+                                                      text: match?.lowest.map { "\($0)%" } ?? "", detail: "\(name) connected",
+                                                      timing: .perishes), for: 3.5)
         }
     }
 
@@ -246,7 +247,8 @@ final class DeviceBatteryMonitor: NSObject, ObservableObject, CBCentralManagerDe
                 warnedLow.remove(device.id)
             } else if level <= 15, warnedLow.insert(device.id).inserted {
                 LiveActivityCenter.shared.post(LiveNotice(key: "device", symbol: device.kind.symbol, tint: .orange,
-                                                          text: "\(level)%", detail: "\(device.name) is running low"), for: 5)
+                                                          text: "\(level)%", detail: "\(device.name) is running low",
+                                                          recall: .whole), for: 5)
             }
         }
     }

@@ -9,8 +9,16 @@ final class QuickToggles: ObservableObject {
 
     @Published private(set) var isDarkMode = QuickToggles.systemIsDark()
     @Published private(set) var isKeepingAwake = false
+    /// When Keep Awake turns itself off, if it does.
+    @Published private(set) var keepAwakeEnd: Date?
+
+    /// "Awake until 5:30 PM", or "Awake" with no end.
+    var keepAwakeDescription: String {
+        keepAwakeEnd.map { "Awake until \($0.formatted(date: .omitted, time: .shortened))" } ?? "Awake"
+    }
 
     private var assertion: IOPMAssertionID = 0
+    private var keepAwakePoll: Poll?
     private let runner = AppleScriptRunner()
     private var observer: NSObjectProtocol?
 
@@ -31,17 +39,46 @@ final class QuickToggles: ObservableObject {
         }
     }
 
-    /// Keeps the display awake, like `caffeinate -d`.
     func toggleKeepAwake() {
         if isKeepingAwake {
-            IOPMAssertionRelease(assertion)
-            isKeepingAwake = false
+            stopKeepingAwake()
         } else {
+            keepAwake()
+        }
+    }
+
+    /// Keeps the display awake, like `caffeinate -d`, until `end`, or until it's turned off.
+    func keepAwake(until end: Date? = nil) {
+        if !isKeepingAwake {
             let result = IOPMAssertionCreateWithName(kIOPMAssertionTypePreventUserIdleDisplaySleep as CFString,
                                                      IOPMAssertionLevel(kIOPMAssertionLevelOn),
                                                      "Keep Awake from Dynotch" as CFString, &assertion)
             isKeepingAwake = result == kIOReturnSuccess
         }
+        guard isKeepingAwake else { return }
+        keepAwakeEnd = end
+        keepAwakePoll?.cancel()
+        keepAwakePoll = end.map { _ in
+            EnergyCoordinator.shared.schedule(.keepAwake, deadline: { [weak self] in self?.keepAwakeEnd }) { [weak self] in
+                self?.endKeepAwakeIfDue()
+            }
+        }
+    }
+
+    func stopKeepingAwake() {
+        guard isKeepingAwake else { return }
+        IOPMAssertionRelease(assertion)
+        isKeepingAwake = false
+        keepAwakeEnd = nil
+        keepAwakePoll?.cancel()
+        keepAwakePoll = nil
+    }
+
+    private func endKeepAwakeIfDue() {
+        guard let end = keepAwakeEnd, end <= .now else { return }
+        stopKeepingAwake()
+        LiveActivityCenter.shared.post(LiveNotice(key: "awake", symbol: "cup.and.saucer.fill", tint: .orange, text: "",
+                                                  detail: "Keep Awake is off", timing: .perishes), for: 3)
     }
 
     /// Picks a color anywhere on screen and copies its hex code.
@@ -67,6 +104,14 @@ final class QuickToggles: ObservableObject {
 
     func sleepDisplay() {
         Task { await Shell.run("/usr/bin/pmset", ["displaysleepnow"]) }
+    }
+
+    // MARK: Snapshots
+
+    /// Keep Awake as a sample: on until `end`, or off. It holds nothing, so the Mac sleeps as usual.
+    func loadSample(awakeUntil end: Date?) {
+        isKeepingAwake = end != nil
+        keepAwakeEnd = end
     }
 
     private static func systemIsDark() -> Bool {
@@ -100,8 +145,9 @@ struct ControlToggleGrid: View {
                     ControlTile(symbol: toggles.isDarkMode ? "moon.fill" : "sun.max.fill", title: "Dark",
                                 state: toggles.isDarkMode ? "On" : "Off", isOn: toggles.isDarkMode, fit: fit,
                                 action: toggles.toggleDarkMode)
-                    ControlTile(symbol: "cup.and.saucer.fill", title: "Awake", state: toggles.isKeepingAwake ? "On" : "Off",
+                    ControlTile(symbol: "cup.and.saucer.fill", title: "Awake", state: awakeState,
                                 isOn: toggles.isKeepingAwake, fit: fit, action: toggles.toggleKeepAwake)
+                        .contextMenu { KeepAwakeMenu() }
                     ControlTile(symbol: mic.isMuted ? "mic.slash.fill" : "mic.fill", title: "Mute mic",
                                 state: mic.hasInput ? (mic.isMuted ? "On" : "Off") : "No mic", isOn: mic.isMuted, fit: fit,
                                 action: mic.toggleMute)
@@ -114,6 +160,31 @@ struct ControlToggleGrid: View {
                     ControlTile(symbol: "moon.zzz.fill", title: "Sleep", state: "Display", fit: fit, action: toggles.sleepDisplay)
                 }
             }
+        }
+    }
+}
+
+private extension ControlToggleGrid {
+    /// "Until 5:30 PM", "On" or "Off".
+    var awakeState: String {
+        guard toggles.isKeepingAwake else { return "Off" }
+        return toggles.keepAwakeEnd.map { "Until \($0.formatted(date: .omitted, time: .shortened))" } ?? "On"
+    }
+}
+
+/// How long to keep the Mac awake, from the tile's right-click menu.
+private struct KeepAwakeMenu: View {
+    private let lengths: [(title: String, minutes: Int)] = [("30 Minutes", 30), ("1 Hour", 60), ("2 Hours", 120), ("4 Hours", 240)]
+
+    var body: some View {
+        let toggles = QuickToggles.shared
+        ForEach(lengths, id: \.minutes) { length in
+            Button(length.title) { toggles.keepAwake(until: .now.addingTimeInterval(TimeInterval(length.minutes * 60))) }
+        }
+        Button("Until Turned Off") { toggles.keepAwake() }
+        if toggles.isKeepingAwake {
+            Divider()
+            Button("Turn Off") { toggles.stopKeepingAwake() }
         }
     }
 }

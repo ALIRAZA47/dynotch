@@ -231,7 +231,7 @@ final class WeatherService: NSObject, ObservableObject, CLLocationManagerDelegat
         let kind = snow ? "Snow" : conditions.isHeavyRain ? "Heavy rain" : "Rain"
         LiveActivityCenter.shared.post(LiveNotice(key: "rain", symbol: snow ? "cloud.snow.fill" : "cloud.rain.fill",
                                                   tint: .cyan, text: Format.countdown(to: start),
-                                                  detail: "\(kind) starting soon"), for: 6)
+                                                  detail: "\(kind) starting soon", timing: .perishes), for: 6)
     }
 
     /// Open-Meteo's forecast for the next hour or two. Coordinates are rounded to about a kilometer.

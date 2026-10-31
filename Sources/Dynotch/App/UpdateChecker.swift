@@ -65,7 +65,9 @@ final class UpdateChecker: ObservableObject {
                 try? await Task.sleep(for: .seconds(1.5))
                 LiveActivityCenter.shared.post(LiveNotice(key: "update", symbol: "checkmark.circle.fill",
                                                           tint: NotchAccent.lavender.color, text: "Updated",
-                                                          detail: "Dynotch \(Self.currentVersion)"), for: 4)
+                                                          detail: "Dynotch \(Self.currentVersion)",
+                                                          actions: [NoticeAction(title: "What's New", kind: .openURL(Self.releasesPage))],
+                                                          timing: .waits, recall: .whole), for: 4)
             }
         }
     }
@@ -80,6 +82,14 @@ final class UpdateChecker: ObservableObject {
         running = task
         await task.value
         running = nil
+    }
+
+    /// Installs the newest release from a notice's button, with Settings up to show how it's going,
+    /// or what stands in its way.
+    func installAvailableRelease() {
+        SettingsWindowController.shared.show(page: .about)
+        guard case .available(let release) = status else { return }
+        UpdateInstaller.shared.install(release)
     }
 
     // MARK: Automatic checks
@@ -109,10 +119,13 @@ final class UpdateChecker: ObservableObject {
             guard case .available(let release) = status, noticedVersion != release.version else { return }
             noticedVersion = release.version
             UserDefaults.dynotch.set(release.version, forKey: "updateNoticedVersion")
-            let ready = release.archive != nil && UpdateInstaller.shared.canInstall ? "install" : "download"
+            let installs = release.archive != nil && UpdateInstaller.shared.canInstall
+            let action = installs ? NoticeAction(title: "Install", kind: .installUpdate)
+                : NoticeAction(title: "Download", kind: .openURL(release.download ?? release.page))
             LiveActivityCenter.shared.post(LiveNotice(key: "update", symbol: "arrow.down.circle.fill",
                                                       tint: NotchAccent.lavender.color, text: "Update",
-                                                      detail: "Dynotch \(release.version) is ready to \(ready)"), for: 5)
+                                                      detail: "Dynotch \(release.version) is ready to \(installs ? "install" : "download")",
+                                                      actions: [action], timing: .waits, recall: .whole), for: 5)
         }
     }
 

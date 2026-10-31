@@ -16,6 +16,12 @@ struct NotificationSettingsSection: View {
             SettingsCard {
                 SwitchRow(title: "Hide message text", detail: "Show only the app and who it's from", symbol: "eye.slash.fill",
                           tint: .indigo, isOn: $settings.notificationHideText)
+                CardDivider()
+                SwitchRow(title: "Copy login codes", detail: "A peek with a code in it gets a Copy Code button", symbol: "number",
+                          tint: .green, isOn: $settings.notificationCodes)
+                CardDivider()
+                SwitchRow(title: "Sum up after a Focus", detail: "One line on what came in while it was on, by app", symbol: "list.bullet",
+                          tint: .orange, isOn: $settings.notificationDigest)
             }
             AppPicker()
         }

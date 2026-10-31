@@ -27,6 +27,7 @@ dynotch notify "Done" --detail "make test · 2m 14s" --symbol checkmark.circle.f
 | `--symbol NAME` | An [SF Symbol](https://developer.apple.com/sf-symbols/). Without one, or with one that doesn't exist, it's a bell |
 | `--tint COLOR` | `red`, `orange`, `yellow`, `green`, `mint`, `teal`, `cyan`, `blue`, `indigo`, `purple`, `pink`, `white` or `gray`, or a hex value like `#FF6B5C` |
 | `--seconds N` | How long it stays, from 1 to 30. It's 4 by default |
+| `--button TITLE --url URL` | A button on the notice, in the [glance](/glance/#a-notices-buttons). The link has to be https; anything else leaves the button out |
 
 Over 18 characters, the text moves to the row underneath, or with `--detail` it's cut short. The row shows one line. The notice carries a small terminal badge, so it can't pass for one of Dynotch's own.
 

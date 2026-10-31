@@ -179,12 +179,18 @@ final class CalendarService: ObservableObject {
         let now = Date.now
         for event in events where !event.isAllDay {
             let minutes = event.start.timeIntervalSince(now) / 60
+            let join = event.meetingURL.map { [NoticeAction(title: "Join", kind: .openURL($0))] } ?? []
+            // It can't wait, and a meeting matters on a call too, but its name stays off the screen.
+            QuietMonitor.shared.look()
+            let title = QuietMonitor.shared.isQuiet ? "Calendar" : event.title
             if minutes > 0, minutes <= 5, announced.insert(event.id + "-soon").inserted {
                 LiveActivityCenter.shared.post(LiveNotice(key: "event", symbol: "calendar", tint: event.color,
-                                                          text: Format.countdown(to: event.start), detail: event.title), for: 6)
+                                                          text: Format.countdown(to: event.start), detail: title,
+                                                          actions: join, recall: .name(event.title)), for: 6)
             } else if minutes <= 0, minutes > -1, announced.insert(event.id + "-now").inserted {
                 LiveActivityCenter.shared.post(LiveNotice(key: "event", symbol: "calendar.badge.clock", tint: event.color,
-                                                          text: "now", detail: event.title), for: 6)
+                                                          text: "now", detail: title,
+                                                          actions: join, recall: .name(event.title)), for: 6)
             }
         }
     }

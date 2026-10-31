@@ -105,7 +105,7 @@ final class PomodoroTimer: ObservableObject {
         advance()
         let message = finished == .focus ? "Focus done. Time for a \(phase == .longBreak ? "long " : "")break." : "Break's over. Back to it."
         LiveActivityCenter.shared.post(LiveNotice(key: "timer", symbol: finished == .focus ? "checkmark.circle.fill" : "bell.fill",
-                                                  tint: phase.color, text: "", detail: message), for: 6)
+                                                  tint: phase.color, text: "", detail: message, recall: .whole), for: 6)
         if AppSettings.shared.autoStartNextPhase { start() }
     }
 

@@ -26,6 +26,7 @@ Each one has a switch in <Path to="Settings → Live Activities" />. All of them
 | Downloads | Progress as a file downloads, and a notice when it's done |
 | Focus | Your Focus's symbol while one is on, and a notice when it changes |
 | Notifications | Messages, Mail, Slack and more as they arrive |
+| Keep Awake | A cup while the Mac is being kept awake |
 
 <Note>**Focus** and **Notifications** need [Full Disk Access](/permissions/#full-disk-access), and show nothing without it.</Note>
 
@@ -48,9 +49,26 @@ To see one without waiting for it, point at it in <Path to="Settings → Live Ac
 
 <Shot name="settings-3-activities" themed alt="The Live Activities page of Dynotch's Settings, with a tile and a switch for each activity." />
 
+## Notices take turns
+
+A second notice waits a moment for the first, rather than replacing it, and more shorten each other's time. One of the same kind updates the notice in place instead, like another message from the same person. A volume or brightness meter sits on top of a notice and gives it its time back. A notice can have [buttons](/glance/#a-notices-buttons), which are in the glance.
+
+## Quiet
+
+While the mic or a camera is in use, or something fills the screen, like a slideshow or a film, the notch keeps to itself. Dynotch can't tell when the screen is shared, so any call counts.
+
+| Notice | While it's quiet |
+|---|---|
+| Notifications, script notices, downloads, screenshots, updates | Wait, with a count at the end of the right ear |
+| Song titles, charging, the weather, a Focus changing, a device connecting | Go unshown, since they'd be out of date by then |
+| Muting the mic, volume and brightness, what you did yourself, a timer ending, low battery, login codes | Show as usual |
+| A meeting about to start | Shows, without its name |
+
+When it's over, one or two show in turn, and more come as one notice, with **See Them** opening [Recent](/glance/#recent). A peek stays hidden if a Focus has come on or a display is mirrored by then. Turn off **Quiet on calls** or **Quiet in full screen** in <Path to="Settings → Live Activities → Options" />.
+
 ## Two at once
 
-A second activity keeps a small glyph at the end of the right ear while another takes the notch: the mute badge, a timer's or a download's ring, the Focus that's on, or the album art.
+A second activity keeps a small glyph at the end of the right ear while another takes the notch: the mute badge, how many notices are waiting, a timer's or a download's ring, Keep Awake's cup, the Focus that's on, or the album art.
 
 <Shots min={320}>
   <Shot name="20-closed-timer-and-music" alt="A timer in the closed notch with the album art as a small glyph at the end of the right ear." caption="A timer, with the music as a glyph" />

@@ -167,6 +167,37 @@ enum CaptureAction: String, CaseIterable, Identifiable {
     }
 }
 
+/// How long screenshots and downloads stay in the Tray before it tidies them away.
+enum TrayRetention: String, CaseIterable, Identifiable {
+    case day, week, forever
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .day: "A day"
+        case .week: "A week"
+        case .forever: "Until removed"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .day: "sun.max"
+        case .week: "calendar"
+        case .forever: "infinity"
+        }
+    }
+
+    var seconds: TimeInterval? {
+        switch self {
+        case .day: 24 * 3600
+        case .week: 7 * 24 * 3600
+        case .forever: nil
+        }
+    }
+}
+
 /// User preferences, persisted in UserDefaults as they change.
 @MainActor
 final class AppSettings: ObservableObject {
@@ -321,6 +352,18 @@ final class AppSettings: ObservableObject {
     @Published var liveFocus: Bool = AppSettings.value("liveFocus", true) {
         didSet { save("liveFocus", liveFocus) }
     }
+    /// A cup at the end of the right ear while Keep Awake is on.
+    @Published var liveKeepAwake: Bool = AppSettings.value("liveKeepAwake", true) {
+        didSet { save("liveKeepAwake", liveKeepAwake) }
+    }
+    /// Notices wait while the mic or a camera is in use.
+    @Published var quietOnCalls: Bool = AppSettings.value("quietOnCalls", true) {
+        didSet { save("quietOnCalls", quietOnCalls) }
+    }
+    /// Notices wait while something fills the screen, like a presentation or a film.
+    @Published var quietInFullScreen: Bool = AppSettings.value("quietInFullScreen", true) {
+        didSet { save("quietInFullScreen", quietInFullScreen) }
+    }
 
     // MARK: Nook
 
@@ -388,6 +431,10 @@ final class AppSettings: ObservableObject {
     @Published var screenshotsToTray: Bool = AppSettings.value("screenshotsToTray", true) {
         didSet { save("screenshotsToTray", screenshotsToTray) }
     }
+    /// How long what arrives by itself stays. Anything you put in the Tray stays until you remove it.
+    @Published var trayKeeps: TrayRetention = AppSettings.value("trayKeeps", TrayRetention.week) {
+        didSet { save("trayKeeps", trayKeeps.rawValue) }
+    }
 
     // MARK: Capture
 
@@ -444,6 +491,14 @@ final class AppSettings: ObservableObject {
     /// Apps from `NotificationPeek.sources` that don't peek, by their `id`.
     @Published var notificationMutedApps: [String] = AppSettings.value("notificationMutedApps", [String]()) {
         didSet { save("notificationMutedApps", notificationMutedApps) }
+    }
+    /// A peek with a login code in it gets a Copy button.
+    @Published var notificationCodes: Bool = AppSettings.value("notificationCodes", true) {
+        didSet { save("notificationCodes", notificationCodes) }
+    }
+    /// One line when a Focus ends, saying what came in during it.
+    @Published var notificationDigest: Bool = AppSettings.value("notificationDigest", true) {
+        didSet { save("notificationDigest", notificationDigest) }
     }
     /// Whether apps that aren't in `NotificationPeek.sources` peek.
     @Published var notificationOtherApps: Bool = AppSettings.value("notificationOtherApps", true) {

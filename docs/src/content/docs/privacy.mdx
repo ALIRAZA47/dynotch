@@ -31,7 +31,7 @@ Dynotch has no account, no analytics and no server of its own. It runs on your M
 
 ## Notifications
 
-Dynotch reads Notification Center's database, opened read-only. It shows a notification and forgets it: nothing a notification says is logged or saved. All it keeps, and only while it runs, is the time of the newest notification it has seen and the row numbers of the last few, so it doesn't show one twice.
+Dynotch reads Notification Center's database, opened read-only. It shows a notification and forgets it: nothing a notification says is logged or saved. A peek waiting out a call stays in memory until it shows, and the Recent list keeps the app's name. All else it keeps, and only while it runs, is how many came from each app during a Focus, the time of the newest notification it has seen and the row numbers of the last few, so it doesn't show one twice.
 
 ## Camera and microphone
 

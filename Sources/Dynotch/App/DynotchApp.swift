@@ -78,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DownloadMonitor.shared.start()
         FocusMonitor.shared.start()
         WeatherService.shared.start()
+        QuietMonitor.shared.start()
         LiveActivityCenter.shared.start()
         NotificationMirror.shared.start()
         // Asks GitHub for the newest release a little after launch, once a day.

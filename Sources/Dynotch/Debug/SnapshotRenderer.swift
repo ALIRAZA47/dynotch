@@ -63,6 +63,8 @@ enum SnapshotRenderer {
         var geometry: NotchGeometry?
         /// The command field, with this typed into it.
         var command: String?
+        /// The glance has turned to the recent list.
+        var showingRecent = false
         /// The Focus tab's second card shows the notes.
         var focusShowsNotes = false
         /// The open notch at this size instead of the setting's, for this scene only.
@@ -120,6 +122,33 @@ enum SnapshotRenderer {
         // What `dynotch notify` shows: a script's own symbol and color, with the terminal badge.
         let scriptNotice = LiveNotice(key: "command", symbol: "checkmark.circle.fill", tint: .green, text: "Done",
                                       detail: "make test · 2m 14s", fromScript: true)
+        let peek = NotificationPeek.notice(
+            for: NotificationReader.Entry(bundleID: "com.apple.MobileSMS", title: "Anna", subtitle: "",
+                                          body: "Running ten minutes late, start the review without me"),
+            appName: "Messages", hideText: false)
+        let code = NotificationPeek.notice(
+            for: NotificationReader.Entry(bundleID: "com.apple.MobileSMS", title: "Acme Bank", subtitle: "",
+                                          body: "Your verification code is 482 913"),
+            appName: "Messages", hideText: false, findsCodes: true)
+        let keynote = folder.appendingPathComponent("tray-samples/Keynote draft.key")
+        let downloadedWithButtons = LiveNotice(key: "download", symbol: "arrow.down.circle.fill", tint: DownloadMonitor.tint,
+                                               text: "Downloaded", detail: "Keynote draft.key",
+                                               actions: [NoticeAction(title: "Open", kind: .openFile(keynote)),
+                                                         NoticeAction(title: "Show", kind: .reveal(keynote))])
+        let screenshot = LiveNotice(key: "screenshot", symbol: "camera.viewfinder", tint: .white,
+                                    text: "Screenshot", detail: "Added to the Tray",
+                                    actions: [NoticeAction(title: "Show", kind: .openTab(.tray)),
+                                              NoticeAction(title: "Open", kind: .openFile(keynote))])
+        let update = LiveNotice(key: "update", symbol: "arrow.down.circle.fill", tint: NotchAccent.lavender.color,
+                                text: "Update", detail: "Dynotch 1.5.0 is ready to install",
+                                actions: [NoticeAction(title: "Install", kind: .installUpdate)])
+        let meeting = LiveNotice(key: "event", symbol: "calendar", tint: .orange, text: "in 5m", detail: "Design review",
+                                 actions: [NoticeAction(title: "Join", kind: .openURL(URL(string: "https://meet.google.com")!))])
+        let scriptButton = LiveNotice(key: "command", symbol: "checkmark.circle.fill", tint: .green, text: "Deployed",
+                                      detail: "api · 2m 14s", fromScript: true,
+                                      actions: [NoticeAction(title: "Open", kind: .openURL(URL(string: "https://example.com")!))])
+        let digest = NotificationPeek.digest(of: ["Slack": 8, "Mail": 3, "Messages": 1], during: "Work")
+        let held = NoticeQueue.summary(of: [peek, downloaded, code, scriptNotice])
         let doNotDisturb = FocusMode(id: "dnd", name: "Do Not Disturb", symbol: "moon.fill", tint: .indigo)
         let work = FocusMode(id: "work", name: "Work", symbol: "briefcase.fill", tint: .teal)
         let focusOn = LiveNotice(key: "focus", symbol: "moon.fill", tint: .indigo, text: "On", detail: "Do Not Disturb")
@@ -206,7 +235,7 @@ enum SnapshotRenderer {
                   setUp: { AudioLevels.shared.loadSample([0.3, 0.9, 0.55, 0.8]) }),
             // Widgets and the Tray
             Scene(name: "90-closed-screenshot", phase: .closed, activity: .notice(LiveNotice(
-                key: "screenshot", symbol: "camera.viewfinder", tint: .white, detail: "Screenshot added to the Tray"))),
+                key: "screenshot", symbol: "camera.viewfinder", tint: .white, text: "Screenshot", detail: "Added to the Tray"))),
             Scene(name: "91-open-control-bluetooth", phase: .open, tab: .stats, prepare: {
                 DeviceBatteryMonitor.shared.loadSample([], paired: samplePairedDevices,
                                                        connections: ["beats": .connecting, "speaker": .failed("Not in range")])
@@ -236,6 +265,12 @@ enum SnapshotRenderer {
             Scene(name: "command-3-sum", phase: .open, command: "18% of 240"),
             Scene(name: "command-4-reminder", phase: .open, command: "remind Call Sam 5pm"),
             Scene(name: "command-5-toggle", phase: .open, command: "dark"),
+            Scene(name: "command-6-volume", phase: .open, command: "vol 30"),
+            Scene(name: "command-7-awake", phase: .open, command: "awake 2h"),
+            Scene(name: "command-8-output", phase: .open, command: "output"),
+            Scene(name: "command-9-settings", phase: .open, command: "settings tray"),
+            Scene(name: "command-10-join", phase: .open, command: "join"),
+            Scene(name: "command-11-music", phase: .open, command: "ne"),
             // Glances: resting the pointer on the notch.
             Scene(name: "glance-1-music", phase: .glance, activity: .music),
             Scene(name: "glance-2-pomodoro", phase: .glance, activity: .timer),
@@ -249,6 +284,35 @@ enum SnapshotRenderer {
                 let lunch = CalendarService.shared.events.filter { $0.title == "Lunch with Sam" }
                 CalendarService.shared.loadSample(events: lunch, reminders: CalendarService.shared.reminders)
             }),
+            // Notices with buttons, which only show here.
+            Scene(name: "glance-9-message-open", phase: .glance, activity: .notice(peek)),
+            Scene(name: "glance-10-code", phase: .glance, activity: .notice(code)),
+            Scene(name: "glance-11-downloaded", phase: .glance, activity: .notice(downloadedWithButtons)),
+            Scene(name: "glance-12-screenshot", phase: .glance, activity: .notice(screenshot)),
+            Scene(name: "glance-13-update", phase: .glance, activity: .notice(update)),
+            Scene(name: "glance-14-join", phase: .glance, activity: .notice(meeting)),
+            Scene(name: "glance-15-script-button", phase: .glance, activity: .notice(scriptButton)),
+            // The recent list, and the two ways in.
+            Scene(name: "glance-16-recent", phase: .glance, showingRecent: true, setUp: { loadRecents() }),
+            Scene(name: "glance-17-today-recent-awake", phase: .glance, hasTrack: false, setUp: {
+                let lunch = CalendarService.shared.events.filter { $0.title == "Lunch with Sam" }
+                CalendarService.shared.loadSample(events: lunch, reminders: CalendarService.shared.reminders)
+                loadRecents()
+                QuickToggles.shared.loadSample(awakeUntil: sampleTime.addingTimeInterval(102 * 60))
+            }),
+            Scene(name: "glance-18-music-recent", phase: .glance, activity: .music, setUp: { loadRecents() }),
+            // While the Mac is quiet, and Keep Awake.
+            Scene(name: "66-closed-held", phase: .closed, secondary: .held(3)),
+            Scene(name: "67-closed-music-held", phase: .closed, activity: .music, secondary: .held(3)),
+            Scene(name: "68-closed-on-air-held", phase: .closed, secondary: .held(12), micInUse: true),
+            Scene(name: "69-closed-held-summary", phase: .closed, activity: .notice(held)),
+            Scene(name: "75-closed-keep-awake", phase: .closed, secondary: .keepAwake),
+            Scene(name: "76-closed-music-keep-awake", phase: .closed, activity: .music, secondary: .keepAwake),
+            Scene(name: "77-closed-digest", phase: .closed, activity: .notice(digest)),
+            Scene(name: "78-open-control-awake", phase: .open, tab: .stats, setUp: {
+                QuickToggles.shared.loadSample(awakeUntil: sampleTime.addingTimeInterval(102 * 60))
+            }),
+            Scene(name: "79-open-tray-pinned", phase: .open, tab: .tray, setUp: { TrayStore.shared.loadSample(pinned: 1) }),
         ] + widgetScenes() + [
             // The other widgets beside the player, busy cards and empty ones. These change the samples, so they go last.
             Scene(name: "96-open-nook-timer-toggles", phase: .open, tab: .home, prepare: {
@@ -287,7 +351,7 @@ enum SnapshotRenderer {
             let sceneGeometry = scene.geometry ?? geometry
             let viewModel = NotchViewModel(geometry: sceneGeometry)
             viewModel.stage(phase: scene.phase, activity: scene.activity, secondary: scene.secondary, tab: scene.tab,
-                            draggingFiles: scene.draggingFiles, command: scene.command)
+                            draggingFiles: scene.draggingFiles, command: scene.command, showingRecent: scene.showingRecent)
             // The command field can make the notch taller than the setting.
             let height = max(size.height, viewModel.metrics.height + 40)
             let content = ZStack(alignment: .top) {
@@ -671,11 +735,33 @@ enum SnapshotRenderer {
             .takeRetainedValue()
     }
 
-    /// The volume, output and equalizer state every scene starts from.
+    /// The volume, output and equalizer state every scene starts from, with nothing recent and
+    /// Keep Awake off.
     private static func resetAudioSamples() {
         VolumeMonitor.shared.loadSample(volume: 0.62, changing: false)
         loadOutputs(pickerShown: false)
         AudioLevels.shared.loadSample(nil)
+        LiveActivityCenter.shared.loadSample(recents: [], unseen: 0)
+        QuickToggles.shared.loadSample(awakeUntil: nil)
+        TrayStore.shared.loadSample(pinned: nil)
+    }
+
+    private static func loadRecents() {
+        func recent(_ symbol: String, _ tint: Color, _ title: String, detail: String? = nil, minutes: Double, count: Int = 1,
+                    actions: [NoticeAction] = []) -> RecentNotice {
+            RecentNotice(id: UUID(), symbol: symbol, tint: tint, title: title, detail: detail,
+                         date: sampleTime.addingTimeInterval(-minutes * 60), actions: actions, count: count)
+        }
+        LiveActivityCenter.shared.loadSample(recents: [
+            recent("number.square.fill", Color(red: 0.93, green: 0.42, blue: 0.69), "Slack", minutes: 2, count: 3,
+                   actions: [NoticeAction(title: "Open", kind: .openApp(bundleID: "com.tinyspeck.slackmacgap"))]),
+            recent("arrow.down.circle.fill", DownloadMonitor.tint, "Downloaded", detail: "Keynote draft.key", minutes: 9),
+            recent("bell.fill", TimerStore.tint, "Done", detail: "Tea · 4 min", minutes: 24),
+            recent("message.fill", .green, "Messages", minutes: 75,
+                   actions: [NoticeAction(title: "Open", kind: .openApp(bundleID: "com.apple.MobileSMS"))]),
+            recent("checkmark.circle.fill", .green, "Done", detail: "Resize Images finished", minutes: 96),
+            recent("arrow.down.app.fill", .white, "Updated", detail: "Dynotch is up to date", minutes: 140),
+        ], unseen: 6)
     }
 
     private static func loadOutputs(pickerShown: Bool) {

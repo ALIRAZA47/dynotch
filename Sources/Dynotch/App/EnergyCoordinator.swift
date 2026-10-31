@@ -32,6 +32,10 @@ extension Cadence {
     static let screenshotFolder = Cadence(name: "Screenshot folder", every: 60, onBattery: 120, lowPower: 300)
     /// The Pomodoro and named timers counting down in the notch.
     static let countdown = Cadence(name: "Timer countdown", every: 0.5, onBattery: 0.5, lowPower: 1)
+    /// Keep Awake with an end: it's over within half a minute of it, or on time with nobody looking.
+    static let keepAwake = Cadence(name: "Keep Awake's end", every: 30, onBattery: 30, lowPower: 60)
+    /// Screenshots and downloads whose time in the Tray is up.
+    static let trayTidying = Cadence(name: "Tray tidying", every: 3600, onBattery: 3600, lowPower: 3600)
     /// Accessibility is granted in System Settings, which doesn't tell the app.
     static let accessibilityCheck = Cadence(name: "Accessibility check", every: 2, onBattery: 2, lowPower: 4)
 }
