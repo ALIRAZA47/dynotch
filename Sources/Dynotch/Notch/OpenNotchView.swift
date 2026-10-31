@@ -1,8 +1,5 @@
 import SwiftUI
 
-/// How tall every control in the header is: the tab track, the command pill and the ··· disc.
-private let headerControlHeight: CGFloat = 28
-
 /// The expanded notch: a header row beside the camera, then the selected tab, or the command field.
 struct OpenNotchView: View {
     @ObservedObject var viewModel: NotchViewModel
@@ -12,10 +9,9 @@ struct OpenNotchView: View {
         let band = viewModel.geometry.closedSize.height
         VStack(spacing: 0) {
             OpenHeaderView(viewModel: viewModel)
-                .frame(height: band)
-                // Beside a menu bar shorter than the controls, on a display without a notch, they
-                // hang from the top edge instead of losing their tops to it.
-                .offset(y: max(0, (headerControlHeight - band) / 2))
+                // Beside a menu bar shorter than the controls, on a display without a notch, the
+                // header hangs from the top edge at their height, and the content stays clear of it.
+                .frame(height: max(band, NotchTheme.headerControlHeight))
             content
                 .id(viewModel.isCommandMode ? "command" : viewModel.visibleTab.rawValue)
                 // The old tab fades out quickly, so the two don't muddle together on the way.
@@ -204,7 +200,7 @@ private struct CommandPill: View {
         // The keys sit as far in from the end as from the top and bottom.
         .padding(.trailing, keys.isEmpty ? 10 : 5)
         // As tall as the tab track across the camera, so the header reads as one line.
-        .frame(height: headerControlHeight)
+        .frame(height: NotchTheme.headerControlHeight)
         .glass(isActive ? .lens(theme.accent) : .control, in: Capsule(), isLit: hovering)
         .contentShape(Capsule())
     }
@@ -221,7 +217,7 @@ private struct MoreMenu: View {
             Image(systemName: "ellipsis")
                 .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(hovering ? theme.primary : theme.secondary)
-                .frame(width: headerControlHeight, height: headerControlHeight)
+                .frame(width: NotchTheme.headerControlHeight, height: NotchTheme.headerControlHeight)
                 .background {
                     if hovering { GlassSurface(depth: .control, shape: Circle()) }
                 }
@@ -260,11 +256,14 @@ struct HomeTabView: View {
         GeometryReader { proxy in
             let widgets = settings.homeWidgets
             HStack(spacing: NotchTheme.gap) {
+                // Two groups, so VoiceOver reads the whole player, then the card, rather than by height.
                 MediaPlayerView()
                     .frame(width: widgets.isEmpty ? proxy.size.width : (proxy.size.width * 0.525).rounded())
+                    .accessibilityElement(children: .contain)
                 if !widgets.isEmpty {
                     NookStack(widgets: widgets, turns: viewModel.stackTurns)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .accessibilityElement(children: .contain)
                 }
             }
         }

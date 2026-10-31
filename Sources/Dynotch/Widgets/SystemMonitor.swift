@@ -134,13 +134,13 @@ final class SystemMonitor: ObservableObject {
 
     // MARK: Snapshots
 
-    func loadSample() {
-        cpu = 0.23
+    func loadSample(cpu: Double = 0.23, download: Double = 1_240_000) {
+        self.cpu = cpu
         cpuHistory = (0..<30).map { 0.15 + 0.12 * abs(sin(Double($0) / 3)) }
         memoryUsed = UInt64(Double(memoryTotal) * 0.58)
         diskTotal = 994_662_584_320
         diskFree = 412_000_000_000
-        download = 1_240_000
+        self.download = download
         upload = 86_000
     }
 }

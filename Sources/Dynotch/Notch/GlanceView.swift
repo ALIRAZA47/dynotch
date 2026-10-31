@@ -265,9 +265,9 @@ private struct MusicGlance: View {
     var body: some View {
         let tint = settings.artworkTint ? Color(nsColor: media.accent) : theme.accent
         GlanceLayout(band: band) {
-            // The art's color falls on the black below it, as the player's does.
+            // The art's color falls on the black below it, as the player's does. No art, no light.
             ArtworkView(image: media.artwork, size: glancePicture, cornerRadius: 11,
-                        glow: settings.artworkTint ? tint : nil)
+                        glow: settings.artworkTint && media.artwork != nil ? tint : nil)
         } trailing: {
             HStack(spacing: 2) {
                 IconButton(symbol: "backward.fill", size: 12, help: "Previous", action: media.previous)
@@ -425,7 +425,9 @@ private struct NoticeGlance: View {
         } trailing: {
             EmptyView()
         } center: {
-            GlanceLines(title: notice.text, subtitle: notice.detail)
+            // A notice with only a detail, like a screenshot's, gives it the title's line.
+            GlanceLines(title: notice.text.isEmpty ? (notice.detail ?? "") : notice.text,
+                        subtitle: notice.text.isEmpty ? nil : notice.detail)
         }
     }
 }

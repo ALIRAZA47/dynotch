@@ -245,6 +245,8 @@ private struct LaterEvents: View {
                         .font(NotchFont.numeric(10.5))
                         .foregroundStyle(theme.tertiary)
                         .lineLimit(1)
+                        // A 12-hour clock's 10:05 PM keeps its PM.
+                        .minimumScaleFactor(0.85)
                         .frame(width: 46, alignment: .leading)
                     Capsule()
                         .fill(event.color)

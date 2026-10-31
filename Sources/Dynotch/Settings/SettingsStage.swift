@@ -57,8 +57,9 @@ struct StageInk {
     var secondary: Color {
         colorScheme == .dark ? .white.opacity(contrast == .increased ? 0.78 : 0.62) : .primary.opacity(0.7)
     }
-    /// A method that's off.
-    var off: Color { colorScheme == .dark ? .white.opacity(0.36) : .primary.opacity(0.36) }
+    /// A method that's off. It's news, not a disabled control, so it reads at the second level;
+    /// its chip has no fill.
+    var off: Color { secondary }
 }
 
 /// Graphite glass lit from above, light or dark with the page: a bloom of the user's accent where
@@ -72,11 +73,17 @@ private struct StageBackdrop: View {
         let bloom = accent.color.opacity(Palette.stageBloomOpacity(colorScheme))
         ZStack {
             Palette.stageGradient
-            RadialGradient(colors: [bloom, bloom.opacity(0)], center: .top, startRadius: 0, endRadius: Palette.stageBloomRadius)
-                .scaleEffect(x: Palette.stageBloomStretch, y: 1, anchor: .top)
-            RadialGradient(colors: [Palette.stageGlow, Palette.stageGlow.opacity(0)], center: .top, startRadius: 0,
-                           endRadius: Palette.stageGlowRadius)
-                .scaleEffect(x: Palette.stageGlowStretch, y: 1, anchor: .top)
+            // The light fades out before the stage's left edge, where the window's own gradient takes
+            // over behind the sidebar, so no edge shows between them.
+            ZStack {
+                RadialGradient(colors: [bloom, bloom.opacity(0)], center: .top, startRadius: 0, endRadius: Palette.stageBloomRadius)
+                    .scaleEffect(x: Palette.stageBloomStretch, y: 1, anchor: .top)
+                RadialGradient(colors: [Palette.stageGlow, Palette.stageGlow.opacity(0)], center: .top, startRadius: 0,
+                               endRadius: Palette.stageGlowRadius)
+                    .scaleEffect(x: Palette.stageGlowStretch, y: 1, anchor: .top)
+            }
+            .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.08)],
+                                 startPoint: .leading, endPoint: .trailing))
         }
         .overlay(alignment: .bottom) {
             Palette.stageFoot.frame(height: 1)
@@ -125,6 +132,8 @@ private struct StagePreview: View {
     private static let openScale: CGFloat = 0.46
     private static let hardwareNotch = CGSize(width: 185, height: 32)
     private static let cycle: TimeInterval = 2.6
+    /// How it moves with Reduce Motion: no spring.
+    private static let eased = Animation.easeOut(duration: 0.2)
 
     var body: some View {
         let page = navigation.page
@@ -137,10 +146,10 @@ private struct StagePreview: View {
                     .id(page)
                     .transition(.opacity)
             }
-            .animation(.notchActivity, value: featured)
+            .animation(reduceMotion ? Self.eased : .notchActivity, value: featured)
         }
-        .animation(.notchOpen, value: page)
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: settings.theme)
+        .animation(reduceMotion ? Self.eased : .notchOpen, value: page)
+        .animation(reduceMotion ? Self.eased : .spring(response: 0.35, dampingFraction: 0.85), value: settings.theme)
         .environment(\.notchTheme, settings.theme)
     }
 
@@ -243,6 +252,7 @@ private struct PreviewNotch<Content: View>: View {
     @ViewBuilder var content: Content
     /// The stage's appearance, which the shadow follows.
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.isSnapshot) private var isSnapshot
 
     var body: some View {
         let onDark = colorScheme == .dark
@@ -250,6 +260,10 @@ private struct PreviewNotch<Content: View>: View {
             .frame(width: size.width, height: size.height, alignment: .top)
             .padding(.horizontal, topRadius)
             .background(NotchSurface(isGlass: isGlass, topRadius: topRadius, bottomRadius: bottomRadius, bandHeight: bandHeight))
+            // Glass carries its own dark layer live. The snapshot's stand-in, on the light stage, needs this.
+            .background {
+                if isSnapshot, isGlass, !onDark { Color.black.opacity(0.35) }
+            }
             .clipShape(NotchShape(topRadius: topRadius, bottomRadius: bottomRadius))
             .environment(\.colorScheme, .dark)
             // Softer on the light stage, and fainter under glass, which would show it through.
@@ -441,9 +455,10 @@ private struct MethodChip: View {
     let text: String
     let isOn: Bool
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
-        let ink = StageInk(colorScheme: colorScheme)
+        let ink = StageInk(colorScheme: colorScheme, contrast: contrast)
         let dark = colorScheme == .dark
         HStack(spacing: 5) {
             Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
@@ -488,6 +503,7 @@ private struct ActivityDots: View {
 /// One round of the focus timer, to scale: focus sessions, short breaks and the long break.
 private struct FocusRound: View {
     @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.colorScheme) private var colorScheme
 
     private let width: CGFloat = 320
     private let gap: CGFloat = 3
@@ -497,15 +513,19 @@ private struct FocusRound: View {
         let total = CGFloat(sessions * settings.focusMinutes + (sessions - 1) * settings.shortBreakMinutes
             + settings.longBreakMinutes)
         let room = width - gap * CGFloat(sessions * 2 - 1)
+        // On the light stage the phases' pale colors would all but vanish, so they take the window's deeper shades.
+        let onLight = colorScheme == .light
+        let focus = onLight ? WindowAccent(choice: .red).color : PomodoroTimer.Phase.focus.color
+        let rest = onLight ? WindowAccent(choice: .green).color : PomodoroTimer.Phase.shortBreak.color
         VStack(spacing: 8) {
             HStack(spacing: gap) {
                 ForEach(0..<sessions, id: \.self) { index in
                     let last = index == sessions - 1
                     Capsule()
-                        .fill(PomodoroTimer.Phase.focus.color)
+                        .fill(focus)
                         .frame(width: max(4, room * CGFloat(settings.focusMinutes) / total))
                     Capsule()
-                        .fill(PomodoroTimer.Phase.shortBreak.color.opacity(last ? 1 : 0.55))
+                        .fill(rest.opacity(last ? 1 : onLight ? 0.8 : 0.55))
                         .frame(width: max(3, room * CGFloat(last ? settings.longBreakMinutes : settings.shortBreakMinutes) / total))
                 }
             }
@@ -590,6 +610,7 @@ private struct NookSketch: View {
     let cardRadius: CGFloat
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.notchTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         GeometryReader { proxy in
@@ -610,7 +631,7 @@ private struct NookSketch: View {
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .glass(.pane, in: RoundedRectangle(cornerRadius: cardRadius, style: .continuous))
-                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                    .transition(reduceMotion ? AnyTransition.opacity : .opacity.combined(with: .scale(scale: 0.9)))
                 }
             }
         }

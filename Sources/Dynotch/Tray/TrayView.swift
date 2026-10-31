@@ -23,6 +23,7 @@ private struct TrayContentView: View {
     @ViewState private var isWorking = false
     @Environment(\.isSnapshot) private var isSnapshot
     @Environment(\.notchTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -47,13 +48,18 @@ private struct TrayContentView: View {
         GeometryReader { proxy in
             let fit = TrayItemView.Fit(height: proxy.size.height)
             // With room to spare, the last tile takes all of it, so an empty tray is one big place to
-            // drop files. More files than fit scroll sideways.
+            // drop files. More files than fit scroll sideways, as far as the shelf's rim.
             ViewThatFits(in: .horizontal) {
                 strip(fit)
-                Scroller(.horizontal) { strip(fit) }
+                    .padding(.horizontal, theme.controlRadius)
+                Scroller(.horizontal) {
+                    strip(fit)
+                        .padding(.horizontal, theme.controlRadius)
+                }
             }
         }
-        .padding(theme.controlRadius)
+        .padding(.vertical, theme.controlRadius)
+        .clipShape(RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous).inset(by: 1))
         .background(CardSurface())
     }
 
@@ -62,10 +68,12 @@ private struct TrayContentView: View {
         HStack(spacing: 6) {
             ForEach(tray.items) { item in
                 TrayItemView(item: item, isSelected: tray.selection == item.id, viewModel: viewModel, fit: fit)
-                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+                    .transition(reduceMotion ? AnyTransition.opacity : .scale(scale: 0.6).combined(with: .opacity))
             }
             AddFilesTile(isTargeted: isTargeted, isAlone: tray.items.isEmpty)
         }
+        // One group, so VoiceOver reads the Add tile after the files in a strip that scrolls, too.
+        .accessibilityElement(children: .contain)
         .frame(maxHeight: .infinity)
     }
 
@@ -199,6 +207,7 @@ private struct TrayItemView: View {
     let fit: Fit
     @ObservedObject private var thumbnails = ThumbnailCache.shared
     @Environment(\.notchTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ViewState private var hovering = false
 
     @ViewState private var detail: String?
@@ -220,6 +229,8 @@ private struct TrayItemView: View {
         }
         .padding(.vertical, 6)
         .frame(width: 100)
+        // As tall as the Add tile beside it, so a pane or a selection doesn't float in a tall shelf.
+        .frame(maxHeight: .infinity)
         .background {
             // A pane rises under the pointer. The selected file holds the accent's light inside a ring
             // of it, so the selection never rests on color alone.
@@ -241,7 +252,7 @@ private struct TrayItemView: View {
                 }
                 .buttonStyle(PressableButtonStyle())
                 .help("Remove from tray")
-                .transition(.scale(scale: 0.6).combined(with: .opacity))
+                .transition(reduceMotion ? AnyTransition.opacity : .scale(scale: 0.6).combined(with: .opacity))
             }
         }
         .contentShape(Rectangle())
