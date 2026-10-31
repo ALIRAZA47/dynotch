@@ -16,6 +16,7 @@ struct CompactActivityView: View {
         case .focus(let mode): FocusGlyph(mode: mode)
         case .held(let count): HeldBadge(count: count)
         case .keepAwake: KeepAwakeGlyph()
+        case .recording: RecordingGlyph()
         }
     }
 }

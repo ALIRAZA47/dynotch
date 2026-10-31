@@ -152,6 +152,24 @@ enum TemperatureUnits: String, CaseIterable, Identifiable {
 }
 
 /// What Return does in the capture editor once a region is selected.
+/// What a recording of a region comes out as.
+enum RecordFormat: String, CaseIterable, Identifiable {
+    case mp4, gif
+
+    var id: String { rawValue }
+    var title: String { rawValue.uppercased() }
+
+    /// A GIF is made from a slower recording: it couldn't keep more frames than this anyway.
+    var frameRate: Int { self == .mp4 ? 60 : 15 }
+
+    var symbol: String {
+        switch self {
+        case .mp4: "film"
+        case .gif: "photo.stack"
+        }
+    }
+}
+
 enum CaptureAction: String, CaseIterable, Identifiable {
     case copy, save, copyAndSave
 
@@ -461,6 +479,10 @@ final class AppSettings: ObservableObject {
     /// The Screenshot app's click when a capture is taken.
     @Published var shutterSound: Bool = AppSettings.value("shutterSound", true) {
         didSet { save("shutterSound", shutterSound) }
+    }
+    /// What Record makes.
+    @Published var recordFormat: RecordFormat = AppSettings.value("recordFormat", RecordFormat.mp4) {
+        didSet { save("recordFormat", recordFormat.rawValue) }
     }
 
     // MARK: Focus timer

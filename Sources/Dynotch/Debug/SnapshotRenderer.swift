@@ -164,6 +164,9 @@ enum SnapshotRenderer {
         ImageActions.deliver(ImageReader.Reading(codes: ["https://paypal.com.accounts.verify.signin.evil.example/account/login"]), to: scratchBoard) { notice, _ in read.append(notice) }
         scratchBoard.releaseGlobally()
         let (copiedText, noText, qrCode, qrCodeLongHost) = (read[0], read[1], read[2], read[3])
+        let recording = folder.appendingPathComponent("tray-samples/Screen Recording 2026-10-31 at 18.02.06.mp4")
+        let recordingLanded = ScreenRecorder.landed(recording, ending: .asked, gifFailed: false)
+        let recordingDisplayGone = ScreenRecorder.landed(recording, ending: .displayGone, gifFailed: false)
         let cutOut = LiveNotice(key: "cutout", symbol: "scissors", tint: .white, text: "Cut out", detail: "Keynote draft (cut out).png",
                                 actions: [NoticeAction(title: "Open", kind: .openFile(keynote)), NoticeAction(title: "Show", kind: .reveal(keynote))],
                                 recall: .whole)
@@ -329,6 +332,24 @@ enum SnapshotRenderer {
                 LiveActivityCenter.shared.loadSample(recents: [], unseen: 0)
                 LiveActivityCenter.shared.remember(qrCodeLongHost)
             }),
+            // Recording a region: the dot and the time, beside a notice, saving, and Stop in the glance.
+            Scene(name: "recording-1-closed", phase: .closed, activity: .recording, setUp: { loadRecording() }),
+            Scene(name: "recording-2-closed-virtual", phase: .closed, activity: .recording, geometry: virtualNotch, setUp: { loadRecording() }),
+            Scene(name: "recording-3-closed-long", phase: .closed, activity: .recording, setUp: { loadRecording(seconds: 3765) }),
+            Scene(name: "recording-4-closed-and-music", phase: .closed, activity: .recording, secondary: .music, setUp: { loadRecording() }),
+            Scene(name: "recording-5-beside-a-notice", phase: .closed, activity: .notice(lateMessage), secondary: .recording,
+                  setUp: { loadRecording() }),
+            Scene(name: "recording-6-saving", phase: .closed, activity: .recording, setUp: { loadRecording(saving: true) }),
+            Scene(name: "recording-7-landed", phase: .closed, activity: .notice(recordingLanded)),
+            Scene(name: "recording-8-display-gone", phase: .closed, activity: .notice(recordingDisplayGone)),
+            Scene(name: "glance-24-recording", phase: .glance, activity: .recording, setUp: { loadRecording() }),
+            Scene(name: "glance-25-recording-long", phase: .glance, activity: .recording, setUp: { loadRecording(seconds: 3765) }),
+            Scene(name: "glance-26-recording-narrow", phase: .glance, activity: .recording, geometry: narrowNotch, setUp: { loadRecording() }),
+            // The recording's, with a notice in the closed notch.
+            Scene(name: "glance-27-recording-beside-a-notice", phase: .glance, activity: .notice(meeting), secondary: .recording,
+                  setUp: { loadRecording() }),
+            Scene(name: "glance-28-recording-saving", phase: .glance, activity: .recording, setUp: { loadRecording(saving: true) }),
+            Scene(name: "glance-29-recording-landed", phase: .glance, activity: .notice(recordingLanded)),
             Scene(name: "85-closed-copied-text", phase: .closed, activity: .notice(copiedText)),
             Scene(name: "86-closed-no-text", phase: .closed, activity: .notice(noText)),
             Scene(name: "87-closed-qr-code", phase: .closed, activity: .notice(qrCodeLongHost)),
@@ -847,7 +868,15 @@ enum SnapshotRenderer {
         LiveActivityCenter.shared.loadSample(recents: [], unseen: 0)
         QuickToggles.shared.loadSample(awakeUntil: nil)
         TrayStore.shared.loadSample(pinned: nil)
+        ScreenRecorder.shared.loadSample(.idle)
         loadClips([], isOn: false)
+    }
+
+    /// A recording this long running, or its file being saved. It holds nothing.
+    private static func loadRecording(seconds: TimeInterval = 83, saving: Bool = false) {
+        let plan = RecordingPlan(region: CGRect(x: 0, y: 0, width: 640, height: 360), scale: 2, frameRate: 60)
+        ScreenRecorder.shared.loadSample(saving ? .saving : .recording(since: sampleTime), plan: plan,
+                                         now: sampleTime.addingTimeInterval(seconds))
     }
 
     /// Made-up clips, never what's really on the clipboard, which a snapshot run doesn't look at.

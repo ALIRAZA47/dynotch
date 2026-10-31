@@ -159,6 +159,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// A recording that's running is finished and landed before the app goes, however it was asked to
+    /// quit: an in-app update comes this way too.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let recorder = ScreenRecorder.shared
+        guard recorder.isBusy else { return .terminateNow }
+        recorder.finishBeforeQuitting { NSApp.reply(toApplicationShouldTerminate: true) }
+        return .terminateLater
+    }
+
     /// Opening the app again from Finder or Spotlight shows its settings.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         SettingsWindowController.shared.show()
@@ -312,6 +321,8 @@ extension AppDelegate: NSMenuItemValidation {
     /// Check for Updates names the new version once a check has found one.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(captureScreen) {
+            // It stops a recording that's running, as ⌃⌥S does.
+            menuItem.title = ScreenRecorder.shared.isRunning ? "Stop Recording" : "Capture Screen"
             menuItem.keyEquivalent = AppSettings.shared.captureShortcut ? "s" : ""
             return !CaptureController.shared.isActive
         }

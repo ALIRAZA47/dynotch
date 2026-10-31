@@ -5,11 +5,14 @@ import SwiftUI
 /// made-up display parked off screen: selects, moves and resizes a region, draws with every tool,
 /// types a text mark, undoes and redoes from the keyboard and the toolbar, then copies to a
 /// pasteboard of its own, saves into the folder, pins and reads the text. On a display that lists
-/// its windows it hovers them and clicks them. It prints a line per check and leaves the finished
-/// capture in the folder.
+/// its windows it hovers them and clicks them. Then it records from V and from the Record button, on
+/// made-up frames, never the real screen. It prints a line per check and leaves the finished capture
+/// in the folder.
 @MainActor
 enum CaptureSelfTest {
     private static var failures: [String] = []
+    /// What the recorder said, for the Record checks. Notices that are collected don't reach the notch.
+    private static var recordingNotices: [LiveNotice] = []
 
     /// Async so it can wait for Copy Text's reading, rather than guess how long Vision takes.
     static func run(into folder: URL) async -> Bool {
@@ -21,6 +24,13 @@ enum CaptureSelfTest {
         controller.placesOverlaysOffScreen = true
         controller.pasteboard = NSPasteboard(name: NSPasteboard.Name("app.dynotch.capture-self-test"))
         controller.saveFolderOverride = folder
+        // Before anything else, so that nothing here can reach the real recorder.
+        let source = SyntheticRecordingSource()
+        let recordings = folder.appendingPathComponent("Recordings", isDirectory: true)
+        try? FileManager.default.createDirectory(at: recordings, withIntermediateDirectories: true)
+        controller.recorder = ScreenRecorder(makeSource: { source }, tray: TrayStore(support: recordings), saveFolder: recordings) { notice, _ in
+            recordingNotices.append(notice)
+        }
         guard let display = CaptureController.syntheticDisplay(id: 7, frame: CGRect(x: 0, y: 0, width: 1280, height: 800), scale: 2) else {
             print("FAIL no synthetic display")
             return false
@@ -178,7 +188,73 @@ enum CaptureSelfTest {
         check(!controller.isActive, "Esc cancels the capture")
         checkWindows(controller)
         await checkCopyText(on: display)
+        await checkRecord(on: display, source: source, in: recordings)
         return finish()
+    }
+
+    /// Record, from V and from the button, with the fake source: no real capture starts. The toolbar's
+    /// last button has to fit too, now that it has one more.
+    private static func checkRecord(on display: CaptureDisplay, source: SyntheticRecordingSource, in folder: URL) async {
+        let controller = CaptureController.shared
+        let recorder = controller.recorder
+        let region = (from: CGPoint(x: 200, y: 150), to: CGPoint(x: 520, y: 390))
+
+        guard let editor = openEditor(on: display, selecting: region) else { return }
+        if let record = editor.controlFrames["Record"], let close = editor.controlFrames["Close"], let toolbar = editor.toolbarFrame(on: display.id) {
+            check(record.width == 30, "the Record button is a toolbar button (\(record.width) wide)")
+            check(close.maxX <= toolbar.maxX - 8, "the toolbar fits the Record button (Close ends at \(close.maxX), the toolbar at \(toolbar.maxX))")
+        } else {
+            check(false, "the toolbar reported its Record button")
+        }
+        if let gif = editor.controlFrames["GIF"], let toolbar = editor.toolbarFrame(on: display.id) {
+            check(gif.maxX <= toolbar.maxX - 8, "the format control fits in the second row (GIF ends at \(gif.maxX), the toolbar at \(toolbar.maxX))")
+        } else {
+            check(false, "the toolbar reported its format control")
+        }
+        key("v", editor)
+        check(!controller.isActive, "V closes the editor")
+        check(recorder.state == .starting, "and starts recording")
+        check(recorder.isRunning, "with the fake source")
+        await recorder.starting?.value
+        check(recorder.plan?.width == 640 && recorder.plan?.height == 480, "the recording is the selection at 2x (\(recorder.plan?.sizeText ?? "nothing"))")
+        await sendFrames(source, count: 30)
+        check(recorder.outline?.canBecomeKey == false, "the outline can't take the keyboard")
+        check(recorder.outline.map { outline in !NSScreen.screens.contains { $0.frame.intersects(outline.frame) } } == true, "and stays off screen here")
+
+        // Every way into Capture stops a recording rather than opening Capture over it. Only with one
+        // running: with none, `begin` would go on to the real screen.
+        guard recorder.isRunning else {
+            check(false, "the recording is running")
+            return
+        }
+        controller.begin()
+        check(!controller.isActive && recorder.state == .saving, "another way into Capture stops the recording")
+        await recorder.saving?.value
+        let recorded = (try? FileManager.default.contentsOfDirectory(atPath: folder.path))?.filter { $0.hasPrefix("Screen Recording ") } ?? []
+        check(recorded.count == 1 && recorded.first?.hasSuffix(".mp4") == true, "the MP4 lands in the save folder (\(recorded))")
+        check(recordingNotices.last?.text == "Saved" && recordingNotices.last?.actions.count == 2, "and a notice names it, with Open and Show")
+
+        guard let second = openEditor(on: display, selecting: region) else { return }
+        press("GIF", second, controller.overlays[0])
+        check(AppSettings.shared.recordFormat == .gif, "the format control picks GIF")
+        press("MP4", second, controller.overlays[0])
+        check(AppSettings.shared.recordFormat == .mp4, "and back to MP4")
+        press("Record", second, controller.overlays[0])
+        check(!controller.isActive && recorder.isRunning, "the Record button closes the editor and starts recording")
+        await recorder.starting?.value
+        await sendFrames(source, count: 30)
+        recorder.stop()
+        await recorder.saving?.value
+        let both = (try? FileManager.default.contentsOfDirectory(atPath: folder.path))?.filter { $0.hasPrefix("Screen Recording ") } ?? []
+        check(both.count == 2, "that recording lands too (\(both.count) in all)")
+        check(recorder.state == .idle, "and the recorder is idle again")
+    }
+
+    private static func sendFrames(_ source: SyntheticRecordingSource, count: Int) async {
+        for _ in 0..<count {
+            source.send(1)
+            try? await Task.sleep(for: .milliseconds(4))
+        }
     }
 
     /// Hovering and clicking on a display that lists its windows, through the overlay's events.

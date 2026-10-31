@@ -1241,7 +1241,7 @@ struct TraySettings: View {
                 SwitchGrid(options: options)
             }
             SettingsSection(title: "Screenshots",
-                            footer: "Dynotch watches the folder the Screenshot app saves to: \(ScreenshotWatcher.folderNames). Its own captures are saved there too, named like macOS's. In the editor, drag out a region or click for the whole display, mark it up, then copy, save, add to the tray or pin it.") {
+                            footer: "Dynotch watches the folder the Screenshot app saves to: \(ScreenshotWatcher.folderNames). Its own captures are saved there too, named like macOS's. In the editor, drag out a region or click for the whole display, mark it up, then copy, save, add to the tray or pin it, or record it.") {
                 SettingsCard {
                     SwitchRow(title: "Add screenshots to the tray", detail: "New screenshots and screen recordings show up here",
                               symbol: "camera.viewfinder", tint: .orange, isOn: $settings.screenshotsToTray)
@@ -1253,6 +1253,8 @@ struct TraySettings: View {
                               symbol: "speaker.wave.2.fill", tint: .teal, isOn: $settings.shutterSound)
                     CardDivider()
                     CaptureActionRow()
+                    CardDivider()
+                    RecordFormatRow()
                 }
             }
             SettingsSection(title: "Tidying",
@@ -1335,6 +1337,36 @@ private struct CaptureActionRow: View {
                 ForEach(CaptureAction.allCases) { action in
                     ChoiceChip(title: action.title, symbol: action.symbol, isSelected: settings.captureAction == action) {
                         settings.captureAction = action
+                    }
+                    .fixedSize()
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+    }
+}
+
+/// What Record makes in the capture editor, which the editor's toolbar sets too.
+private struct RecordFormatRow: View {
+    @ObservedObject private var settings = AppSettings.shared
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SymbolBadge(symbol: "record.circle", tint: .red, size: 26)
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Record as")
+                    .font(.system(size: 13, weight: .medium))
+                Text("What V makes of a region: no sound, in either")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Palette.secondaryText)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 12)
+            HStack(spacing: 6) {
+                ForEach(RecordFormat.allCases) { format in
+                    ChoiceChip(title: format.title, symbol: format.symbol, isSelected: settings.recordFormat == format) {
+                        settings.recordFormat = format
                     }
                     .fixedSize()
                 }

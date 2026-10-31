@@ -48,6 +48,9 @@ final class CaptureController: ObservableObject {
     var saveFolderOverride: URL?
     /// The last Copy Text, which goes on after the overlay has closed. A test waits for it.
     private(set) var reading: Task<Void, Never>?
+    /// What Record starts, and what every way into Capture stops. Tests and the self-test give it one
+    /// of their own, with made-up frames.
+    var recorder = ScreenRecorder.shared
 
     private static let shutterPath = "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Grab.aif"
 
@@ -56,7 +59,12 @@ final class CaptureController: ObservableObject {
     var isActive: Bool { editor != nil }
 
     /// Freezes the displays and opens the editor. Without Screen Recording access, asks for it and says so in the notch.
+    /// While a recording runs it stops that instead, so every way in, from ⌃⌥S to `dynotch capture`, is a way to stop.
     func begin() {
+        if recorder.isRunning {
+            recorder.stop()
+            return
+        }
         guard editor == nil, !isFreezing else { return }
         refreshAccess()
         guard hasAccess else {
@@ -196,18 +204,38 @@ final class CaptureController: ObservableObject {
         NSCursor.crosshair.set()
     }
 
+    /// Where the selection is on the desktop, from the overlay's frame: the display's, or off screen in a test.
+    private var selectionPlace: CGRect? {
+        guard let editor, let selection = editor.selection,
+              let window = overlays.first(where: { $0.display.id == editor.activeDisplay }) else { return nil }
+        return CGRect(x: window.frame.minX + selection.minX, y: window.frame.maxY - selection.maxY,
+                      width: selection.width, height: selection.height)
+    }
+
+    /// Record renders nothing: marks aren't recorded. It takes the selection and its display, and the
+    /// overlay goes first, so that it isn't in the recording.
+    private func record() {
+        guard let editor, let selection = editor.selection, let id = editor.activeDisplay, let display = editor.display(id),
+              let place = selectionPlace else {
+            tearDown()
+            return
+        }
+        let request = RecordingRequest(display: id, region: selection, scale: display.scale, place: place,
+                                       format: AppSettings.shared.recordFormat)
+        tearDown()
+        recorder.start(request)
+    }
+
     private func finish(_ finish: CaptureEditor.Finish) {
+        if finish == .record {
+            record()
+            return
+        }
         guard let editor, let output = editor.render() else {
             tearDown()
             return
         }
-        // Where the selection is on the desktop, from the overlay's frame: the display's, or off screen in a test.
-        let place = overlays.first { $0.display.id == editor.activeDisplay }.flatMap { window in
-            editor.selection.map { selection in
-                CGRect(x: window.frame.minX + selection.minX, y: window.frame.maxY - selection.maxY,
-                       width: selection.width, height: selection.height)
-            }
-        }
+        let place = selectionPlace
         tearDown()
         // Copy Text takes no picture, so there's nothing for the shutter to mark.
         if finish != .copyText, AppSettings.shared.shutterSound { playShutter() }
@@ -243,6 +271,8 @@ final class CaptureController: ObservableObject {
             // overlay has gone by now, which makes it feel instant, and the notice follows.
             let pasteboard = pasteboard
             reading = Task { await ImageActions.copyText(in: output.image, to: pasteboard) }
+        case .record:
+            break
         }
     }
 

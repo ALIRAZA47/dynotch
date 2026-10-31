@@ -8,7 +8,7 @@ import SwiftUI
 final class CaptureEditor: ObservableObject {
     /// What becomes of the finished capture.
     enum Finish: Equatable {
-        case copy, save, copyAndSave, addToTray, pin, copyText
+        case copy, save, copyAndSave, addToTray, pin, copyText, record
 
         init(_ action: CaptureAction) {
             switch action {
@@ -437,6 +437,10 @@ final class CaptureEditor: ObservableObject {
             finish(.copyText)
             return true
         }
+        if key == "v" {
+            finish(.record)
+            return true
+        }
         if let picked = AnnotationTool(rawValue: key) {
             tool = picked
             return true
@@ -701,7 +705,7 @@ private struct CaptureGlass<S: InsettableShape>: View {
 /// size so the editor can place it and know where it is. It floats on glass, its tools pieces of
 /// the notch's glass, the one in hand a jewel of the accent.
 struct CaptureToolbar: View {
-    static let size = CGSize(width: 628, height: 84)
+    static let size = CGSize(width: 660, height: 84)
 
     @ObservedObject var editor: CaptureEditor
     @ObservedObject var document: AnnotationDocument
@@ -736,6 +740,7 @@ struct CaptureToolbar: View {
                     editor.redo()
                 }
                 ToolbarDivider()
+                ToolbarButton(symbol: "record.circle", title: "Record", key: "V", tint: .red, editor: editor) { editor.finish(.record) }
                 ToolbarButton(symbol: "pin", title: "Pin", editor: editor) { editor.finish(.pin) }
                 ToolbarButton(symbol: "tray.and.arrow.down", title: "Add to Tray", editor: editor) { editor.finish(.addToTray) }
                 ToolbarButton(symbol: "square.and.arrow.down", title: "Save", key: "⌘S", editor: editor) { editor.finish(.save) }
@@ -756,6 +761,7 @@ struct CaptureToolbar: View {
                     .frame(width: 36, alignment: .trailing)
                     .accessibilityHidden(true)
                 Spacer(minLength: 0)
+                RecordFormatPicker(editor: editor)
             }
         }
         .padding(.horizontal, 10)
@@ -778,6 +784,8 @@ private struct ToolbarButton: View {
     var key: String?
     var isSelected = false
     var isEnabled = true
+    /// A color of its own, for Record.
+    var tint: Color?
     let editor: CaptureEditor
     let action: () -> Void
     @ViewState private var hovering = false
@@ -789,7 +797,7 @@ private struct ToolbarButton: View {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))
                 // Ink on the jewel, as on every accent face.
-                .foregroundStyle(isSelected ? theme.onAccent : Color.white.opacity(isEnabled ? 0.88 : 0.3))
+                .foregroundStyle(isSelected ? theme.onAccent : tint ?? Color.white.opacity(isEnabled ? 0.88 : 0.3))
                 .frame(width: 30, height: 30)
                 .background {
                     if isSelected {
@@ -822,6 +830,38 @@ private extension View {
                 .onAppear { editor.setControlFrame(name, frame) }
                 .onChange(of: frame) { editor.setControlFrame(name, frame) }
         })
+    }
+}
+
+/// What Record makes, MP4 or GIF, at the right of the second row. The same choice as in Settings → Tray.
+private struct RecordFormatPicker: View {
+    let editor: CaptureEditor
+    @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.notchTheme) private var theme
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(RecordFormat.allCases) { format in
+                let isSelected = settings.recordFormat == format
+                Button { settings.recordFormat = format } label: {
+                    Text(format.title)
+                        .font(NotchFont.numeric(11, .medium))
+                        .foregroundStyle(isSelected ? .white : .white.opacity(0.6))
+                        .frame(width: 38, height: 22)
+                        .background {
+                            if isSelected {
+                                GlassSurface(depth: .control, shape: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                            }
+                        }
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableButtonStyle(scale: 0.95))
+                .help("Record as \(format.title)")
+                .accessibilityLabel("Record as \(format.title)")
+                .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+                .reportingFrame(format.title, to: editor)
+            }
+        }
     }
 }
 

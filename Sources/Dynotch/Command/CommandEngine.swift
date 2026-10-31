@@ -93,6 +93,7 @@ enum CommandEngine {
         }
 
         // Then anything whose name starts that way.
+        results.append(contentsOf: stopRecording(matching: lower))
         results.append(contentsOf: toggles(matching: lower))
         results.append(contentsOf: tabs(matching: lower))
         if !saidWhat {
@@ -260,6 +261,16 @@ enum CommandEngine {
                 return .close
             }
         }
+    }
+
+    /// Stop, for as long as there's a recording to stop.
+    static func stopRecording(matching text: String, recorder: ScreenRecorder? = nil) -> [CommandResult] {
+        let recorder = recorder ?? .shared
+        guard recorder.isRunning, matches(text, ["stop", "stop recording"]) else { return [] }
+        return [CommandResult(id: "stop-recording", symbol: "stop.fill", tint: .red, title: "Stop recording") { _ in
+            recorder.stop()
+            return .close
+        }]
     }
 
     /// The meeting on now, or the next one today with a link to join.

@@ -83,6 +83,10 @@ struct ClosedLayout: Equatable {
             // Room for a size like "482.3 MB" on the right.
             earWidth = 78
             rowHeight = 0
+        case .recording:
+            // Room for "1:02:45" on the right, as for the stopwatch.
+            earWidth = 72
+            rowHeight = 0
         case .notice(let notice):
             switch notice.kind {
             case .meter:
@@ -107,6 +111,7 @@ final class NotchViewModel: ObservableObject {
     @Published private(set) var phase: Phase = .closed {
         didSet {
             guard (oldValue == .glance) != (phase == .glance) else { return }
+            if phase == .glance { glanceAppeared = .now }
             LiveActivityCenter.shared.glanceChanged(isGlancing: phase == .glance)
         }
     }
@@ -141,6 +146,7 @@ final class NotchViewModel: ObservableObject {
     /// The glance has turned to the recent list.
     @Published private(set) var isShowingRecent = false
     private var clickedForGlance = Date.distantPast
+    private var glanceAppeared = Date.distantPast
 
     /// Something was dragged out of the tray and the drag hasn't ended yet.
     @Published var isDraggingOut = false
@@ -187,6 +193,8 @@ final class NotchViewModel: ObservableObject {
     /// What the glance shows, from what's live right now.
     var glanceContent: GlanceContent {
         if isShowingRecent { return .recent(rows: LiveActivityCenter.shared.recents.count) }
+        // The recording's for as long as it runs, whatever the closed notch shows, so Stop stays put.
+        if isRecording { return .recording }
         return GlanceContent(activity: activity)
     }
 
@@ -200,6 +208,20 @@ final class NotchViewModel: ObservableObject {
     var noticeHasActions: Bool {
         if case .notice(let notice) = activity { return !notice.actions.isEmpty }
         return false
+    }
+
+    /// A recording is going, in the notch itself or as the dot beside a notice.
+    var isRecording: Bool { activity == .recording || secondary == .recording }
+
+    /// How long Stop stays dead once the glance has come up.
+    static let stopGate: TimeInterval = 0.4
+
+    /// Stop refuses clicks for a moment after the glance appears, however it appeared. A click meant
+    /// for the notch can land on a Stop that has just arrived under it, whether the pointer resting
+    /// there or a click raised the glance, and it would end the recording. `acceptsNoticeButtons`
+    /// only knows of clicks.
+    var acceptsStop: Bool {
+        Date.now.timeIntervalSince(glanceAppeared) >= Self.stopGate
     }
 
     /// The open notch with the command field up: tall enough for its rows, at least as tall as the tabs.
@@ -267,9 +289,10 @@ final class NotchViewModel: ObservableObject {
         NowPlayingService.shared.refresh()
     }
 
-    /// A click on the closed notch: the glance, for a notice's buttons, and otherwise the whole notch.
+    /// A click on the closed notch: the glance, for a notice's buttons or a recording's Stop, and
+    /// otherwise the whole notch. It never stops a recording.
     func activate() {
-        if noticeHasActions {
+        if noticeHasActions || isRecording {
             clickedForGlance = .now
             glance()
         } else {
