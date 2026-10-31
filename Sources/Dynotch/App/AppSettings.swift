@@ -151,7 +151,6 @@ enum TemperatureUnits: String, CaseIterable, Identifiable {
     }
 }
 
-/// What Return does in the capture editor once a region is selected.
 /// What a recording of a region comes out as.
 enum RecordFormat: String, CaseIterable, Identifiable {
     case mp4, gif
@@ -170,6 +169,7 @@ enum RecordFormat: String, CaseIterable, Identifiable {
     }
 }
 
+/// What Return does in the capture editor once a region is selected.
 enum CaptureAction: String, CaseIterable, Identifiable {
     case copy, save, copyAndSave
 
