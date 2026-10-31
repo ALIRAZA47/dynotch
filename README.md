@@ -17,7 +17,7 @@ dependencies.
 | | |
 |---|---|
 | **Notch shell** | Hover for a glance; click, trackpad swipe or ⌃⌥N to open; swipe up, Esc or move away to close; swipe sideways over the open notch to move between its tabs. Spring animations, haptics, hover grow. A virtual notch on Macs and displays without one, or just a faint line along the top edge that covers nothing and grows into the notch while something's showing, when you hover and when it opens (**Settings → Appearance → Virtual notch**). Choose the built-in display, the main display or all displays. |
-| **Themes** | Settings → Appearance picks what the open notch is made of (black, or Liquid Glass on macOS 26 and later, which stays black along the top where it meets the camera), an accent color for the selected tab, selections and buttons, and how round its top and bottom corners are; the cards inside follow the bottom ones. The model notch at the top of the page shows each change. The closed notch stays black, so it blends with the camera housing. |
+| **Themes** | Settings → Appearance picks what the open notch is made of (black, or Liquid Glass on macOS 26 and later, which stays black along the top where it meets the camera), an accent color for the selected tab, selections and buttons, and how round its top and bottom corners are; the cards inside follow the bottom ones. The model notch at the top of the page shows each change. The closed notch stays black, so it blends with the camera housing, and with Reduce Transparency on in System Settings the open one does too. |
 | **Live activities** (closed notch) | Album art and an equalizer while music plays; the song title when the track changes; focus-timer countdown; volume and brightness HUD; charging; low battery (Mac and Bluetooth devices); upcoming events five minutes ahead; Bluetooth devices connecting; Shortcuts finishing; a screenshot landing in the Tray; rain about to start; notifications from Messages, Mail, Slack and other apps (see [Notification peeks](#notification-peeks)). |
 | **Two at once** | A second activity keeps a small glyph at the end of the right ear while another takes the notch: the mute badge, a timer's or a download's ring, the Focus that's on, or the album art. The main activity keeps the order above: notices, the song title, the timer that ends soonest, a download, then music. |
 | **Microphone** | ⌃⌥M, or **Mute Microphone** in the menu bar menu, mutes the mic in every app (by its mute control, or by turning its input level down when it has none). A red badge stays in the closed notch while it's muted. An on-air ring outlines the closed notch while a camera (green) or the mic (orange) is in use. Like macOS's own indicator, it leaves out Siri listening for its name. |
@@ -44,8 +44,7 @@ Dynotch needs macOS 14 or later. It's made for MacBooks with a notch, and draws 
 one on displays without.
 
 1. Download `Dynotch-<version>.dmg` from
-   [Releases](https://github.com/ALIRAZA47/dynotch/releases/latest). The repository is
-   private, so sign in to GitHub with an account that can see it. Or use the
+   [Releases](https://github.com/ALIRAZA47/dynotch/releases/latest), or use the
    [GitHub CLI](https://cli.github.com):
 
    ```bash
@@ -89,7 +88,7 @@ browser; then quit Dynotch from its menu bar icon and replace the app in Applica
 3. To remove what it saved as well (this deletes the notes and Tray files kept there):
 
    ```bash
-   rm -rf ~/Library/Application\ Support/Dynotch ~/Library/Logs/Dynotch
+   rm -rf ~/Library/Application\ Support/Dynotch
    defaults delete app.dynotch.Dynotch
    ```
 
@@ -99,7 +98,8 @@ browser; then quit Dynotch from its menu bar icon and replace the app in Applica
 
 ## Build and run
 
-Requires macOS 14 or later and the Swift toolchain (Xcode or the Command Line Tools).
+Building needs the macOS 26 SDK, which the Glass theme compiles against, and its Swift toolchain:
+Xcode 26 or later, or its Command Line Tools. What it builds runs on macOS 14 or later.
 
 ```bash
 ./scripts/build.sh
@@ -143,14 +143,12 @@ The app carries a copy in `Dynotch.app/Contents/Resources/dynotch`; link it onto
 `PATH` to use it anywhere:
 
 ```bash
-ln -s /Applications/Dynotch.app/Contents/Resources/dynotch /usr/local/bin/dynotch
+sudo ln -s /Applications/Dynotch.app/Contents/Resources/dynotch /usr/local/bin/dynotch
 ```
 
 | Command | What it does |
 |---|---|
 | `dynotch notify "Deploy done" --detail "api · 2m 14s" --symbol checkmark.circle.fill --tint green` | Shows a notice in the closed notch. Long text moves to the row underneath. `--seconds` sets how long it stays (4 by default). The notice carries a small terminal badge, so it can't pass for one of Dynotch's own. |
-| `dynotch open tray` | Opens the notch on a tab: `home`, `tray`, `focus` or `stats`. |
-| `dynotch notify "Deploy done" --detail "api · 2m 14s" --symbol checkmark.circle.fill --tint green` | Shows a notice in the closed notch. Long text moves to the row underneath. `--seconds` sets how long it stays (4 by default). |
 | `dynotch open tray` | Opens the notch on a tab: `home`, `tray`, `focus` or `stats` (the Control tab). |
 | `dynotch close` | Closes the notch. |
 | `dynotch timer start` | Controls the focus timer: `start`, `pause`, `toggle`, `reset` or `skip`. |

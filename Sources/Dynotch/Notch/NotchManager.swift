@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Combine
 
 /// Owns a notch per screen and feeds them the pointer, which it watches app-wide.
@@ -12,6 +13,9 @@ final class NotchManager {
     private var dragChangeCount = NSPasteboard(name: .drag).changeCount
     /// Set while the capture overlay covers the screen, so the notch neither grows nor opens under it.
     var isPointerSuspended = false
+    /// Esc, held while a notch is open. The keyboard stays with the app in front, so a key monitor
+    /// here wouldn't see it, and a global one would need Accessibility.
+    private var escapeKey: HotKey?
     private var cancellables = Set<AnyCancellable>()
 
     private init() {}
@@ -80,6 +84,17 @@ final class NotchManager {
         controllers.forEach { $0.dismiss() }
     }
 
+    /// Esc is the notch's only while one is open with nothing hanging off it. Otherwise it stays with
+    /// whatever needs it: the app in front, a menu, a drag, AirPlay's device list.
+    func updateEscapeKey() {
+        let wanted = controllers.contains { $0.wantsEscape }
+        guard wanted != (escapeKey != nil) else { return }
+        escapeKey?.unregister()
+        escapeKey = wanted
+            ? HotKey(keyCode: kVK_Escape, modifiers: 0) { [weak self] in self?.controllers.first { $0.wantsEscape }?.escape() }
+            : nil
+    }
+
     // MARK: Private
 
     private func activeController() -> NotchWindowController? {
@@ -122,6 +137,8 @@ final class NotchManager {
             controller.tearDown()
         }
         controllers = kept
+        // A notch that went away with its display can't let go of Esc itself.
+        updateEscapeKey()
     }
 
     private func installMonitors() {
@@ -137,7 +154,8 @@ final class NotchManager {
         }) {
             monitors.append(monitor)
         }
-        // Escape closes the notch while one of its text fields has focus.
+        // For when `escapeKey` isn't held and the keyboard is here anyway: a Quick Look preview is up, or
+        // macOS refused the hot key.
         if let monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
             let handled = MainActor.assumeIsolated { self?.handleKey(event) ?? false }
             return handled ? nil : event
@@ -170,12 +188,7 @@ final class NotchManager {
 
     private func handleKey(_ event: NSEvent) -> Bool {
         guard event.keyCode == 53, let open = controllers.first(where: { $0.viewModel.isOpen }) else { return false }
-        // In the command field, Escape clears what's typed, then leaves the field; the next one closes the notch.
-        if open.viewModel.isCommandMode {
-            open.viewModel.escapeCommand()
-        } else {
-            open.dismiss()
-        }
+        open.escape()
         return true
     }
 

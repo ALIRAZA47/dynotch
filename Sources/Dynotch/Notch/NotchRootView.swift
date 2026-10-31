@@ -9,11 +9,13 @@ struct NotchRootView: View {
     /// The system's appearance, read before the notch sets its own: the menu bar follows it.
     @Environment(\.colorScheme) private var menuBarScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
-    /// The user's look, with the system's Increase Contrast.
+    /// The user's look, with the system's Increase Contrast and Reduce Transparency.
     private var theme: NotchTheme {
         var theme = settings.theme
         theme.isHighContrast = contrast == .increased
+        theme.reducesTransparency = reduceTransparency
         return theme
     }
 

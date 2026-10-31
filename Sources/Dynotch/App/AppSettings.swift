@@ -167,13 +167,6 @@ enum CaptureAction: String, CaseIterable, Identifiable {
     }
 }
 
-enum PlayerChoice: String, CaseIterable, Identifiable {
-    case music, spotify
-
-    var id: String { rawValue }
-    var title: String { self == .music ? "Apple Music" : "Spotify" }
-}
-
 /// User preferences, persisted in UserDefaults as they change.
 @MainActor
 final class AppSettings: ObservableObject {
@@ -345,9 +338,6 @@ final class AppSettings: ObservableObject {
     }
     @Published var showStatsTab: Bool = AppSettings.value("showStatsTab", true) {
         didSet { save("showStatsTab", showStatsTab) }
-    }
-    @Published var preferredPlayer: PlayerChoice = AppSettings.value("preferredPlayer", PlayerChoice.music) {
-        didSet { save("preferredPlayer", preferredPlayer.rawValue) }
     }
     @Published var pinnedShortcuts: [String] = AppSettings.value("pinnedShortcuts", [String]()) {
         didSet { save("pinnedShortcuts", pinnedShortcuts) }

@@ -56,11 +56,17 @@ final class NotchWindowController {
             .sink { [weak self] phase in
                 if phase == .closed { self?.panel.giveUpKeyFocus() }
                 self?.refreshPointer()
+                NotchManager.shared.updateEscapeKey()
             }
             .store(in: &cancellables)
         Publishers.Merge(viewModel.$isMenuOpen, viewModel.$isDraggingFiles)
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in self?.closeIfAbandoned() }
+            .store(in: &cancellables)
+        Publishers.MergeMany(viewModel.$isMenuOpen, viewModel.$isDraggingFiles, viewModel.$isDraggingOut,
+                             AudioOutputs.shared.$isPresentingRoutes)
+            .receive(on: RunLoop.main)
+            .sink { _ in NotchManager.shared.updateEscapeKey() }
             .store(in: &cancellables)
         // The command field takes the keyboard, without bringing the app forward. Closing the notch gives it back.
         viewModel.$isCommandMode
@@ -269,6 +275,19 @@ final class NotchWindowController {
         cancelClose()
         awaitingPointer = false
         viewModel.close()
+    }
+
+    /// Open or glancing with nothing hanging off it, so Esc is this notch's to use.
+    var wantsEscape: Bool { (viewModel.isOpen || viewModel.isGlancing) && !isHeldOpen }
+
+    /// Esc closes the notch. In the command field it clears what's typed, then leaves the field; the
+    /// next one closes the notch.
+    func escape() {
+        if viewModel.isCommandMode {
+            viewModel.escapeCommand()
+        } else {
+            dismiss()
+        }
     }
 
     func refreshPointer() {

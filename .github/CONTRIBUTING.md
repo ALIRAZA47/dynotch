@@ -5,8 +5,8 @@ third-party dependencies). This guide covers how to build it and how changes get
 
 ## Requirements
 
-- macOS 14 or later.
-- The Swift toolchain — either Xcode or the Command Line Tools (`xcode-select --install`).
+- The macOS 26 SDK, which the Glass theme compiles against. The app itself runs on macOS 14 or later.
+- Its Swift toolchain — either Xcode 26 or later, or its Command Line Tools (`xcode-select --install`).
 
 ## Build and run
 

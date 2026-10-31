@@ -348,11 +348,13 @@ private struct VirtualNotchArt: View {
 /// The open notch's material, accent color and corners. The header above shows each change.
 private struct ThemeSettings: View {
     @ObservedObject private var settings = AppSettings.shared
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     var body: some View {
         VStack(alignment: .leading, spacing: 26) {
             SettingsSection(title: "Material",
-                            footer: "The closed notch stays black either way, so it blends with the camera housing.") {
+                            footer: "The closed notch stays black either way, so it blends with the camera housing."
+                                + (reduceTransparency ? " With Reduce Transparency on in System Settings, so does the open one." : "")) {
                 HStack(spacing: 10) {
                     ForEach(NotchMaterial.allCases) { material in
                         let isAvailable = material != .glass || NotchMaterial.isGlassAvailable
@@ -752,7 +754,8 @@ struct NookSettings: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 26) {
-            SettingsSection(title: "Tabs", footer: "The Nook tab, with the player, is always there.") {
+            SettingsSection(title: "Tabs",
+                            footer: "The Nook tab, with the player, is always there. The player follows Apple Music and Spotify. macOS keeps other players' Now Playing info private to Apple's own apps.") {
                 SwitchGrid(options: tabs, columns: 3)
             }
             SettingsSection(title: "Stacked beside the player",
@@ -763,19 +766,6 @@ struct NookSettings: View {
                     WidgetSlotPicker(title: "Second widget", selection: $settings.homeWidgetB)
                 }
             }
-            SettingsSection(title: "The play button starts",
-                            footer: "Dynotch follows Apple Music and Spotify. macOS keeps other players' Now Playing info private to Apple's own apps.") {
-                HStack(spacing: 10) {
-                    ForEach(PlayerChoice.allCases) { player in
-                        ChoiceTile(title: player.title, isSelected: settings.preferredPlayer == player) {
-                            settings.preferredPlayer = player
-                        } art: {
-                            AppIconView(bundleID: player == .music ? "com.apple.Music" : "com.spotify.client",
-                                        fallback: "music.note", side: 34)
-                        }
-                    }
-                }
-            }
             SettingsSection(title: "Calendar") {
                 SettingsCard {
                     SwitchRow(title: "Show all-day events", detail: "List them in the Calendar widget",
@@ -784,7 +774,7 @@ struct NookSettings: View {
                 .onChange(of: settings.showAllDayEvents) { CalendarService.shared.reload() }
             }
             SettingsSection(title: "Notes",
-                            footer: "Each note is a Markdown file named after its first line. Keep them in iCloud Drive to have them on all your Macs. Leaving Dynotch's own folder takes your notes along.") {
+                            footer: "Each note is a Markdown file named after its first line. Keep them in iCloud Drive to have them on all your Macs. Leaving Dynotch's own folder takes your notes along; notes in any other folder stay until you bring them.") {
                 NotesFolderCard()
             }
             SettingsSection(title: "Weather",
@@ -841,6 +831,10 @@ private struct NotesFolderCard: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 11)
+            if let left = store.leftBehind {
+                CardDivider()
+                leftBehind(left)
+            }
         }
     }
 
@@ -860,6 +854,31 @@ private struct NotesFolderCard: View {
 
     private var showInFinder: some View {
         CapsuleButton(title: "Show in Finder", symbol: "arrow.up.forward") { NSWorkspace.shared.open(store.folder) }
+    }
+
+    /// Where the notes went, right after leaving the folder that kept them: the one in use starts
+    /// out without them, which looks as if they've gone.
+    private func leftBehind(_ left: NotesStore.LeftBehind) -> some View {
+        HStack(spacing: 12) {
+            SymbolBadge(symbol: "note.text", tint: .orange, size: 26)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(left.count == 1 ? "1 note stayed behind" : "\(left.count) notes stayed behind")
+                    .font(.system(size: 13, weight: .medium))
+                Text("In \(Self.describe(left.folder))."
+                    + (NotesStore.isInICloud(left.folder) ? " Bringing notes here takes them off your other Macs." : ""))
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Palette.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 12)
+            CapsuleButton(title: "Switch Back", symbol: "arrow.uturn.backward") { store.useFolder(left.folder) }
+            CapsuleButton(title: left.count == 1 ? "Bring It Here" : "Bring Them Here", kind: .prominent) {
+                store.bringLeftBehind()
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
     }
 
     /// "iCloud Drive › Dynotch Notes", or the path with ~ for the home folder.
