@@ -1,0 +1,65 @@
+---
+title: Nook
+description: Your music, and a stack of widgets beside it.
+open:
+  label: Open the Nook
+  href: dynotch://open?tab=home
+---
+
+The Nook is the first tab of the open notch, and the one that's always there.
+
+<Shot name="10-open-nook" eager alt="The Nook tab: the album art, title, scrubber and playback controls on the left, and the next event on a card on the right." />
+
+## The player
+
+The player follows Apple Music and Spotify. It shows the artwork, the track and where it's playing, a scrubber, a big play button, next and previous, shuffle and repeat, on a glow in the album art's color.
+
+- **Favorite** is the star, for Apple Music. Spotify doesn't let other apps like songs.
+- **The output button** lists the Mac's outputs and switches between them. See [Audio and keys](/dynotch/audio-keys/#outputs).
+- **Scrolling over the artwork** changes the volume.
+
+With nothing playing, the player offers a button for each of the two that's installed.
+
+<Shot name="11-open-nook-empty" alt="The Nook with nothing playing, offering buttons to start Music or Spotify." />
+
+Turn off **Artwork tint** in <Path to="Settings → Appearance → Style" /> to color the player with your accent instead of the album art.
+
+## The stack
+
+Beside the player sits a stack of up to two widgets, one showing at a time. Choose them in <Path to="Settings → Nook & Widgets → Stacked beside the player" />.
+
+| Widget | What it shows |
+|---|---|
+| Calendar | Up next, and the rest of the day. See [Calendar and weather](/dynotch/calendar-weather/) |
+| Mirror | Your camera, to check yourself before a call. Click the card to turn it on and again to turn it off, and it stops by itself when the card leaves the screen |
+| Shortcuts | Up to four pinned Shortcuts, a click away |
+| Focus timer | The Pomodoro, with its controls |
+| Batteries | Rings for the Mac, AirPods, keyboards, mice and more |
+| Quick toggles | The Control tab's toggles |
+| Notes | Your [notes](/dynotch/focus/#notes), with their checklists |
+| Weather | Current conditions, and today's high and low |
+
+The first widget starts as Calendar and the second as Mirror. Either can be **Nothing**.
+
+<Shots min={320}>
+  <Shot name="widget-mirror" alt="The Nook with the Mirror widget, inviting you to check yourself before a call." caption="Mirror" />
+  <Shot name="widget-shortcuts" alt="The Nook with the Shortcuts widget, listing three pinned Shortcuts." caption="Shortcuts" />
+  <Shot name="96-open-nook-timer-toggles" alt="The Nook with the Focus timer widget, showing 18:24 and session 3 of 4." caption="Focus timer" />
+  <Shot name="widget-notes" alt="The Nook with the Notes widget, showing a Weekend checklist." caption="Notes" />
+  <Shot name="93-open-nook-weather-notes" alt="The Nook with the Weather widget for Lisbon, 65 degrees and partly cloudy, with rain in 20 minutes." caption="Weather" />
+  <Shot name="98-open-nook-shortcuts-calendar" alt="The Nook with the Calendar widget, showing Design review up next and two more events today." caption="Calendar" />
+</Shots>
+
+### Turning the stack
+
+The stack turns by itself to whatever matters now, as long as that widget is one of your two:
+
+- to the calendar during an event, or within 15 minutes of one
+- to the weather when rain is on its way
+- to the batteries when one runs low
+
+To turn it by hand, swipe up or down over it, or use the dots on its edge. A card with more than it shows, like a long note or the batteries, scrolls first.
+
+## Live equalizer
+
+The bars beside the track are decorative until you turn on **Live equalizer** in <Path to="Settings → Live Activities" />. Then they follow the music. See [Audio and keys](/dynotch/audio-keys/#live-equalizer).

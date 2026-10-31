@@ -1,0 +1,37 @@
+---
+// The phone's way around, at the thumb. It borrows the open notch's tab track: the selected tab is a
+// jewel with its name, and the rest are glyphs. On a wider window the menu bar does this job instead.
+interface Props {
+  /** On a page of the docs, as opposed to the home page. */
+  inDocs: boolean;
+}
+
+const { inDocs } = Astro.props;
+const base = import.meta.env.BASE_URL;
+---
+
+<nav class="dock" aria-label="Main" data-dock>
+  <a class:list={['dock-tab', { on: !inDocs }]} href={base} aria-label="Home" aria-current={inDocs ? undefined : 'page'}>
+    <svg aria-hidden="true" width="21" height="21" viewBox="0 0 20 20" fill="currentColor">
+      <path d="M10 2.6 2.4 9.3c-.5.4-.2 1.2.5 1.2H4v5.7c0 .6.5 1.1 1.1 1.1h3v-4.5h3.8v4.5h3c.6 0 1.1-.5 1.1-1.1v-5.7h1.1c.7 0 1-.8.5-1.2L10 2.6Z"></path>
+    </svg>
+    <span>Home</span>
+  </a>
+  <button class:list={['dock-tab', { on: inDocs }]} type="button" data-open-sheet="menu" aria-label="Docs">
+    <svg aria-hidden="true" width="21" height="21"><use href="#icon-book"></use></svg>
+    <span>Docs</span>
+  </button>
+  <button class="dock-tab" type="button" data-open-search aria-label="Search the docs">
+    <svg aria-hidden="true" width="21" height="21" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+      <circle cx="7" cy="7" r="4.6"></circle>
+      <path d="M10.6 10.6 14 14"></path>
+    </svg>
+  </button>
+  <button class="dock-tab" type="button" data-open-sheet="more" aria-label="More">
+    <svg aria-hidden="true" width="22" height="22" viewBox="0 0 20 20" fill="currentColor">
+      <circle cx="4" cy="10" r="1.8"></circle>
+      <circle cx="10" cy="10" r="1.8"></circle>
+      <circle cx="16" cy="10" r="1.8"></circle>
+    </svg>
+  </button>
+</nav>

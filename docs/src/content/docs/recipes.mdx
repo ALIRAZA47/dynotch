@@ -1,0 +1,54 @@
+---
+title: Recipes
+description: Small things worth wiring up.
+---
+
+## When a long command finishes
+
+Source `notify-long-commands.zsh` from `~/.zshrc`. It sits next to `dynotch` in the app:
+
+```bash
+source /Applications/Dynotch.app/Contents/Resources/notify-long-commands.zsh
+```
+
+Any command that runs for 30 seconds or more then ends with a **Done** or **Failed** notice.
+
+| Variable | What it does | Starts as |
+|---|---|---|
+| `DYNOTCH_LONG_COMMAND` | The threshold, in seconds | `30` |
+| `DYNOTCH_LONG_COMMAND_DETAIL` | Set it to `full` to show the command's arguments too | Off |
+
+The notice names the command alone, `make` say, since its arguments can hold tokens, and the notch is on screen when you share it.
+
+<Shot name="65-closed-script-notice" alt="The closed notch showing Done, make test, 2 minutes 14 seconds." caption="With DYNOTCH_LONG_COMMAND_DETAIL=full, the arguments show too." />
+
+## When Claude Code needs you
+
+[Claude Code](https://claude.com/claude-code) hooks can call the same command. Add this to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Notification": [{ "hooks": [{ "type": "command", "command": "dynotch notify 'Claude needs you' --symbol bubble.left.fill --tint orange" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "dynotch notify 'Claude is done' --symbol checkmark.circle.fill --tint green" }] }]
+  }
+}
+```
+
+This needs the [`dynotch` command](/dynotch/dynotch-command/) on your `PATH`.
+
+## A deploy that tells you when it's done
+
+Anything that can run a command can use the notch:
+
+```bash
+./deploy.sh && dynotch notify "Deployed" --detail "api" --symbol checkmark.circle.fill --tint green
+```
+
+## A Shortcut that starts a focus session
+
+In the Shortcuts app, add an **Open URLs** action with this link, and pin the Shortcut to the [Shortcuts widget](/dynotch/nook/#the-stack):
+
+```text
+dynotch://timer/start
+```

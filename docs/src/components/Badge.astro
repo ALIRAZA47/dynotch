@@ -1,0 +1,14 @@
+---
+import type { NavGroup } from '../data/nav';
+
+interface Props {
+  group: Pick<NavGroup, 'tint' | 'icon'>;
+  size?: number;
+}
+
+const { group, size = 26 } = Astro.props;
+---
+
+<span class="badge" aria-hidden="true" style={`--tint: ${group.tint}; --size: ${size}px`}>
+  <svg><use href={`#icon-${group.icon}`}></use></svg>
+</span>

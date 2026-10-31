@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://aliraza47.github.io/dynotch/sitemap-index.xml

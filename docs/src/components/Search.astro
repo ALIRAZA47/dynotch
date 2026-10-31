@@ -1,0 +1,253 @@
+---
+import { getCollection } from 'astro:content';
+import { nav } from '../data/nav';
+import Badge from './Badge.astro';
+import Keys from './Keys.astro';
+
+const base = import.meta.env.BASE_URL;
+const docs = await getCollection('docs');
+const groupOf = (slug: string) => nav.find((group) => group.pages.includes(slug))!;
+
+// What the field suggests with nothing typed, as the app's command field does.
+const suggestions = ['install', 'command-field', 'shortcuts', 'dynotch-command', 'permissions'].map((slug) => {
+  const entry = docs.find((doc) => doc.id === slug)!;
+  return { slug, entry, group: groupOf(slug) };
+});
+
+const groups = Object.fromEntries(nav.map((group) => [group.title, { tint: group.tint, icon: group.icon }]));
+---
+
+<dialog class="search" id="search" aria-label="Search the docs" data-groups={JSON.stringify(groups)}>
+  <label class="search-field">
+    <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="rgba(255,255,255,.72)" stroke-width="1.7" stroke-linecap="round">
+      <circle cx="7" cy="7" r="4.6"></circle>
+      <path d="M10.6 10.6 14 14"></path>
+    </svg>
+    <span class="sr-only">Search the docs</span>
+    <input
+      type="search"
+      id="search-input"
+      placeholder="Search the docs"
+      autocomplete="off"
+      autocapitalize="off"
+      spellcheck="false"
+      role="combobox"
+      aria-expanded="true"
+      aria-controls="search-results"
+      aria-autocomplete="list"
+    />
+    <button class="search-close" type="button" data-close-search aria-label="Close search"><span class="key">esc</span><span class="search-cancel">Cancel</span></button>
+  </label>
+
+  <p class="search-label" id="search-label">Try</p>
+
+  <div class="search-results" id="search-results" role="listbox" aria-labelledby="search-label">
+    {
+      suggestions.map(({ slug, entry, group }, index) => (
+        <a class="search-row" href={`${base}${slug}/`} role="option" aria-selected={index === 0 ? 'true' : 'false'}>
+          <Badge {group} size={28} />
+          <span class="search-text">
+            <span class="search-title">{entry.data.title}</span>
+            <span class="search-excerpt">{entry.data.description}</span>
+          </span>
+          <span class="search-group">{group.title}</span>
+        </a>
+      ))
+    }
+  </div>
+
+  <div class="search-hints" aria-hidden="true">
+    <span><Keys k="↑ ↓" /> pick a row</span>
+    <span><Keys k="↩" /> open it</span>
+    <span><span class="key">esc</span> clear, then leave</span>
+  </div>
+</dialog>
+
+<script>
+  interface PagefindResult {
+    url: string;
+    excerpt: string;
+    meta: { title: string; group?: string };
+    sub_results: { title: string; url: string; excerpt: string }[];
+  }
+
+  interface Pagefind {
+    init(): Promise<void>;
+    debouncedSearch(query: string): Promise<{ results: { data(): Promise<PagefindResult> }[] } | null>;
+  }
+
+  const dialog = document.querySelector<HTMLDialogElement>('#search')!;
+  const input = dialog.querySelector('input')!;
+  const list = dialog.querySelector<HTMLElement>('#search-results')!;
+  const label = dialog.querySelector<HTMLElement>('#search-label')!;
+  const groups: Record<string, { tint: string; icon: string }> = JSON.parse(dialog.dataset.groups!);
+  const suggestions = [...list.children];
+
+  let pagefind: Promise<Pagefind> | undefined;
+
+  function loadPagefind() {
+    // Built after the site, so this can't be an import the bundler sees.
+    const url = `${import.meta.env.BASE_URL}pagefind/pagefind.js`;
+    pagefind ??= import(/* @vite-ignore */ url).then(async (module: Pagefind) => {
+      await module.init();
+      return module;
+    });
+    return pagefind;
+  }
+
+  const rows = () => [...list.querySelectorAll<HTMLElement>('[role="option"]')];
+
+  function select(row: HTMLElement | undefined) {
+    for (const other of rows()) other.setAttribute('aria-selected', other === row ? 'true' : 'false');
+    if (!row) return input.removeAttribute('aria-activedescendant');
+    input.setAttribute('aria-activedescendant', row.id);
+    row.scrollIntoView({ block: 'nearest' });
+  }
+
+  function badge(group: string) {
+    const { tint, icon } = groups[group] ?? groups['The notch'];
+    const span = document.createElement('span');
+    span.className = 'badge';
+    span.ariaHidden = 'true';
+    span.style.setProperty('--tint', tint);
+    span.style.setProperty('--size', '28px');
+    span.innerHTML = `<svg><use href="#icon-${icon}"></use></svg>`;
+    return span;
+  }
+
+  function resultRow(title: string, excerptHTML: string, url: string, group: string, where: string) {
+    const row = document.createElement('a');
+    row.className = 'search-row';
+    row.href = url;
+    row.setAttribute('role', 'option');
+
+    const text = document.createElement('span');
+    text.className = 'search-text';
+    const name = document.createElement('span');
+    name.className = 'search-title';
+    name.textContent = title;
+    // Pagefind escapes the text and adds only its own <mark>s.
+    const excerpt = document.createElement('span');
+    excerpt.className = 'search-excerpt';
+    excerpt.innerHTML = excerptHTML;
+    text.append(name, excerpt);
+
+    const place = document.createElement('span');
+    place.className = 'search-group';
+    place.textContent = where;
+
+    row.append(badge(group), text, place);
+    return row;
+  }
+
+  function show(items: HTMLElement[], heading: string) {
+    label.textContent = heading;
+    list.replaceChildren(...items);
+    items.forEach((item, index) => (item.id = `search-row-${index}`));
+    select(items[0]);
+  }
+
+  function showSuggestions() {
+    show(suggestions as HTMLElement[], 'Try');
+  }
+
+  function showMessage(text: string) {
+    const message = document.createElement('p');
+    message.className = 'search-empty';
+    message.textContent = text;
+    label.textContent = 'Results';
+    list.replaceChildren(message);
+    input.removeAttribute('aria-activedescendant');
+  }
+
+  let latest = 0;
+
+  async function runSearch(query: string) {
+    const ticket = ++latest;
+    if (!query.trim()) return showSuggestions();
+    try {
+      const engine = await loadPagefind();
+      const search = await engine.debouncedSearch(query);
+      if (!search || ticket !== latest) return;
+      const pages = await Promise.all(search.results.slice(0, 6).map((result) => result.data()));
+      if (ticket !== latest) return;
+
+      const found = pages.flatMap((page) => {
+        const group = page.meta.group ?? '';
+        const subs = page.sub_results.slice(0, 2);
+        return subs.map((sub) =>
+          sub.title === page.meta.title
+            ? resultRow(sub.title, sub.excerpt, sub.url, group, group)
+            : resultRow(sub.title, sub.excerpt, sub.url, group, page.meta.title),
+        );
+      });
+      if (found.length) show(found.slice(0, 8), 'Results');
+      else showMessage(`Nothing for “${query.trim()}”. Try another word.`);
+    } catch {
+      showMessage('Search needs the built site. Run npm run build, then npm run preview.');
+    }
+  }
+
+  function openSearch() {
+    if (dialog.open) return;
+    dialog.showModal();
+    input.select();
+    loadPagefind().catch(() => {});
+  }
+
+  document.querySelectorAll('[data-open-search]').forEach((button) => button.addEventListener('click', openSearch));
+  dialog.querySelector('[data-close-search]')!.addEventListener('click', () => dialog.close());
+
+  addEventListener('keydown', (event) => {
+    const typing = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
+    // ⌃⌥K is the app's own shortcut for its command field, so it works the same here.
+    const pressed =
+      (event.code === 'KeyK' && event.ctrlKey && event.altKey) ||
+      (event.code === 'KeyK' && event.metaKey) ||
+      (event.key === '/' && !typing && !event.metaKey && !event.ctrlKey);
+    if (!pressed) return;
+    event.preventDefault();
+    openSearch();
+  });
+
+  input.addEventListener('input', () => runSearch(input.value));
+
+  input.addEventListener('keydown', (event) => {
+    const all = rows();
+    const index = all.findIndex((row) => row.getAttribute('aria-selected') === 'true');
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const step = event.key === 'ArrowDown' ? 1 : -1;
+      select(all[(index + step + all.length) % all.length]);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      all[index]?.click();
+    }
+  });
+
+  // Escape clears what's typed and then leaves, as it does in the app.
+  dialog.addEventListener('cancel', (event) => {
+    if (!input.value) return;
+    event.preventDefault();
+    input.value = '';
+    runSearch('');
+  });
+
+  list.addEventListener('pointermove', (event) => {
+    const row = (event.target as HTMLElement).closest<HTMLElement>('[role="option"]');
+    if (row && row.getAttribute('aria-selected') !== 'true') select(row);
+  });
+
+  // A click on the dim area closes it: the dialog itself fills only the notch.
+  dialog.addEventListener('click', (event) => {
+    if (event.target === dialog) {
+      const box = dialog.getBoundingClientRect();
+      const inside =
+        event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom;
+      if (!inside) dialog.close();
+    }
+  });
+
+  suggestions.forEach((row, index) => (row.id = `search-row-${index}`));
+  input.setAttribute('aria-activedescendant', suggestions[0].id);
+</script>

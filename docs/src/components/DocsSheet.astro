@@ -1,0 +1,36 @@
+---
+import { getPageNames, nav } from '../data/nav';
+import Badge from './Badge.astro';
+import Sheet from './Sheet.astro';
+
+interface Props {
+  current?: string;
+}
+
+const { current } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const names = await getPageNames();
+---
+
+<Sheet id="menu" title="Docs">
+  {
+    nav.map((group) => (
+      <details class="sheet-group" name="docs-section" open={group.pages.includes(current ?? '')}>
+        <summary>
+          <Badge {group} size={28} />
+          <span>{group.title}</span>
+          <svg class="sheet-chevron" aria-hidden="true" width="14" height="8" viewBox="0 0 14 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="m1 1 6 6 6-6" />
+          </svg>
+        </summary>
+        <div class="sheet-pages">
+          {group.pages.map((slug) => (
+            <a href={`${base}${slug}/`} aria-current={slug === current ? 'page' : undefined}>
+              {names.get(slug)}
+            </a>
+          ))}
+        </div>
+      </details>
+    ))
+  }
+</Sheet>

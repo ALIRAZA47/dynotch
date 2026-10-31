@@ -1,0 +1,10 @@
+---
+interface Props {
+  /** How narrow a column may get before the grid drops one. */
+  min?: number;
+}
+
+const { min = 300 } = Astro.props;
+---
+
+<div class="shots" style={`--min: ${min}px`}><slot /></div>

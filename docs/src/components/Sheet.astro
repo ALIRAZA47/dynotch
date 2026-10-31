@@ -1,0 +1,22 @@
+---
+// A sheet that slides up from the bottom of a phone's screen.
+interface Props {
+  id: string;
+  title: string;
+}
+
+const { id, title } = Astro.props;
+---
+
+<dialog class="sheet" id={id} aria-label={title}>
+  <div class="sheet-grabber" aria-hidden="true"></div>
+  <div class="sheet-head">
+    <span>{title}</span>
+    <button class="icon-button sheet-close" type="button" data-close-sheet aria-label={`Close ${title}`}>
+      <svg aria-hidden="true" width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+        <path d="m4.5 4.5 11 11M15.5 4.5l-11 11"></path>
+      </svg>
+    </button>
+  </div>
+  <div class="sheet-body"><slot /></div>
+</dialog>

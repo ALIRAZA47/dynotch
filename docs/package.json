@@ -1,0 +1,24 @@
+{
+  "name": "dynotch-docs",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.23.4"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build && pagefind --site dist",
+    "preview": "astro preview",
+    "screens": "node scripts/screens.mjs"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "^8.1.2",
+    "@astrojs/sitemap": "^3.7.4",
+    "astro": "^7.4.4",
+    "marked": "^18.1.2",
+    "pagefind": "^1.5.2"
+  },
+  "devDependencies": {
+    "sharp": "^0.35.5"
+  }
+}

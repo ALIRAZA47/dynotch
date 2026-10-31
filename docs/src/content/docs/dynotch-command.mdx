@@ -1,0 +1,83 @@
+---
+title: The dynotch command
+description: Drive the notch from the shell.
+---
+
+`dynotch` is a small script that wraps [`dynotch://` links](/dynotch/links/), and the app carries a copy. Link it onto your `PATH` to use it anywhere:
+
+```bash
+sudo ln -s /Applications/Dynotch.app/Contents/Resources/dynotch /usr/local/bin/dynotch
+```
+
+Whatever app you're in stays at the front.
+
+<Note warn>Start Dynotch first. If it isn't running, the command launches it but arrives before it's ready, so it's lost or goes wrong. `dynotch tray` is the one to watch: it can drop what's already in the Tray.</Note>
+
+## notify
+
+Shows a notice in the closed notch.
+
+```bash
+dynotch notify "Done" --detail "make test · 2m 14s" --symbol checkmark.circle.fill --tint green
+```
+
+<Shot name="65-closed-script-notice" eager alt="The closed notch showing a green check, Done, and make test, 2 minutes 14 seconds, on a row under the camera, with a small terminal badge on the check." />
+
+| Option | What it does |
+|---|---|
+| `--detail TEXT` | A second line, on the row underneath |
+| `--symbol NAME` | An [SF Symbol](https://developer.apple.com/sf-symbols/). Without one, or with one that doesn't exist, it's a bell |
+| `--tint COLOR` | `red`, `orange`, `yellow`, `green`, `mint`, `teal`, `cyan`, `blue`, `indigo`, `purple`, `pink`, `white` or `gray`, or a hex value like `#FF6B5C` |
+| `--seconds N` | How long it stays, from 1 to 30. It's 4 by default |
+
+Over 18 characters, the text moves to the row underneath, or with `--detail` it's cut short. The row shows one line. The notice carries a small terminal badge, so it can't pass for one of Dynotch's own.
+
+## open
+
+Opens the notch on a tab: `home`, `tray`, `focus` or `stats`, which is the Control tab.
+
+```bash
+dynotch open tray
+```
+
+## close
+
+Closes the notch.
+
+```bash
+dynotch close
+```
+
+## timer
+
+Controls the focus timer: `start`, `pause`, `toggle`, `reset` or `skip`. With nothing after it, it's `toggle`.
+
+```bash
+dynotch timer start
+```
+
+## tray
+
+Adds files to the Tray, and opens it with `--show`.
+
+```bash
+dynotch tray --show report.pdf
+```
+
+It takes up to 20 files at a time. The items point at the files where they are, never copies. Nothing under `~/Library` is taken, and the notch says what a script added.
+
+## profile
+
+Switches to a saved [profile](/dynotch/profiles/) by name. The notch says which, or that there's no such profile.
+
+```bash
+dynotch profile Work
+```
+
+## capture
+
+Freezes the screen to [capture](/dynotch/capture/) a region, like <Keys k="⌃⌥S" />.
+
+```bash
+dynotch capture
+```
