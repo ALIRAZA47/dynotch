@@ -155,7 +155,7 @@ final class TextActionsTests {
     }
 
     @Test(arguments: [
-        (OnDeviceText.Failure.notInstalled("Spanish to English"), "Download Spanish to English in Translation Languages", true),
+        (OnDeviceText.Failure.notInstalled("Spanish to English"), "Download Spanish to English", true),
         (.unsupported("Urdu"), "macOS can't translate Urdu", false),
         (.alreadyIn("English"), "That's already in English", false),
         (.unknownLanguage, "Couldn't tell what language that is", false),

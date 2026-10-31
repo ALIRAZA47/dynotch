@@ -426,6 +426,15 @@ final class AppSettings: ObservableObject {
     @Published var pinnedShortcuts: [String] = AppSettings.value("pinnedShortcuts", [String]()) {
         didSet { save("pinnedShortcuts", pinnedShortcuts) }
     }
+    /// The line being sung, under the song's title. Off until asked for, as it sends the song's name
+    /// to LRCLIB.
+    @Published var showsLyrics: Bool = AppSettings.value("showsLyrics", false) {
+        didSet { save("showsLyrics", showsLyrics) }
+    }
+    /// That line on the closed notch's second row too.
+    @Published var lyricsInClosedNotch: Bool = AppSettings.value("lyricsInClosedNotch", false) {
+        didSet { save("lyricsInClosedNotch", lyricsInClosedNotch) }
+    }
     /// The World clock widget's cities, as `WorldTime.place` knows them.
     @Published var worldClockCities: [String] = AppSettings.value("worldClockCities", ["London", "New York", "Tokyo"]) {
         didSet { save("worldClockCities", worldClockCities) }

@@ -339,7 +339,6 @@ private struct FocusListsCard: View {
                     .init(value: true, title: "Notes"),
                 ])
                 .fixedSize()
-                Spacer(minLength: 0)
                 FocusStrip()
                 if settings.focusShowsNotes {
                     NotesActions(editor: editor)

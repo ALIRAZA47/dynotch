@@ -4,7 +4,7 @@ navTitle: Privacy and network
 description: What stays on your Mac, and the few things that leave it.
 ---
 
-Dynotch has no account, no analytics and no server of its own. It runs on your Mac, and it talks to the network for exactly three things.
+Dynotch has no account, no analytics and no server of its own. It runs on your Mac, and it only talks to the network for what's listed here.
 
 ## What leaves your Mac
 
@@ -17,8 +17,13 @@ Dynotch has no account, no analytics and no server of its own. It runs on your M
 | Naming your town | Apple | With **Use my location** on: where your Mac is, to find the town's name for the widget |
 | Artwork from Spotify | Spotify's image servers | Asks for the link Spotify gave it |
 | Artwork from Apple Music | `itunes.apple.com` and Apple's image servers | For a track with no artwork of its own: the artist and album, or the title if it has no album, to find it |
+| Lyrics | `lrclib.net` | Only with **Show synced lyrics** on, which starts off: the title, artist, album and length of each song you play, a couple of seconds after it starts, once each time Dynotch runs. It says it's Dynotch and its version, and there's no account or key |
 
 **Join** opens a meeting's link in the app that handles it.
+
+## Lyrics
+
+LRCLIB is run by someone else, so with **Show synced lyrics** on, it can see which songs you play from your IP address. A song that's skipped in its first couple of seconds, or that stays paused, isn't sent. The lyrics stay in memory until Dynotch quits or you turn this off, so your Mac keeps no list of what you've played.
 
 ## What stays on your Mac
 

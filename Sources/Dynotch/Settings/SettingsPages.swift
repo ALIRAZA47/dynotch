@@ -780,6 +780,18 @@ struct NookSettings: View {
                     WidgetSlotPicker(title: "Second widget", selection: $settings.homeWidgetB)
                 }
             }
+            SettingsSection(title: "Lyrics",
+                            footer: "Lyrics come from LRCLIB, a free online service. With this on, the title, artist, album and length of each song you play go to lrclib.net a moment after it starts. Nothing is sent while this is off.") {
+                SettingsCard {
+                    SwitchRow(title: "Show synced lyrics", detail: "The line being sung, under the song's title",
+                              symbol: "quote.bubble.fill", tint: .pink, isOn: $settings.showsLyrics)
+                    if settings.showsLyrics {
+                        CardDivider()
+                        SwitchRow(title: "In the closed notch", detail: "On a second row under the camera",
+                                  symbol: "rectangle.topthird.inset.filled", tint: .pink, isOn: $settings.lyricsInClosedNotch)
+                    }
+                }
+            }
             SettingsSection(title: "Calendar") {
                 SettingsCard {
                     SwitchRow(title: "Show all-day events", detail: "List them in the Calendar widget",

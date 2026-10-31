@@ -27,7 +27,7 @@ enum OnDeviceText {
         var message: String {
             switch self {
             case .needsNewerMacOS: "This needs macOS 26"
-            case .notInstalled(let languages): "Download \(languages) in Translation Languages"
+            case .notInstalled(let languages): "Download \(languages)"
             case .unsupported(let language): "macOS can't translate \(language)"
             case .alreadyIn(let language): "That's already in \(language)"
             case .unknownLanguage: "Couldn't tell what language that is"

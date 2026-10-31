@@ -81,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotesStore.shared.start()
         FocusHistory.shared.load()
         NowPlayingService.shared.start()
+        LyricsService.shared.start()
         PowerMonitor.shared.start()
         CalendarService.shared.start()
         VolumeMonitor.shared.start()

@@ -418,7 +418,7 @@ enum SnapshotRenderer {
                 CalendarService.shared.loadSample(events: [], reminders: [])
                 NotesStore.shared.loadSample([""])
             }),
-        ] + clipboardScenes() + sizeScenes() + edgeScenes(virtualNotch: virtualNotch)
+        ] + lyricsScenes() + clipboardScenes() + sizeScenes() + edgeScenes(virtualNotch: virtualNotch)
 
         let settings = AppSettings.shared
         let savedTheme = settings.theme
@@ -900,6 +900,7 @@ enum SnapshotRenderer {
         loadClips([], isOn: false)
         CommandHistory.forget()
         FocusHistory.shared.loadSample(days: sampleFocusDays)
+        LyricsService.shared.loadSample(nil)
     }
 
     /// A recording this long running, or its file being saved. It holds nothing.
@@ -1059,6 +1060,40 @@ enum SnapshotRenderer {
                       setUp: { (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (stack.first, stack.second) })
             }
         }
+    }
+
+    /// Made up, as a real song's words aren't Dynotch's to print.
+    private static let sampleLyrics = Lyrics(lrc: """
+    [00:21.00] The streetlights came on one by one
+    [01:12.00] We kept on driving past the last of the signs
+    [01:30.00]
+    [01:50.00] And nobody said a word about how far we'd come or what was waiting at the end of it all, not then, not for a long while after
+    """)
+
+    /// The line under the title, and on the closed notch's second row.
+    private static func lyricsScenes() -> [Scene] {
+        let lyrics = sampleLyrics
+        let width = lyrics?.rowWidth ?? 0
+        func at(_ elapsed: TimeInterval) -> @MainActor () -> Void {
+            {
+                LyricsService.shared.loadSample(lyrics)
+                NowPlayingService.shared.loadSample(NowPlayingService.Track(title: "Midnight City", artist: "M83", album: "Hurry Up, We're Dreaming", duration: 243),
+                                                    artwork: sampleArtwork(), playing: true, elapsed: elapsed)
+            }
+        }
+        return [
+            Scene(name: "lyrics-1-nook", phase: .open, tab: .home, setUp: at(81)),
+            Scene(name: "lyrics-2-nook-small", phase: .open, tab: .home, openSize: CGSize(width: 600, height: 196), setUp: at(81)),
+            Scene(name: "lyrics-3-nook-large", phase: .open, tab: .home, openSize: CGSize(width: 840, height: 260), setUp: at(81)),
+            Scene(name: "lyrics-4-nook-glass", phase: .open, tab: .home, theme: NotchTheme(material: .glass), setUp: at(81)),
+            Scene(name: "lyrics-5-nook-gap", phase: .open, tab: .home, setUp: at(95)),
+            Scene(name: "lyrics-6-nook-long-line", phase: .open, tab: .home, setUp: at(115)),
+            Scene(name: "lyrics-7-closed", phase: .closed, activity: .lyrics(rowWidth: width), setUp: at(81)),
+            Scene(name: "lyrics-8-closed-gap", phase: .closed, activity: .lyrics(rowWidth: width), setUp: at(95)),
+            Scene(name: "lyrics-9-closed-long-line", phase: .closed, activity: .lyrics(rowWidth: width), setUp: at(115)),
+            Scene(name: "lyrics-10-closed-and-timer", phase: .closed, activity: .lyrics(rowWidth: width), secondary: .timer, setUp: at(81)),
+            Scene(name: "lyrics-11-hover", phase: .hovering, activity: .lyrics(rowWidth: width), setUp: at(81)),
+        ]
     }
 
     /// The Tray's Clipboard side, at the usual size and the smallest and largest, with `clip` in the

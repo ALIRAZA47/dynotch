@@ -72,6 +72,8 @@ enum ClosedActivity: Equatable {
     case music
     case trackPeek
     case timer
+    /// Music, with the line being sung on a row underneath as wide as the song's longest.
+    case lyrics(rowWidth: CGFloat)
     case notice(LiveNotice)
     /// A named timer from the Focus tab.
     case countdown(Countdown)
@@ -104,7 +106,7 @@ enum CompactActivity: Equatable {
     /// The main activity already shows this one.
     func isShown(by activity: ClosedActivity) -> Bool {
         switch (self, activity) {
-        case (.timer, .timer), (.music, .music), (.music, .trackPeek), (.stopwatch, .stopwatch), (.download, .download),
+        case (.timer, .timer), (.music, .music), (.music, .trackPeek), (.music, .lyrics), (.stopwatch, .stopwatch), (.download, .download),
              (.recording, .recording): true
         case (.micMuted, .notice(let notice)): notice.key == "mic"
         case (.focus, .notice(let notice)): notice.key == "focus"
@@ -164,6 +166,7 @@ final class LiveActivityCenter: ObservableObject {
         Publishers.MergeMany(
             media.$isPlaying.map { _ in () }.eraseToAnyPublisher(),
             media.$track.map { _ in () }.eraseToAnyPublisher(),
+            LyricsService.shared.$lyrics.map { _ in () }.eraseToAnyPublisher(),
             timer.$isRunning.map { _ in () }.eraseToAnyPublisher(),
             MicMonitor.shared.$isMuted.map { _ in () }.eraseToAnyPublisher(),
             TimerStore.shared.$countdowns.map { _ in () }.eraseToAnyPublisher(),
@@ -318,7 +321,9 @@ final class LiveActivityCenter: ObservableObject {
         } else if downloading {
             activity = .download
         } else if musicPlaying {
-            activity = .music
+            // Words on the notch keep out of the way on a call, as song titles do.
+            let lyrics = settings.lyricsInClosedNotch && !QuietMonitor.shared.isQuiet ? LyricsService.shared.lyrics : nil
+            activity = lyrics.map { .lyrics(rowWidth: $0.rowWidth) } ?? .music
         } else {
             activity = .idle
         }

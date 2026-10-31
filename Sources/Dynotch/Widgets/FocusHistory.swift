@@ -131,26 +131,29 @@ final class FocusHistory: ObservableObject {
 
 /// How the week's going, beside the switch on the Focus tab's second card: today and the week in
 /// numbers, and a bar for each day of the week, with today's in the Pomodoro's color. Nothing shows
-/// until there's a session this week.
+/// until there's a session this week, but it still takes the room, which pushes what's after it right.
 struct FocusStrip: View {
     @ObservedObject private var history = FocusHistory.shared
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
         let summary = history.summary()
-        if summary.sessionsThisWeek > 0 {
-            // The notes' buttons share the row, and the smallest notch has less of it.
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 8) {
-                    numbers(summary)
+        Group {
+            if summary.sessionsThisWeek > 0 {
+                // The notes' buttons share the row, and the smallest notch has less of it.
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 8) {
+                        numbers(summary)
+                        bars(summary)
+                    }
                     bars(summary)
                 }
-                bars(summary)
+                .help(Self.spoken(summary))
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Self.spoken(summary))
             }
-            .help(Self.spoken(summary))
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(Self.spoken(summary))
         }
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     private func numbers(_ summary: FocusHistory.Summary) -> some View {
