@@ -49,6 +49,19 @@ enum FileActions {
         UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true
     }
 
+    static func isText(_ url: URL) -> Bool {
+        UTType(filenameExtension: url.pathExtension)?.conforms(to: .text) == true
+    }
+
+    /// The text in a file, read off the main thread. A file this large isn't what Translate is for.
+    nonisolated static func text(of url: URL) async -> String? {
+        await Task.detached(priority: .userInitiated) {
+            guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 4_000_000 else { return nil }
+            var encoding = String.Encoding.utf8
+            return try? String(contentsOf: url, usedEncoding: &encoding)
+        }.value
+    }
+
     static func isArchive(_ url: URL) -> Bool {
         url.pathExtension.lowercased() == "zip"
     }

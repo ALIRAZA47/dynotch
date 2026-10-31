@@ -221,6 +221,16 @@ private struct ClipMenu: View {
                 close()
             }
         }
+        if OnDeviceText.isAvailable {
+            Divider()
+            TranslateMenu(text: { clip.text }, after: close)
+            if clip.text.utf16.count >= TextActions.shortestSummary {
+                Button("Summarize") {
+                    close()
+                    Task { await TextActions.summarize(clip.text) }
+                }
+            }
+        }
         Divider()
         Button("Remove") { ClipboardStore.shared.remove(clip) }
     }

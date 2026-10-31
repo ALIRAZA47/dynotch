@@ -303,8 +303,10 @@ above). An ad hoc build may lose them.
 - The brightness HUD and the Control tab's brightness slider reach the built-in display through
   the private DisplayServices framework. If that's unavailable, the HUD stays quiet and the slider
   isn't shown.
-- Not included from MacNotch: AI translation, and Night Shift / True Tone toggles (they have
-  no public API).
+- Not included from MacNotch: Night Shift / True Tone toggles (they have no public API).
+- Translate and Summarize need macOS 26. Translate only uses languages already installed in
+  System Settings, and Summarize needs Apple Intelligence turned on. Dynotch says so when either
+  can't run, and neither sends anything off the Mac.
 - Which Focus is on comes from Focus settings files that Apple doesn't document. A scheduled
   Focus switched off by hand is recognized by the record macOS keeps of what was switched off,
   using the key names in macOS's own Focus code, but that hasn't been checked against a real

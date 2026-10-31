@@ -67,6 +67,11 @@ enum CommandEngine {
             results.append(event(body))
             saidWhat = saidWhat || !body.isEmpty
         }
+        // "tr" on its own is still the start of "tray".
+        if let body = remainder(of: text, after: ["translate", "tr"]), !body.isEmpty || lower == "translate" {
+            results.append(translation(body))
+            saidWhat = true
+        }
         // These only speak for the line if they found something, so a shortcut called Connect VPN or
         // a timer called Output still get their turn.
         var found: [CommandResult] = []
@@ -171,7 +176,11 @@ enum CommandEngine {
             CommandResult(id: "cal", symbol: "calendar.badge.plus", tint: .red, title: "Add an event", hint: "cal Dentist fri 3pm") { _ in
                 .fill("cal ")
             },
-        ]
+        ] + (OnDeviceText.isAvailable ? [
+            CommandResult(id: "translate", symbol: "character.bubble", tint: .blue, title: "Translate", hint: "tr hola to english") { _ in
+                .fill("tr ")
+            },
+        ] : [])
     }
 
     /// With nothing typed: what's been used, then the starters, as far as there's room.
@@ -214,7 +223,7 @@ enum CommandEngine {
 
     private static let learnedCommands: Set<String> = [
         "timer", "note", "remind", "dark", "awake", "mic", "pomodoro", "stopwatch", "color", "screenshot", "sleep",
-        "play", "next", "previous", "join", "volume", "brightness", "settings", "cal",
+        "play", "next", "previous", "join", "volume", "brightness", "settings", "cal", "translate",
     ]
 
     /// What goes in the history for a row. Answers all count as the one row that offers them.
@@ -296,6 +305,27 @@ enum CommandEngine {
                 }
                 return .close
             }
+        }
+    }
+
+    /// `start` is what Return does, once there's something to translate. It closes the notch and the
+    /// answer arrives as a notice.
+    static func translation(_ body: String, isAvailable: Bool = OnDeviceText.isAvailable,
+                            start: @escaping @MainActor (TranslationRequest) -> Void = { request in
+                                Task { await TextActions.translate(request, showsResult: true) }
+                            }) -> CommandResult {
+        let symbol = "character.bubble"
+        guard isAvailable else {
+            return CommandResult(id: "translate", symbol: symbol, tint: .gray, title: "Translating needs macOS 26")
+        }
+        guard !body.isEmpty else {
+            return CommandResult(id: "translate", symbol: symbol, tint: .blue, title: "Translate", hint: "hola to english")
+        }
+        let request = TranslationRequest(body)
+        return CommandResult(id: "translate", symbol: symbol, tint: .blue, title: "Translate to \(request.targetName): \(request.text)",
+                             hint: "on this Mac") { _ in
+            start(request)
+            return .close
         }
     }
 

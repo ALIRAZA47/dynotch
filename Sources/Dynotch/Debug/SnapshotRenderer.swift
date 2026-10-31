@@ -175,6 +175,8 @@ enum SnapshotRenderer {
         let cutOut = LiveNotice(key: "cutout", symbol: "scissors", tint: .white, text: "Cut out", detail: "Keynote draft (cut out).png",
                                 actions: [NoticeAction(title: "Open", kind: .openFile(keynote)), NoticeAction(title: "Show", kind: .reveal(keynote))],
                                 recall: .whole)
+        let notInstalled = TextActions.notice(for: .notInstalled("Spanish to English"), title: "Can't translate")
+        let appleIntelligenceOff = TextActions.notice(for: .appleIntelligenceOff, title: "Can't summarize")
         // As narrow as a virtual notch can be set, which is the least room a glance ever has.
         let narrowNotch = NotchGeometry(screenFrame: virtualNotch.screenFrame, closedSize: CGSize(width: 140, height: 24), hasHardwareNotch: false)
         let digest = NotificationPeek.digest(of: ["Slack": 8, "Mail": 3, "Messages": 1], during: "Work")
@@ -308,6 +310,7 @@ enum SnapshotRenderer {
             Scene(name: "command-18-color", phase: .open, command: "#a894ff to rgb"),
             Scene(name: "command-19-date", phase: .open, command: "2026-10-31"),
             Scene(name: "command-21-event", phase: .open, command: "cal dentist fri 3pm"),
+            Scene(name: "command-24-translate", phase: .open, command: "tr hola to english"),
             Scene(name: "command-22-event-length", phase: .open, command: "cal standup mon 9am 30m"),
             Scene(name: "command-23-event-no-time", phase: .open, command: "cal dentist fri"),
             // What's been used comes first, and the suggestions fill the rest.
@@ -372,6 +375,10 @@ enum SnapshotRenderer {
             Scene(name: "85-closed-copied-text", phase: .closed, activity: .notice(copiedText)),
             Scene(name: "86-closed-no-text", phase: .closed, activity: .notice(noText)),
             Scene(name: "87-closed-qr-code", phase: .closed, activity: .notice(qrCodeLongHost)),
+            Scene(name: "88-closed-translated", phase: .closed, activity: .notice(TextActions.copied("hello"))),
+            Scene(name: "88-closed-cant-summarize", phase: .closed, activity: .notice(appleIntelligenceOff)),
+            Scene(name: "glance-30-cant-translate", phase: .glance, activity: .notice(notInstalled)),
+            Scene(name: "glance-31-cant-summarize", phase: .glance, activity: .notice(appleIntelligenceOff)),
             // The recent list, and the two ways in.
             Scene(name: "glance-16-recent", phase: .glance, showingRecent: true, setUp: { loadRecents() }),
             Scene(name: "glance-17-today-recent-awake", phase: .glance, hasTrack: false, setUp: {

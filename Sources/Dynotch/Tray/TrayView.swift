@@ -382,6 +382,9 @@ private struct TrayItemMenu: View {
                 Task { if let folder = await FileActions.extract(item.url) { TrayStore.shared.add([folder]) } }
             }
         }
+        if OnDeviceText.isAvailable, FileActions.isText(item.url) {
+            TranslateMenu(text: { await FileActions.text(of: item.url) })
+        }
         if FileActions.isImage(item.url) {
             Button("Copy Text") {
                 Task { await ImageActions.copyText(from: [item.url]) }
