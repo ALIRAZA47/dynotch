@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 
 /// `dynotch hook`: what Claude Code's hooks run. It passes on what the notch needs and leaves the
@@ -25,7 +26,7 @@ enum AgentHook {
 
     static func run(_ arguments: [String], _ socket: SocketClient, _ io: CommandLineClient.IO) -> Int32 {
         guard let payload = (try? JSONSerialization.jsonObject(with: io.input())) as? [String: Any] else { return 0 }
-        let request = request(from: payload, environment: io.environment)
+        let request = request(from: payload, environment: io.environment, terminal: controllingTerminal())
         if isPermissionRequest(payload) {
             // As long as it takes: the deck answers, retires it, or the process is stopped.
             let answer = try? socket.send(request, timeout: nil)
@@ -36,15 +37,25 @@ enum AgentHook {
         return 0
     }
 
-    /// What goes over the socket for a hook's JSON.
-    static func request(from payload: [String: Any], environment: [String: String]) -> [String: Any] {
+    /// The terminal this session runs in, if any. zsh keeps `$TTY` to itself, so a hook has to ask.
+    private static func controllingTerminal() -> String? {
+        let terminal = open("/dev/tty", O_RDONLY | O_NOCTTY | O_CLOEXEC)
+        guard terminal >= 0 else { return nil }
+        defer { close(terminal) }
+        return ttyname(terminal).map { String(cString: $0) }
+    }
+
+    /// What goes over the socket for a hook's JSON. `terminal` stands in for a `$TTY` it didn't get.
+    static func request(from payload: [String: Any], environment: [String: String], terminal: String? = nil) -> [String: Any] {
         var request: [String: Any] = ["op": "hook"]
         for name in fields { request[name] = payload[name] as? String }
         if let input = payload["tool_input"] as? [String: Any] {
             let kept: [String: Any] = isPermissionRequest(payload) ? shown(input, tool: payload["tool_name"] as? String) : target(of: input)
             if !kept.isEmpty { request["tool_input"] = kept }
         }
-        request["origin"] = TerminalOrigin(environment: environment, folder: payload["cwd"] as? String).fields
+        var origin = TerminalOrigin(environment: environment, folder: payload["cwd"] as? String)
+        if origin.tty == nil { origin.tty = terminal }
+        request["origin"] = origin.fields
         return request
     }
 

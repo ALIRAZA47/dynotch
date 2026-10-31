@@ -444,7 +444,7 @@ final class AgentDeck: ObservableObject {
             let justAnswered = memory.answeredAt.map { now.timeIntervalSince($0) < Self.answerEcho } ?? false
             guard !hasApproval, !justAnswered, memory.asking == nil else { return }
             memory.asking = type == "permission_prompt" ? "Needs your permission" : "Has a question for you"
-            announceAsking(session, tool: nil, actions: [NoticeAction(title: session.origin.title, kind: .focusTerminal(session.origin))])
+            announceAsking(session, tool: nil, actions: session.origin.action.map { [$0] } ?? [])
         case "idle_prompt":
             // Its turn is over, if its Stop never came.
             guard !hasApproval, memory.asking == nil, memory.phase == .working else { return }
@@ -469,8 +469,7 @@ final class AgentDeck: ObservableObject {
         let minutes = Int(now.timeIntervalSince(started) / 60)
         post(LiveNotice(key: "agents.done.\(id)", symbol: "checkmark.circle.fill", tint: .green, text: "Done",
                         detail: "\(session.project) · \(AgentSession.span(minutes: minutes))", fromScript: true,
-                        actions: [NoticeAction(title: session.origin.title, kind: .focusTerminal(session.origin))],
-                        timing: .waits, recall: .whole), 4)
+                        actions: session.origin.action.map { [$0] } ?? [], timing: .waits, recall: .whole), 4)
     }
 
     /// Says a session needs you, with the tool and the project and nothing about what it would do.

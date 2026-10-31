@@ -57,10 +57,9 @@ private struct SessionRow: View {
             Spacer(minLength: 8)
             if hasApproval {
                 PillButton(title: "Review", tint: AgentDeck.tint) { viewModel.showApproval() }
-            } else {
-                let origin = session.origin
-                NoticeButton(action: NoticeAction(title: origin.title, kind: .focusTerminal(origin)), isMain: false, height: 24) {
-                    origin.focus()
+            } else if let action = session.origin.action {
+                NoticeButton(action: action, isMain: false, height: 24) {
+                    session.origin.focus()
                     viewModel.close()
                 }
             }
@@ -171,10 +170,12 @@ struct ApprovalGlance: View {
 
     private func footer(isArmed: Bool) -> some View {
         HStack(spacing: 8) {
-            NoticeButton(action: NoticeAction(title: approval.origin.title, kind: .focusTerminal(approval.origin)), isMain: false) {
-                guard viewModel.acceptsNoticeButtons else { return }
-                approval.origin.focus()
-                viewModel.close()
+            if let action = approval.origin.action {
+                NoticeButton(action: action, isMain: false) {
+                    guard viewModel.acceptsNoticeButtons else { return }
+                    approval.origin.focus()
+                    viewModel.close()
+                }
             }
             if let overflow {
                 Text(overflow)
@@ -318,16 +319,19 @@ extension SnapshotRenderer {
         let now = Date.now
         let virtualNotch = NotchGeometry(screenFrame: CGRect(x: 0, y: 0, width: 2560, height: 1440),
                                          closedSize: CGSize(width: 190, height: 24), hasHardwareNotch: false)
-        let building = AgentSession(id: "a", project: "dynotch", state: .working("Running swift build"), since: now.addingTimeInterval(-240))
-        let asking = AgentSession(id: "b", project: "docs-site", state: .waiting("Wants to run: npm run screens"), since: now)
-        let done = AgentSession(id: "c", project: "ratline", state: .done(now.addingTimeInterval(-120)), since: now)
+        let iTerm = TerminalOrigin(program: "iTerm.app")
+        let desktop = TerminalOrigin(bundleID: "com.anthropic.claudefordesktop")
+        let building = AgentSession(id: "a", project: "dynotch", state: .working("Running swift build"), since: now.addingTimeInterval(-240),
+                                    origin: desktop)
+        let asking = AgentSession(id: "b", project: "docs-site", state: .waiting("Wants to run: npm run screens"), since: now, origin: iTerm)
+        let done = AgentSession(id: "c", project: "ratline", state: .done(now.addingTimeInterval(-120)), since: now, origin: iTerm)
         let three = [done, building, asking]
         let crowd = three + (1...9).map {
             AgentSession(id: "d\($0)", project: "a-project-with-rather-a-long-name-\($0)", state: .done(now.addingTimeInterval(TimeInterval(-600 * $0))),
-                         since: now)
+                         since: now, origin: iTerm)
         }
 
-        let short = AgentApproval(sessionID: "b", project: "docs-site", tool: "Bash", input: ["command": "npm run screens"])
+        let short = AgentApproval(sessionID: "b", project: "docs-site", tool: "Bash", input: ["command": "npm run screens"], origin: iTerm)
         let long = AgentApproval(sessionID: "b", project: "docs-site", tool: "Bash", input: [
             "command": """
             cd docs && npm ci && npm run build

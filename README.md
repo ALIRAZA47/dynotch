@@ -25,6 +25,7 @@ dependencies.
 | **Microphone** | ⌃⌥M, or **Mute Microphone** in the menu bar menu, mutes the mic in every app (by its mute control, or by turning its input level down when it has none). A red badge stays in the closed notch while it's muted. An on-air ring outlines the closed notch while a camera (green) or the mic (orange) is in use. Like macOS's own indicator, it leaves out Siri listening for its name. |
 | **Downloads** | A ring in the closed notch while files arrive in ~/Downloads: a real percentage for Safari, which records its progress, and the size so far for Chrome, Firefox and Opera, whose partial files only grow. A notice names the file when it's done, and an option puts finished downloads in the Tray. |
 | **Focus** | The symbol of the Focus that's on, in its color, at the end of the right ear, and a notice when a Focus turns on or off, whether by hand or on a schedule. macOS only tells apps whether a Focus is on, so Dynotch reads which one from the Focus settings, which takes Full Disk Access. Without it, nothing shows. |
+| **Agents** | Every Claude Code session in the notch, in the terminal and in the desktop app: what's working, what's waiting and what's done, in an Agents tab that's there while there are sessions, with a count at the end of the right ear for what needs you. A tool call waiting for permission can be allowed or denied from the glance, with the whole command on show, and **Back** goes to the session. Claude Code's own prompt stays up the whole time, whichever answers first wins, and nothing ever allows by itself. |
 | **Scripts** | `dynotch progress deploy 40` draws a thin line along the foot of the closed notch, with the percentage in the glance, and `dynotch status --json` reads the notch back. Each script has its own name, and one that goes quiet is taken down and says so. |
 | **Claude usage** | How much of your 5-hour and 7-day limits you've used and when they reset, as a ring in the glance, with a heads-up at 80%. The numbers come from Claude Code's status line, through `dynotch statusline`, and the glance says how old they are. |
 | **CI** | `dynotch ci`, or a `git push` with the long-command hook on, follows GitHub Actions on your branch: the workflow in the closed notch while it runs, then **Passed** or **Failed** with **Open Run**. The glance counts pull requests waiting for your review. It uses your own `gh` login, and polls only while a run is active. |
@@ -185,8 +186,9 @@ then ends with a "Done" or "Failed" notice. `DYNOTCH_LONG_COMMAND` changes the t
 The notice names the command alone, `make` say, since its arguments can hold tokens;
 `DYNOTCH_LONG_COMMAND_DETAIL=full` includes them.
 
-**When Claude Code needs you.** Claude Code hooks can call the same command. Add this
-to `~/.claude/settings.json`:
+**When Claude Code needs you.** Terminal setup adds the hooks behind the Agents tab, or see
+[Agents](https://dynotch.alirazakhan.me/agents/) to add them by hand. If all you want is a word when
+Claude needs you, hooks can call the same command. Add this to `~/.claude/settings.json`:
 
 ```json
 {

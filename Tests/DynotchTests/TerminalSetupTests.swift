@@ -752,4 +752,100 @@ struct TerminalSetupInstalledTests {
         #expect(result.code != 2)
         #expect(result.output.isEmpty)
     }
+
+    /// A real `dynotch hook` and `dynotch statusline`, as the card wrote them to `settings.json`, in
+    /// the shell Claude Code would use, and a real deck and store behind a scratch socket.
+    @MainActor
+    private func withInstalledSetup(_ body: (ScratchHome, String, [String: String]) async throws -> Void) async throws {
+        SnapshotRenderer.useScratchDefaults()
+        let scratch = try installed()
+        let socket = NSTemporaryDirectory() + "dyn-" + UUID().uuidString.prefix(8) + "/run/s.sock"
+        defer { try? FileManager.default.removeItem(atPath: ((socket as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent) }
+        try await body(scratch, socket, ["DYNOTCH_SOCKET": socket, "PATH": "/usr/bin:/bin"])
+    }
+
+    private nonisolated func sent(_ input: String, to command: String, environment: [String: String]) async throws -> (code: Int32, output: String) {
+        try await Task.detached {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments = ["-c", command]
+            process.environment = environment
+            let input_ = Pipe(), output = Pipe()
+            process.standardInput = input_
+            process.standardOutput = output
+            process.standardError = Pipe()
+            try process.run()
+            input_.fileHandleForWriting.write(Data(input.utf8))
+            input_.fileHandleForWriting.closeFile()
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+        }.value
+    }
+
+    private func installedHandler(_ scratch: ScratchHome, event: String) throws -> [String: Any] {
+        let hooks = try #require(try scratch.settings()["hooks"] as? [String: [[String: Any]]])
+        return try #require((hooks[event]?.first?["hooks"] as? [[String: Any]])?.first)
+    }
+
+    @MainActor @Test(.enabled(if: hasBinary)) func theInstalledHooksReachTheDeckAndTheAnswerComesBack() async throws {
+        try await withInstalledSetup { scratch, socket, environment in
+            let deck = AgentDeck(post: { _, _ in })
+            let router = SocketRouter()
+            deck.start(on: router)
+            router.start(path: socket)
+            defer { router.stop() }
+
+            for event in AgentHook.events {
+                #expect(try installedHandler(scratch, event: event.name)["command"] as? String == scratch.setup.hookCommand)
+            }
+            let command = try #require(try installedHandler(scratch, event: "PermissionRequest")["command"] as? String)
+            let payload = #"{"hook_event_name":"PermissionRequest","session_id":"s1","cwd":"/work/docs","tool_name":"Bash","tool_input":{"command":"npm run screens"}}"#
+            let answer = Task { try await sent(payload, to: command, environment: environment) }
+            for _ in 0..<300 where deck.approvals.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
+            let approval = try #require(deck.approvals.first)
+            #expect(approval.command == "npm run screens")
+            #expect(approval.project == "docs")
+
+            let start = Date(timeIntervalSinceReferenceDate: 0)
+            var shown = ApprovalGuard()
+            shown.show(approval.id, at: start)
+            deck.allow(approval, shown: shown, at: start.addingTimeInterval(ApprovalGuard.delay()))
+            let result = try await answer.value
+            #expect(result.code == 0)
+            let printed = try JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: [String: Any]]
+            #expect(printed?["hookSpecificOutput"]?["hookEventName"] as? String == "PermissionRequest")
+            #expect((printed?["hookSpecificOutput"]?["decision"] as? [String: String])?["behavior"] == "allow")
+        }
+    }
+
+    @MainActor @Test(.enabled(if: hasBinary)) func theInstalledStatusLineReachesTheStore() async throws {
+        try await withInstalledSetup { scratch, socket, environment in
+            let store = UsageStore(post: { _, _ in })
+            let router = SocketRouter()
+            store.start(on: router)
+            router.start(path: socket)
+            defer { router.stop() }
+
+            let line = try #require(try scratch.settings()["statusLine"] as? [String: Any])
+            let command = try #require(line["command"] as? String)
+            let resets = Int(Date.now.timeIntervalSince1970) + 3600
+            let payload = #"{"model":{"display_name":"Opus 5.5"},"rate_limits":{"five_hour":{"used_percentage":62,"resets_at":\#(resets)},"seven_day":{"used_percentage":9.4,"resets_at":\#(resets + 86400)}}}"#
+            let result = try await sent(payload, to: command, environment: environment)
+            #expect(result.code == 0)
+            #expect(result.output == "Opus 5.5 · 62% of 5 h · 9% of 7 d\n")
+            for _ in 0..<300 where store.numbers == nil { try await Task.sleep(for: .milliseconds(10)) }
+            #expect(store.numbers?.fiveHour?.percent == 62)
+            #expect(store.numbers?.sevenDay?.percent == 9)
+        }
+    }
+
+    @Test(.enabled(if: hasBinary)) func withDynotchNotRunningTheInstalledHookStaysOutOfTheWay() async throws {
+        let scratch = try installed()
+        let socket = NSTemporaryDirectory() + "dyn-" + UUID().uuidString.prefix(8) + "/run/s.sock"
+        let payload = #"{"hook_event_name":"PermissionRequest","session_id":"s1","tool_name":"Bash","tool_input":{"command":"ls"}}"#
+        let result = try await sent(payload, to: scratch.setup.hookCommand, environment: ["DYNOTCH_SOCKET": socket, "PATH": "/usr/bin:/bin"])
+        #expect(result.code == 0)
+        #expect(result.output.isEmpty)
+    }
 }

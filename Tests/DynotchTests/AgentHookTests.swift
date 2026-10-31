@@ -257,4 +257,12 @@ struct AgentHookTests {
         #expect(CommandLineClient.run(["hook"], io: terminal.io(input: HookPayloads.data("PermissionRequest"), socket: scratch.path)) == 0)
         #expect(terminal.output.isEmpty)
     }
+
+    @Test func aHookFindsItsOwnTerminalWhenTheShellKeptItToItself() {
+        let payload: [String: Any] = ["hook_event_name": "Stop", "session_id": "s", "cwd": "/work"]
+        let asked = AgentHook.request(from: payload, environment: [:], terminal: "/dev/ttys004")
+        #expect((asked["origin"] as? [String: String])?["tty"] == "/dev/ttys004")
+        let told = AgentHook.request(from: payload, environment: ["TTY": "/dev/ttys009"], terminal: "/dev/ttys004")
+        #expect((told["origin"] as? [String: String])?["tty"] == "/dev/ttys009")
+    }
 }
