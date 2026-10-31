@@ -94,7 +94,8 @@ enum TimerText {
         guard parts.count == 2 || parts.count == 3,
               parts.allSatisfy({ !$0.isEmpty && $0.allSatisfy(\.isASCII) && $0.allSatisfy(\.isNumber) }),
               parts.dropFirst().allSatisfy({ $0.count == 2 && Int($0)! < 60 }) else { return nil }
-        return parts.reduce(0) { $0 * 60 + Double(Int($1)!) }
+        // Any number of digits gets here, too many for an Int; `parse` turns down what's over the maximum.
+        return parts.reduce(0) { $0 * 60 + (Double($1) ?? .infinity) }
     }
 
     /// Numbers with units in one word: "4m", "90s", "1.5h", "1h30m", or "1h30" with the last unit implied.

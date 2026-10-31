@@ -128,7 +128,8 @@ calendars and Apple events.
 `.zip` of the app in `dist/`, with their SHA-256 checksums. The version comes from
 `Support/Info.plist`.
 
-For development, `swift build` and `.build/debug/Dynotch` also work.
+For development, `swift build` and `.build/debug/Dynotch` also work, and `./scripts/test.sh` runs
+the tests.
 `Dynotch --snapshot <folder>` renders every notch state with sample data to PNGs,
 which is handy for reviewing UI changes. `Dynotch --energy-probe` counts how often the polls
 would run and wake the Mac in an hour, in each of the conditions under [Energy](#energy).
@@ -311,6 +312,7 @@ Sources/Dynotch/
   Settings/   settings window and permissions page
   Welcome/    the first-run welcome tour
   Debug/      snapshot renderer, energy probe, capture self-test
+Tests/        the tests, run with scripts/test.sh
 Support/      Info.plist, entitlements, app icon
 scripts/      build and signing scripts, icon generator, the dynotch command and the zsh hook
 ```
