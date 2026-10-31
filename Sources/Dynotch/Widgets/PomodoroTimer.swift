@@ -98,6 +98,8 @@ final class PomodoroTimer: ObservableObject {
 
     private func finish() {
         let finished = phase
+        // Cleared first: pause() ticks, and a tick that still sees the end date comes straight back here.
+        endDate = nil
         pause()
         if AppSettings.shared.timerSound { NSSound(named: "Glass")?.play() }
         advance()

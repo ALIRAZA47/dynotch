@@ -25,6 +25,9 @@ reach is listed in `Support/Dynotch.entitlements`.
 For a quick loop, `swift build` and `.build/debug/Dynotch` also work. Reviewing UI?
 `Dynotch --snapshot <folder>` renders every notch state with sample data to PNGs.
 
+`./scripts/test.sh` runs the tests, with Xcode or with the Command Line Tools, where plain
+`swift test` can't find Swift Testing's macros.
+
 ## How changes get in
 
 `main` is protected: no one pushes to it directly, and every change lands through a
@@ -33,7 +36,7 @@ pull request that the maintainer approves. So:
 1. Branch off `main` (`git switch -c your-change`).
 2. Make the change. Keep it focused — one topic per PR.
 3. Push your branch and open a PR against `main`.
-4. CI builds the app on every PR; keep it green.
+4. CI builds the app and runs the tests on every PR; keep it green.
 5. A maintainer reviews. Once approved, it merges.
 
 ## Style

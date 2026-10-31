@@ -11,6 +11,11 @@ let package = Package(
         .executableTarget(
             name: "Dynotch",
             path: "Sources/Dynotch"
+        ),
+        .testTarget(
+            name: "DynotchTests",
+            dependencies: ["Dynotch"],
+            path: "Tests/DynotchTests"
         )
     ]
 )

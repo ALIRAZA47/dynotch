@@ -35,3 +35,6 @@ jobs:
 
       - name: Build (release)
         run: swift build -c release
+
+      - name: Test
+        run: ./scripts/test.sh
