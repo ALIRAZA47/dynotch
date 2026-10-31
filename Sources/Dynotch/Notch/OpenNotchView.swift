@@ -36,6 +36,7 @@ struct OpenNotchView: View {
             case .tray: TrayTabView(viewModel: viewModel)
             case .focus: FocusTabView()
             case .stats: ControlTabView()
+            case .agents: AgentsTabView(viewModel: viewModel)
             }
         }
     }
@@ -69,6 +70,7 @@ struct OpenHeaderView: View {
 private struct TabSwitcher: View {
     @ObservedObject var viewModel: NotchViewModel
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var deck = AgentDeck.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selection
 

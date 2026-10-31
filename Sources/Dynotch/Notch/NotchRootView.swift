@@ -153,6 +153,11 @@ struct ClosedNotchView: View {
                     .padding(.horizontal, viewModel.activity == .trackPeek ? 14 : 16)
                     .frame(height: layout.rowHeight, alignment: .top)
             }
+            if layout.footHeight > 0, case .script(let activity) = viewModel.activity {
+                ScriptFootLine(activity: activity)
+                    .padding(.horizontal, ClosedLayout.footInset)
+                    .frame(height: layout.footHeight, alignment: .top)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .clipped()
@@ -198,6 +203,10 @@ struct ClosedNotchView: View {
                 .foregroundStyle(TimerStore.stopwatchTint)
         case .download:
             DownloadLabel()
+        case .script(let activity):
+            ScriptLabel(activity: activity)
+        case .ci(let run):
+            CILabel(run: run)
         }
     }
 
@@ -227,6 +236,10 @@ struct ClosedNotchView: View {
             StopwatchTime()
         case .download:
             DownloadAmount()
+        case .script(let activity):
+            ScriptPercent(activity: activity)
+        case .ci(let run):
+            CIStatus(run: run)
         }
     }
 

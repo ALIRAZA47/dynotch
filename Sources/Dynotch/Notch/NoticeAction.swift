@@ -13,6 +13,8 @@ struct NoticeAction: Equatable {
         case openTab(NotchTab)
         case installUpdate
         case showRecent
+        /// Back to the terminal a command ran in.
+        case focusTerminal(TerminalOrigin)
     }
 
     let title: String
@@ -46,6 +48,8 @@ struct NoticeAction: Equatable {
             if !fromRecent { center.dismissNotice() }
             viewModel.showRecent()
             return
+        case .focusTerminal(let origin):
+            origin.focus()
         }
         if !fromRecent { center.dismissNotice() }
         viewModel.close()

@@ -339,6 +339,11 @@ private struct ClosedPreview: View {
                     .padding(.horizontal, (activity == .trackPeek ? 14 : 16) * scale)
                     .frame(height: layout.rowHeight * scale, alignment: .top)
             }
+            if layout.footHeight > 0, case .script(let activity) = activity {
+                ScriptFootLine(activity: activity, height: ClosedLayout.footLineHeight * scale)
+                    .padding(.horizontal, ClosedLayout.footInset * scale)
+                    .frame(height: layout.footHeight * scale, alignment: .top)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .clipped()
@@ -376,6 +381,19 @@ private struct ClosedPreview: View {
         case .download:
             DownloadRing(fraction: 0.45, lineWidth: 2.6 * scale, arrowSize: 7 * scale)
                 .frame(width: 17 * scale, height: 17 * scale)
+        case .script(let activity):
+            HStack(spacing: 6 * scale) {
+                Image(systemName: activity.symbol)
+                    .font(.system(size: 12 * scale, weight: .semibold))
+                    .foregroundStyle(activity.tint ?? theme.accent)
+                Text(activity.key)
+                    .font(.system(size: 12 * scale, weight: .semibold))
+                    .foregroundStyle(theme.primary)
+                    .lineLimit(1)
+            }
+        case .ci(let run):
+            CILabel(run: run)
+                .scaleEffect(scale, anchor: .leading)
         }
     }
 
@@ -414,6 +432,13 @@ private struct ClosedPreview: View {
             Text("45%")
                 .font(NotchFont.numeric(12.5 * scale))
                 .foregroundStyle(DownloadMonitor.tint)
+        case .script(let activity):
+            Text(activity.percentText ?? "")
+                .font(NotchFont.numeric(12.5 * scale))
+                .foregroundStyle(activity.tint ?? theme.accent)
+        case .ci(let run):
+            CIStatus(run: run)
+                .scaleEffect(scale, anchor: .trailing)
         }
     }
 
@@ -456,6 +481,14 @@ private struct ClosedPreview: View {
             HeldBadge(count: count, size: ClosedLayout.glyphSize * scale)
         case .keepAwake:
             KeepAwakeGlyph(size: ClosedLayout.glyphSize * scale)
+        case .script(let activity):
+            ProgressRing(progress: activity.fraction ?? 0, color: activity.tint ?? theme.accent, lineWidth: 2.4 * scale)
+                .padding(1.5 * scale)
+        case .agentsWaiting(let count):
+            AgentsWaitingBadge(count: count, size: ClosedLayout.glyphSize * scale)
+        case .ci(let run):
+            CIGlyph(run: run)
+                .scaleEffect(scale)
         }
     }
 }

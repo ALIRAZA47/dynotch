@@ -36,6 +36,10 @@ extension Cadence {
     static let keepAwake = Cadence(name: "Keep Awake's end", every: 30, onBattery: 30, lowPower: 60)
     /// Screenshots and downloads whose time in the Tray is up.
     static let trayTidying = Cadence(name: "Tray tidying", every: 3600, onBattery: 3600, lowPower: 3600)
+    /// A GitHub Actions run in progress, through `gh`. Only while one is active.
+    static let ciRun = Cadence(name: "CI run", every: 15, onBattery: 30, lowPower: 60)
+    /// Pull requests waiting for your review, once CI has been asked for.
+    static let ciReviews = Cadence(name: "Reviews waiting", every: 15 * 60, onBattery: 30 * 60, lowPower: 60 * 60)
     /// Accessibility is granted in System Settings, which doesn't tell the app.
     static let accessibilityCheck = Cadence(name: "Accessibility check", every: 2, onBattery: 2, lowPower: 4)
 }

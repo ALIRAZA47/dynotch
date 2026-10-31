@@ -6,6 +6,10 @@ import SwiftUI
 @main
 enum DynotchApp {
     static func main() {
+        // The `dynotch` command, for anything that has to hear back from the notch. No app, no windows.
+        if CommandLine.arguments.dropFirst().first == "--cli" {
+            exit(CommandLineClient.run(Array(CommandLine.arguments.dropFirst(2))))
+        }
         MainActor.assumeIsolated {
             // Before anything reads a setting: a snapshot run works against scratch defaults with
             // sample values, never the real ones, and needs somewhere to put the images. The
@@ -81,6 +85,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         QuietMonitor.shared.start()
         LiveActivityCenter.shared.start()
         NotificationMirror.shared.start()
+        // What scripts and agents tell the notch, then the socket they tell it through.
+        ScriptActivityStore.shared.start()
+        AgentDeck.shared.start()
+        UsageStore.shared.start()
+        CIMonitor.shared.start()
+        // Not for the capture tests, which run the whole app beside the real one.
+        if !arguments.contains("--capture-self-test"), !arguments.contains("--capture-test") { SocketRouter.shared.start() }
         // Asks GitHub for the newest release a little after launch, once a day.
         UpdateChecker.shared.start()
         NotchManager.shared.start()

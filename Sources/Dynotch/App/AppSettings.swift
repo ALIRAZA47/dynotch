@@ -48,6 +48,8 @@ enum VirtualNotchStyle: String, CaseIterable, Identifiable {
 enum NotchTab: String, CaseIterable, Identifiable {
     // `stats` is the Control tab; the raw value stays so saved settings and links keep working.
     case home, tray, focus, stats
+    /// Claude Code's sessions. Only there while there are some.
+    case agents
 
     var id: String { rawValue }
 
@@ -57,6 +59,7 @@ enum NotchTab: String, CaseIterable, Identifiable {
         case .tray: "Tray"
         case .focus: "Focus"
         case .stats: "Control"
+        case .agents: "Agents"
         }
     }
 
@@ -66,6 +69,7 @@ enum NotchTab: String, CaseIterable, Identifiable {
         case .tray: "tray.full.fill"
         case .focus: "timer"
         case .stats: "switch.2"
+        case .agents: "sparkles"
         }
     }
 }
@@ -365,6 +369,23 @@ final class AppSettings: ObservableObject {
         didSet { save("quietInFullScreen", quietInFullScreen) }
     }
 
+    /// A line under the notch while a script reports progress with `dynotch progress`.
+    @Published var liveScripts: Bool = AppSettings.value("liveScripts", true) {
+        didSet { save("liveScripts", liveScripts) }
+    }
+    /// Claude Code's sessions, and the tool calls waiting for an answer.
+    @Published var liveAgents: Bool = AppSettings.value("liveAgents", true) {
+        didSet { save("liveAgents", liveAgents) }
+    }
+    /// How much of Claude's limits are used, and a heads-up at 80%.
+    @Published var liveUsage: Bool = AppSettings.value("liveUsage", true) {
+        didSet { save("liveUsage", liveUsage) }
+    }
+    /// GitHub Actions runs on your branch.
+    @Published var liveCI: Bool = AppSettings.value("liveCI", true) {
+        didSet { save("liveCI", liveCI) }
+    }
+
     // MARK: Nook
 
     @Published var homeWidgetA: HomeWidget = AppSettings.value("homeWidgetA", HomeWidget.calendar) {
@@ -512,6 +533,7 @@ final class AppSettings: ObservableObject {
             case .tray: showTrayTab
             case .focus: showFocusTab
             case .stats: showStatsTab
+            case .agents: liveAgents && AgentDeck.shared.hasSessions
             }
         }
     }

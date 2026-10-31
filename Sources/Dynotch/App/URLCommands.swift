@@ -6,6 +6,7 @@ import SwiftUI
 ///
 ///     dynotch://notify?text=Deploy%20done&detail=…&symbol=checkmark.circle.fill&tint=green&seconds=4
 ///                      &button=Open&url=https://…   a button in the glance, for an https link
+///                      &key=deploy                  its own notice, so another script's doesn't replace it
 ///     dynotch://open?tab=tray          home, tray, focus or stats
 ///     dynotch://close
 ///     dynotch://timer/start            start, pause, toggle, reset or skip
@@ -33,7 +34,7 @@ enum URLCommands {
         case "notify":
             notify(text: value("text") ?? "", detail: value("detail"), symbol: value("symbol"),
                    tint: value("tint"), seconds: value("seconds").flatMap(Double.init),
-                   button: button(title: value("button"), url: value("url")))
+                   button: button(title: value("button"), url: value("url")), key: value("key"))
         case "open":
             NotchManager.shared.open(tab: value("tab").flatMap(tab(named:)))
         case "close":
@@ -65,7 +66,7 @@ enum URLCommands {
     }
 
     private static func notify(text: String, detail: String?, symbol: String?, tint: String?, seconds: Double?,
-                               button: NoticeAction?) {
+                               button: NoticeAction?, key: String?) {
         var text = String(text.prefix(100))
         var detail = detail.map { String($0.prefix(140)) }.flatMap { $0.isEmpty ? nil : $0 }
         // The ear beside the camera fits a couple of words; longer text goes on the row underneath.
@@ -78,7 +79,8 @@ enum URLCommands {
             }
         }
         let symbol = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) == nil ? nil : $0 } ?? "bell.fill"
-        LiveActivityCenter.shared.post(LiveNotice(key: "command", symbol: symbol, tint: color(named: tint) ?? .white,
+        let key = ScriptActivityStore.cleaned(key, limit: ScriptActivityStore.longestKey).map { "script.\($0)" } ?? "command"
+        LiveActivityCenter.shared.post(LiveNotice(key: key, symbol: symbol, tint: color(named: tint) ?? .white,
                                                   text: text, detail: detail, fromScript: true,
                                                   actions: button.map { [$0] } ?? [], timing: .waits, recall: .whole),
                                        for: min(max(seconds ?? 4, 1), 30))

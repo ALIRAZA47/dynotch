@@ -78,6 +78,26 @@ enum ClosedActivity: Equatable {
     case stopwatch
     /// Files arriving in ~/Downloads.
     case download
+    /// A script reporting its progress with `dynotch progress`.
+    case script(ScriptActivity)
+    /// A GitHub Actions run on your branch.
+    case ci(CIRun)
+
+    /// What it's called in `dynotch status`. Only the kind: what a notice says stays in the notch.
+    var statusName: String {
+        switch self {
+        case .idle: "idle"
+        case .music: "music"
+        case .trackPeek: "trackPeek"
+        case .timer: "timer"
+        case .notice: "notice"
+        case .countdown: "countdown"
+        case .stopwatch: "stopwatch"
+        case .download: "download"
+        case .script: "script"
+        case .ci: "ci"
+        }
+    }
 }
 
 /// A second activity, drawn as a small glyph at the end of the right ear while the main
@@ -96,6 +116,10 @@ enum CompactActivity: Equatable {
     case held(Int)
     /// Keep Awake is on.
     case keepAwake
+    case script(ScriptActivity)
+    /// Tool calls waiting for an answer.
+    case agentsWaiting(Int)
+    case ci(CIRun)
 
     /// The main activity already shows this one.
     func isShown(by activity: ClosedActivity) -> Bool {
@@ -104,6 +128,8 @@ enum CompactActivity: Equatable {
         case (.micMuted, .notice(let notice)): notice.key == "mic"
         case (.focus, .notice(let notice)): notice.key == "focus"
         case (.countdown(let compact), .countdown(let main)): compact.id == main.id
+        case (.script(let compact), .script(let main)): compact.key == main.key
+        case (.ci(let compact), .ci(let main)): compact.id == main.id
         default: false
         }
     }
@@ -111,7 +137,7 @@ enum CompactActivity: Equatable {
     /// A state rather than something going on, so it may show on its own while "Two at once" is off.
     var isStatus: Bool {
         switch self {
-        case .micMuted, .focus, .held, .keepAwake: true
+        case .micMuted, .focus, .held, .keepAwake, .agentsWaiting: true
         default: false
         }
     }
@@ -124,10 +150,11 @@ struct ClosedContent: Equatable {
 }
 
 /// Decides what the closed notch shows. The main activity goes by priority: notices, which take
-/// turns (see `NoticeQueue`), a new track, a running timer (the focus timer or a named one, whichever
-/// ends soonest, then the stopwatch), a download, then music that's playing. The most important of
-/// the others that has a compact form shows beside it: the mute badge, what's being held back,
-/// timers, a download, Keep Awake, the Focus, music.
+/// turns (see `NoticeQueue`), a new track, a script's progress, a running timer (the focus timer or a
+/// named one, whichever ends soonest, then the stopwatch), a CI run, a download, then music that's
+/// playing. The most important of the others that has a compact form shows beside it: tool calls
+/// waiting for an answer, the mute badge, what's being held back, a script, timers, a CI run, a
+/// download, Keep Awake, the Focus, music.
 @MainActor
 final class LiveActivityCenter: ObservableObject {
     static let shared = LiveActivityCenter()
@@ -166,6 +193,9 @@ final class LiveActivityCenter: ObservableObject {
             DownloadMonitor.shared.$downloads.map(\.isEmpty).removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
             FocusMonitor.shared.$mode.map { _ in () }.eraseToAnyPublisher(),
             QuickToggles.shared.$isKeepingAwake.map { _ in () }.eraseToAnyPublisher(),
+            ScriptActivityStore.shared.$activities.map { _ in () }.eraseToAnyPublisher(),
+            AgentDeck.shared.$approvals.map { _ in () }.eraseToAnyPublisher(),
+            CIMonitor.shared.$run.map { _ in () }.eraseToAnyPublisher(),
             AppSettings.shared.objectWillChange.map { _ in () }.eraseToAnyPublisher()
         )
         // @Published fires before the value changes; read it on the next turn.
@@ -178,6 +208,7 @@ final class LiveActivityCenter: ObservableObject {
             .dropFirst()
             .sink { [weak self] quiet in self?.quietChanged(quiet) }
             .store(in: &cancellables)
+        SocketRouter.shared.reportsStatus("notch") { [weak self] in self?.statusReport ?? [:] }
     }
 
     func post(_ notice: LiveNotice, for duration: TimeInterval = 2.6) {
@@ -221,6 +252,12 @@ final class LiveActivityCenter: ObservableObject {
             self?.trackPeekActive = false
             self?.recompute()
         }
+    }
+
+    /// What `dynotch status` says about the closed notch.
+    private var statusReport: [String: Any] {
+        ["activity": content.activity.statusName, "heldNotices": queue.held.count, "isQuiet": QuietMonitor.shared.isQuiet,
+         "isOpen": NotchManager.shared.controllers.contains { $0.viewModel.isOpen }]
     }
 
     // MARK: Snapshots
@@ -285,6 +322,8 @@ final class LiveActivityCenter: ObservableObject {
         let store = TimerStore.shared
         let musicPlaying = settings.liveMusic && media.isPlaying && media.track != nil
         let downloading = settings.liveDownloads && !DownloadMonitor.shared.downloads.isEmpty
+        let script = settings.liveScripts ? ScriptActivityStore.shared.activities.first : nil
+        let ciRun = settings.liveCI ? CIMonitor.shared.run : nil
 
         // Running timers, the one that ends soonest first, then the stopwatch.
         var timers: [(end: Date, activity: ClosedActivity, compact: CompactActivity)] = []
@@ -304,8 +343,12 @@ final class LiveActivityCenter: ObservableObject {
             activity = .notice(notice)
         } else if trackPeekActive, settings.liveMusic, media.track != nil {
             activity = .trackPeek
+        } else if let script {
+            activity = .script(script)
         } else if let timer = timers.first {
             activity = timer.activity
+        } else if let ciRun {
+            activity = .ci(ciRun)
         } else if downloading {
             activity = .download
         } else if musicPlaying {
@@ -316,9 +359,13 @@ final class LiveActivityCenter: ObservableObject {
 
         // The ones with a compact form, most important first.
         var compact: [CompactActivity] = []
+        let waiting = settings.liveAgents ? AgentDeck.shared.approvals.count : 0
+        if waiting > 0 { compact.append(.agentsWaiting(waiting)) }
         if settings.liveMicMuted, MicMonitor.shared.isMuted { compact.append(.micMuted) }
         if !queue.held.isEmpty { compact.append(.held(queue.held.count)) }
+        if let script { compact.append(.script(script)) }
         compact += timers.map(\.compact)
+        if let ciRun { compact.append(.ci(ciRun)) }
         if downloading { compact.append(.download) }
         if settings.liveKeepAwake, QuickToggles.shared.isKeepingAwake { compact.append(.keepAwake) }
         if settings.liveFocus, let focus = FocusMonitor.shared.mode { compact.append(.focus(focus)) }

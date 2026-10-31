@@ -359,6 +359,7 @@ enum CommandEngine {
             .tray: ["tray", "files"],
             .focus: ["focus", "timers", "reminders", "notes"],
             .stats: ["control", "toggles", "batteries", "stats", "volume", "brightness"],
+            .agents: ["agents", "claude", "sessions"],
         ]
         return settings.enabledTabs.compactMap { tab in
             guard let tabWords = words[tab], let word = tabWords.first(where: { $0.hasPrefix(text) || text == $0 }) else {

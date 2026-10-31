@@ -39,7 +39,7 @@ enum SnapshotRenderer {
         try? FileManager.default.removeItem(atPath: scratchDomain + ".plist")
     }
 
-    private struct Scene {
+    struct Scene {
         let name: String
         let phase: NotchViewModel.Phase
         var activity: ClosedActivity = .idle
@@ -65,6 +65,8 @@ enum SnapshotRenderer {
         var command: String?
         /// The glance has turned to the recent list.
         var showingRecent = false
+        /// The glance has turned to Claude's usage.
+        var showingUsage = false
         /// The Focus tab's second card shows the notes.
         var focusShowsNotes = false
         /// The open notch at this size instead of the setting's, for this scene only.
@@ -313,7 +315,7 @@ enum SnapshotRenderer {
                 QuickToggles.shared.loadSample(awakeUntil: sampleTime.addingTimeInterval(102 * 60))
             }),
             Scene(name: "79-open-tray-pinned", phase: .open, tab: .tray, setUp: { TrayStore.shared.loadSample(pinned: 1) }),
-        ] + widgetScenes() + [
+        ] + scriptScenes(tea: tea) + agentScenes() + usageScenes() + ciScenes() + widgetScenes() + [
             // The other widgets beside the player, busy cards and empty ones. These change the samples, so they go last.
             Scene(name: "96-open-nook-timer-toggles", phase: .open, tab: .home, prepare: {
                 (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.timer, .toggles)
@@ -351,7 +353,8 @@ enum SnapshotRenderer {
             let sceneGeometry = scene.geometry ?? geometry
             let viewModel = NotchViewModel(geometry: sceneGeometry)
             viewModel.stage(phase: scene.phase, activity: scene.activity, secondary: scene.secondary, tab: scene.tab,
-                            draggingFiles: scene.draggingFiles, command: scene.command, showingRecent: scene.showingRecent)
+                            draggingFiles: scene.draggingFiles, command: scene.command, showingRecent: scene.showingRecent,
+                            showingUsage: scene.showingUsage)
             // The command field can make the notch taller than the setting.
             let height = max(size.height, viewModel.metrics.height + 40)
             let content = ZStack(alignment: .top) {
@@ -742,6 +745,10 @@ enum SnapshotRenderer {
         loadOutputs(pickerShown: false)
         AudioLevels.shared.loadSample(nil)
         LiveActivityCenter.shared.loadSample(recents: [], unseen: 0)
+        ScriptActivityStore.shared.loadSample([])
+        AgentDeck.shared.clearSample()
+        UsageStore.shared.clearSample()
+        CIMonitor.shared.clearSample()
         QuickToggles.shared.loadSample(awakeUntil: nil)
         TrayStore.shared.loadSample(pinned: nil)
     }
@@ -858,6 +865,40 @@ enum SnapshotRenderer {
     /// The widgets no other scene brings to the top of the Nook's stack, each first in it beside one
     /// that never asks for the room, on black and on glass. They leave the widgets set, so they come
     /// just before 96, which sets its own.
+    /// A script's progress: with a number, without one yet, on a virtual notch, beside other things.
+    private static func scriptScenes(tea: Countdown) -> [Scene] {
+        let deploy = ScriptActivity(key: "deploy", percent: 62, detail: "Uploading the build")
+        let build = ScriptActivity(key: "nightly-backup-run", percent: 8, symbol: "externaldrive.fill", tint: .teal)
+        let waiting = ScriptActivity(key: "migrate")
+        let virtualNotch = NotchGeometry(screenFrame: CGRect(x: 0, y: 0, width: 2560, height: 1440),
+                                         closedSize: CGSize(width: 190, height: 24), hasHardwareNotch: false)
+        return [
+            Scene(name: "script-1-closed", phase: .closed, activity: .script(deploy)),
+            Scene(name: "script-2-closed-symbol", phase: .closed, activity: .script(build)),
+            Scene(name: "script-3-closed-no-number", phase: .closed, activity: .script(waiting)),
+            Scene(name: "script-4-closed-virtual", phase: .closed, activity: .script(deploy), geometry: virtualNotch),
+            Scene(name: "script-5-hover", phase: .hovering, activity: .script(deploy)),
+            Scene(name: "script-6-with-timer", phase: .closed, activity: .script(deploy), secondary: .timer),
+            Scene(name: "script-7-beside-a-notice", phase: .closed, activity: .notice(LiveNotice(
+                key: "power", symbol: "bolt.fill", tint: .green, text: "82%")), secondary: .script(deploy)),
+            Scene(name: "script-8-glance", phase: .glance, activity: .script(deploy),
+                  setUp: { ScriptActivityStore.shared.loadSample([deploy]) }),
+            Scene(name: "script-9-glance-more", phase: .glance, activity: .script(deploy),
+                  setUp: { ScriptActivityStore.shared.loadSample([deploy, build, waiting]) }),
+            Scene(name: "script-10-glance-no-number", phase: .glance, activity: .script(waiting),
+                  setUp: { ScriptActivityStore.shared.loadSample([waiting]) }),
+            Scene(name: "script-11-done", phase: .closed, activity: .notice(LiveNotice(
+                key: "script.deploy", symbol: "checkmark.circle.fill", tint: .green, text: "Done",
+                detail: "deploy · 2m 14s", fromScript: true))),
+            Scene(name: "script-12-failed", phase: .closed, activity: .notice(LiveNotice(
+                key: "script.deploy", symbol: "xmark.octagon.fill", tint: .red, text: "Failed",
+                detail: "deploy · tests failed", fromScript: true))),
+            Scene(name: "script-13-quiet", phase: .closed, activity: .notice(LiveNotice(
+                key: "script.deploy", symbol: "questionmark.circle.fill", tint: .gray, text: "Went quiet",
+                detail: "deploy", fromScript: true))),
+        ]
+    }
+
     private static func widgetScenes() -> [Scene] {
         let stacks: [(name: String, first: HomeWidget, second: HomeWidget)] = [
             ("notes", .notes, .mirror), ("shortcuts", .shortcuts, .mirror),

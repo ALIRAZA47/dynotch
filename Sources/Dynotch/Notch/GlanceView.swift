@@ -8,6 +8,12 @@ enum GlanceContent: Equatable {
     case countdown(Countdown)
     case stopwatch
     case download
+    case script(ScriptActivity)
+    case ci(CIRun)
+    /// A tool call waiting for an answer.
+    case approval(AgentApproval)
+    /// How much of Claude's limits are used.
+    case usage
     case notice(LiveNotice)
     case event(CalendarService.Event)
     case today
@@ -36,6 +42,12 @@ enum GlanceContent: Equatable {
         case .download:
             self = .download
             return
+        case .script(let activity):
+            self = .script(activity)
+            return
+        case .ci(let run):
+            self = .ci(run)
+            return
         case .notice(let notice):
             // A volume or brightness meter is nothing to glance at.
             if case .info = notice.kind {
@@ -59,7 +71,8 @@ enum GlanceContent: Equatable {
     var extraHeight: CGFloat {
         switch self {
         case .music: 70
-        case .pomodoro, .countdown, .stopwatch, .event: 54
+        case .pomodoro, .countdown, .stopwatch, .event, .script, .ci, .usage: 54
+        case .approval(let approval): ApprovalGlance.extraHeight(for: approval)
         case .download, .notice: 50
         case .today: 52
         case .recent(let rows): CGFloat(rows) * Self.recentRowHeight + 10
@@ -93,6 +106,10 @@ struct GlanceView: View {
             case .countdown(let countdown): CountdownGlance(countdown: countdown, band: band)
             case .stopwatch: StopwatchGlance(band: band)
             case .download: DownloadGlance(band: band)
+            case .script(let activity): ScriptGlance(activity: activity, band: band)
+            case .ci(let run): CIGlance(run: run, band: band)
+            case .approval(let approval): ApprovalGlance(approval: approval, viewModel: viewModel, band: band)
+            case .usage: UsageGlance(band: band)
             case .notice(let notice): NoticeGlance(notice: notice, viewModel: viewModel, band: band)
             case .event(let event): EventGlance(event: event, band: band)
             case .today: TodayGlance(viewModel: viewModel, band: band)
@@ -120,12 +137,12 @@ private extension NotchTheme {
 // MARK: Layout
 
 /// The side of the picture at the glance's left: artwork, a ring, a date.
-private let glancePicture: CGFloat = 46
+let glancePicture: CGFloat = 46
 
 /// The glance's places around the camera, as on an iPhone's Dynamic Island: a picture on the left
 /// that reaches down from the top edge, controls in the right ear, two lines under the camera, and
 /// sometimes a row along the bottom.
-private struct GlanceLayout<Leading: View, Trailing: View, Center: View, Bottom: View>: View {
+struct GlanceLayout<Leading: View, Trailing: View, Center: View, Bottom: View>: View {
     let band: CGFloat
     let leading: Leading
     let trailing: Trailing
@@ -175,7 +192,7 @@ extension GlanceLayout where Bottom == EmptyView {
 }
 
 /// A round button in the glance's ear, a disc of glass with the tint's light in it: pause, play.
-private struct GlanceCircleButton: View {
+struct GlanceCircleButton: View {
     let symbol: String
     let tint: Color
     let help: String
@@ -201,7 +218,7 @@ private struct GlanceCircleButton: View {
 }
 
 /// The picture for a stopwatch or a notice: its symbol on a disc of glass holding the tint's light.
-private struct GlanceDisc: View {
+struct GlanceDisc: View {
     let symbol: String
     let tint: Color
 
@@ -215,7 +232,7 @@ private struct GlanceDisc: View {
 }
 
 /// The two lines under the camera: what it is, then a quieter line about it.
-private struct GlanceLines: View {
+struct GlanceLines: View {
     let title: String
     var subtitle: String?
     var truncation: Text.TruncationMode = .tail
@@ -239,7 +256,7 @@ private struct GlanceLines: View {
 }
 
 /// Two lines under the camera: a quiet one, then the main one, large.
-private struct GlanceFigure: View {
+struct GlanceFigure: View {
     let caption: String
     let figure: String
     let tint: Color
@@ -486,7 +503,7 @@ private struct NoticeGlance: View {
 }
 
 /// A button on a notice. The main one is the accent's jewel, in ink; another is glass.
-private struct NoticeButton: View {
+struct NoticeButton: View {
     let action: NoticeAction
     var isMain = true
     var height: CGFloat = 28
@@ -718,7 +735,7 @@ private struct TodayGlance: View {
 }
 
 /// A capsule of glass under the camera: what's coming, in its color, and a tap opens where it is.
-private struct GlanceChip: View {
+struct GlanceChip: View {
     let symbol: String
     let tint: Color
     let text: String

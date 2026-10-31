@@ -520,6 +520,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
     case music, trackPeek, timer, levels, charging, lowBattery, events, devices
     case micMuted, countdowns, downloads, focusMode
     case notifications, keepAwake
+    case scripts, agents, usage, ci
 
     var id: String { rawValue }
 
@@ -539,6 +540,10 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .focusMode: "Focus"
         case .notifications: "Notifications"
         case .keepAwake: "Keep Awake"
+        case .scripts: "Script progress"
+        case .agents: "Claude Code"
+        case .usage: "Claude usage"
+        case .ci: "CI runs"
         }
     }
 
@@ -558,6 +563,10 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .focusMode: "Your Focus's symbol while one is on, and a notice when it changes"
         case .notifications: "Messages, Mail, Slack and more as they arrive"
         case .keepAwake: "A cup while the Mac is being kept awake"
+        case .scripts: "A line under the notch while a script reports its progress"
+        case .agents: "Your sessions, and tool calls waiting for an answer"
+        case .usage: "A ring in the glance, and a heads-up at 80%"
+        case .ci: "GitHub Actions on your branch, through to pass or fail"
         }
     }
 
@@ -577,6 +586,10 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .focusMode: "moon.fill"
         case .notifications: "bell.badge.fill"
         case .keepAwake: "cup.and.saucer.fill"
+        case .scripts: "terminal.fill"
+        case .agents: "sparkles"
+        case .usage: "gauge.with.dots.needle.67percent"
+        case .ci: "checkmark.seal.fill"
         }
     }
 
@@ -596,6 +609,10 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .focusMode: .indigo
         case .notifications: .indigo
         case .keepAwake: .orange
+        case .scripts: .mint
+        case .agents: Palette.lavender
+        case .usage: Palette.lavender
+        case .ci: .green
         }
     }
 
@@ -616,6 +633,10 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .focusMode: \.liveFocus
         case .notifications: \.liveNotifications
         case .keepAwake: \.liveKeepAwake
+        case .scripts: \.liveScripts
+        case .agents: \.liveAgents
+        case .usage: \.liveUsage
+        case .ci: \.liveCI
         }
     }
 
@@ -639,13 +660,17 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .devices:
             .notice(LiveNotice(key: "device", symbol: "airpodspro", tint: .white, text: "80%", detail: "AirPods Pro connected"))
         case .notifications: .notice(NotificationPeek.sample())
-        case .micMuted, .keepAwake: .idle
+        case .micMuted, .keepAwake, .agents, .usage: .idle
         case .countdowns: .countdown(Self.sampleCountdown)
         case .downloads: .download
         case .focusMode: .idle
+        case .scripts: .script(ScriptActivity(key: "deploy", percent: 62))
+        case .ci: .ci(Self.sampleRun)
         }
     }
 
+    private static let sampleRun = CIRun(id: 1, repository: "acme/app", branch: "main", workflow: "Build",
+                                         url: URL(string: "https://github.com")!)
     private static let sampleCountdown = Countdown(id: UUID(), name: "Tea", duration: 240, pausedRemaining: 221)
 
     /// A glyph at the end of the right ear, for the activities that only ever show as one.
@@ -654,6 +679,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .micMuted: .micMuted
         case .focusMode: .focus(FocusMode(id: "sample", name: "Do Not Disturb", symbol: "moon.fill", tint: .indigo))
         case .keepAwake: .keepAwake
+        case .agents: .agentsWaiting(2)
         default: nil
         }
     }
