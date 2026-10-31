@@ -20,7 +20,7 @@ enum SetupItem: String, CaseIterable, Identifiable {
     var detail: String {
         switch self {
         case .command: "Use dynotch from any terminal"
-        case .longCommands: "A notice when a shell command that ran for a while finishes"
+        case .longCommands: "A notice when a long shell command ends, and CI followed after a git push"
         case .claudeHooks: "Sessions in the notch, and approvals you can answer from it"
         case .claudeStatusLine: "A status line that feeds the usage ring"
         }
