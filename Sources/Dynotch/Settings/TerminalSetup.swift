@@ -148,7 +148,7 @@ struct TerminalSetup {
             ? .installed : .blocked("You have a status line already, so it stays.")
     }
 
-    private static let unreadableSettings = State.blocked("~/.claude/settings.json isn't valid JSON, so it stays.")
+    private static let unreadableSettings = State.blocked("~/.claude/settings.json can't be read as JSON, so it stays.")
 
     /// Hooks run the link, so with something else at that path they'd run that. What's already
     /// installed can still come out.
@@ -180,13 +180,20 @@ struct TerminalSetup {
                 let waits = AgentHook.events.filter(\.waits).map(\.name).joined(separator: ", ")
                 let others = AgentHook.events.filter { !$0.waits }.map(\.name).joined(separator: ", ")
                 changes.append(Change(item: item, summary: "Add hooks to ~/.claude/settings.json, beside any you have",
-                                      text: "\(waits): \(hookCommand)\n\(others): \(hookCommand), in the background"))
+                                      text: "\(waits): \(hookCommand)\n\(others): \(hookCommand), in the background" + layoutNote))
             case .claudeStatusLine:
                 changes.append(Change(item: item, summary: "Set the status line in ~/.claude/settings.json",
-                                      text: statusLineCommand))
+                                      text: statusLineCommand + layoutNote))
             }
         }
         return changes
+    }
+
+    /// Said when a settings file laid out by hand won't come back the way it went in.
+    private var layoutNote: String {
+        guard let text = read(settingsURL), let document = try? settingsDocument(), !text.isEmpty,
+              document.printed() + "\n" != text else { return "" }
+        return "\nThe file's layout gets tidied too. What it says stays the same."
     }
 
     /// What undoing `items` would do.
@@ -359,10 +366,12 @@ struct TerminalSetup {
 
     // MARK: ~/.claude/settings.json
 
+    /// What's in `settings.json`. A file that's there and can't be read isn't an empty one: it can be
+    /// in some other encoding, or a link to something that's gone, and writing would lose it.
     private func settingsDocument() throws -> OrderedJSON {
-        guard let text = read(settingsURL), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return .object([])
-        }
+        guard exists(settingsURL) else { return .object([]) }
+        guard let text = read(settingsURL) else { throw OrderedJSON.Failure.malformed }
+        guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .object([]) }
         let document = try OrderedJSON(parsing: text)
         guard case .object = document else { throw OrderedJSON.Failure.malformed }
         return document
@@ -445,6 +454,9 @@ struct TerminalSetup {
     private func write(_ text: String, to url: URL, newFileMode: mode_t) throws {
         let target = url.resolvingSymlinksInPath()
         let name = Self.tilde(url.path, in: home)
+        var link = stat()
+        // A link to something that's gone resolves to itself, and writing would put a file in its place.
+        guard !exists(url) || stat(url.path, &link) == 0 else { throw Failure.blocked("\(name) is a link to something that's gone.") }
         do {
             try manager.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
             var mode = newFileMode

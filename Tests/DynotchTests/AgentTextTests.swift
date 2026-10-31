@@ -288,7 +288,37 @@ struct ApprovalGuardTests {
         guardrail.show(two, at: at(5))
         #expect(!guardrail.accepts(two, at: at(5.3)))
         #expect(!guardrail.accepts(one, at: at(5.3)))
-        #expect(guardrail.accepts(two, at: at(5.6)))
+        #expect(guardrail.accepts(two, at: at(5 + ApprovalGuard.nextDelay)))
+    }
+
+    /// A pointer resting on Allow, with the next one come up under it.
+    @Test func oneThatFollowsAnotherWaitsLonger() {
+        var guardrail = shown(one)
+        guardrail.show(two, at: at(5))
+        #expect(guardrail.wait == ApprovalGuard.nextDelay)
+        #expect(!guardrail.accepts(two, at: at(5 + ApprovalGuard.nextDelay - 0.01)))
+        #expect(guardrail.accepts(two, at: at(5 + ApprovalGuard.nextDelay)))
+    }
+
+    @Test func oneOnItsOwnDoesnt() {
+        var guardrail = shown(one)
+        guardrail.show(nil, at: at(5))
+        guardrail.show(two, at: at(6))
+        #expect(guardrail.wait == 0.6)
+    }
+
+    /// What counts is when the press began, however late it's let go.
+    @Test func aPressThatBeganTooSoonDoesntCount() {
+        let guardrail = shown(one)
+        #expect(!guardrail.accepts(one, at: at(0.1)))
+        #expect(guardrail.accepts(one, at: at(0.7)))
+    }
+
+    @Test func aPressThatBeganOnTheOneBeforeDoesntCount() {
+        var guardrail = shown(one)
+        let pressed = at(5)
+        guardrail.show(two, at: at(5.1))
+        #expect(!guardrail.accepts(two, at: pressed))
     }
 
     @Test func theSameApprovalAgainDoesntStartOver() {
@@ -309,5 +339,53 @@ struct ApprovalGuardTests {
         let guardrail = shown(one, delay: 1.5)
         #expect(!guardrail.accepts(one, at: at(1)))
         #expect(guardrail.accepts(one, at: at(1.5)))
+    }
+}
+
+struct HonestTextMarkTests {
+    private func shown(_ text: String) -> String { HonestText.runs(text).map(\.text).joined() }
+
+    /// Lines of stacked marks can paint over the lines around them, and over a `-` or a `~`.
+    @Test func marksStackedPastAnyWritingAreMarked() {
+        let stacked = "x" + String(repeating: "\u{0305}", count: 24)
+        #expect(shown(stacked).components(separatedBy: "<U+0305>").count == 23)
+        #expect(HonestText.runs(stacked).filter { $0.kind == .marker }.count == 22)
+    }
+
+    @Test(arguments: ["e\u{0301}", "o\u{0302}\u{0301}", "\u{0645}\u{0651}\u{064E}", "\u{0E2A}\u{0E31}\u{0E48}"])
+    func accentsAndVowelSignsStayAsTheyAre(text: String) {
+        #expect(shown(text) == text)
+    }
+
+    @Test func theCountStartsAgainOnTheNextLetter() {
+        let text = "e\u{0301}\u{0302}a\u{0301}\u{0302}"
+        #expect(shown(text) == text)
+    }
+
+    @Test func anEnclosingMarkIsMarked() {
+        #expect(shown("x\u{20DD}") == "x<U+20DD>")
+    }
+
+    @Test(arguments: [(Unicode.Scalar(0x2800)!, "<U+2800>"), (Unicode.Scalar(0xFFFC)!, "<U+FFFC>")])
+    func whatDrawsNothingIsMarked(scalar: Unicode.Scalar, marker: String) {
+        #expect(HonestText.marker(for: scalar) == marker)
+    }
+
+    @Test func rightToLeftWordsKeepTheirPlaces() {
+        let text = "mv \u{5D0}\u{5D0} \u{5D1}\u{5D1}"
+        #expect(HonestText.keepingOrder(text) == "mv \u{5D0}\u{5D0}\u{200E} \u{5D1}\u{5D1}\u{200E}")
+    }
+
+    @Test func aNumberAfterRightToLeftWordsKeepsItsPlace() {
+        #expect(HonestText.keepingOrder("\u{5D0} 12 \u{5D1}") == "\u{5D0}\u{200E} 12 \u{5D1}\u{200E}")
+    }
+
+    @Test func aMarkStaysWithItsLetter() {
+        #expect(HonestText.keepingOrder("\u{5D0}\u{05B7} x") == "\u{5D0}\u{05B7}\u{200E} x")
+    }
+
+    @Test func plainTextIsLeftAlone() {
+        #expect(HonestText.keepingOrder("rm -rf build") == "rm -rf build")
+        #expect(HonestText.keepingOrder("caf\u{E9} \u{65E5}\u{672C}") == "caf\u{E9} \u{65E5}\u{672C}")
     }
 }

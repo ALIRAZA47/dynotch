@@ -2,7 +2,8 @@ import Foundation
 
 /// Text from a session, made to say what it is. Control characters, terminal escapes, bidirectional
 /// overrides and characters that draw nothing come out as visible markers instead of doing what they
-/// do, so a command can't hide its tail or read backwards.
+/// do, so a command can't hide its tail or read backwards. So do marks stacked past what any writing
+/// needs, which can paint over the lines around them.
 enum HonestText {
     struct Run: Equatable {
         enum Kind: Equatable {
@@ -22,12 +23,17 @@ enum HonestText {
                                        "CR", "SO", "SI", "DLE", "DC1", "DC2", "DC3", "DC4", "NAK", "SYN", "ETB", "CAN", "EM",
                                        "SUB", "ESC", "FS", "GS", "RS", "US"]
 
+    /// How many marks can sit on one letter. Accents and vowel signs don't need more.
+    private static let mostMarks = 2
+
     /// `text` as it's shown. It's taken as one line: split it first to keep its line breaks.
     static func runs(_ text: String) -> [Run] {
         var runs: [Run] = []
         var plain = String.UnicodeScalarView()
+        var marks = 0
         for scalar in text.unicodeScalars {
-            if let marker = marker(for: scalar) {
+            marks = scalar.properties.generalCategory == .nonspacingMark ? marks + 1 : 0
+            if let marker = marker(for: scalar) ?? (marks > mostMarks ? numbered(scalar) : nil) {
                 if !plain.isEmpty { runs.append(Run(text: String(plain), kind: .text)) }
                 plain = String.UnicodeScalarView()
                 runs.append(Run(text: marker, kind: scalar == "\t" ? .tab : .marker))
@@ -51,6 +57,34 @@ enum HonestText {
         text.unicodeScalars.split(separator: "\n", omittingEmptySubsequences: false).map { String($0) }
     }
 
+    /// `text`, with a left-to-right mark after each run of right-to-left letters. Without one, two such
+    /// words and whatever's between them read as one run, so `mv אאא בבב` would show its arguments swapped.
+    static func keepingOrder(_ text: String) -> String {
+        guard !text.utf8.allSatisfy({ $0 < 0x80 }) else { return text }
+        var kept = String.UnicodeScalarView()
+        var isRightToLeft = false
+        for scalar in text.unicodeScalars {
+            let rightToLeft = isWrittenRightToLeft(scalar)
+            if isRightToLeft, !rightToLeft, scalar.properties.generalCategory != .nonspacingMark { kept.append("\u{200E}") }
+            kept.append(scalar)
+            isRightToLeft = rightToLeft || (isRightToLeft && scalar.properties.generalCategory == .nonspacingMark)
+        }
+        if isRightToLeft { kept.append("\u{200E}") }
+        return String(kept)
+    }
+
+    /// Hebrew, Arabic and the other right-to-left scripts, by their blocks in Unicode.
+    private static func isWrittenRightToLeft(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x0590...0x08FF, 0xFB1D...0xFDFF, 0xFE70...0xFEFF, 0x10800...0x10FFF, 0x1E800...0x1EFFF: true
+        default: false
+        }
+    }
+
+    private static func numbered(_ scalar: Unicode.Scalar) -> String {
+        "<U+\(String(format: "%04X", scalar.value))>"
+    }
+
     /// What shows in place of `scalar`, or nil if it can show as itself.
     static func marker(for scalar: Unicode.Scalar) -> String? {
         switch scalar.value {
@@ -58,18 +92,21 @@ enum HonestText {
         case 0x09: return "→   "
         case 0..<0x20: return "<\(controlNames[Int(scalar.value)])>"
         case 0x7F: return "<DEL>"
+        // A blank pattern of braille dots, and the stand-in for an object: both draw nothing.
+        case 0x2800, 0xFFFC: return numbered(scalar)
         default: break
         }
         let properties = scalar.properties
         switch properties.generalCategory {
-        case .control, .format, .surrogate, .privateUse, .unassigned, .lineSeparator, .paragraphSeparator, .spaceSeparator:
+        case .control, .format, .surrogate, .privateUse, .unassigned, .lineSeparator, .paragraphSeparator, .spaceSeparator,
+             .enclosingMark:
             break
         default:
             guard properties.isBidiControl || properties.isDefaultIgnorableCodePoint || properties.isNoncharacterCodePoint else {
                 return nil
             }
         }
-        return "<U+\(String(format: "%04X", scalar.value))>"
+        return numbered(scalar)
     }
 }
 

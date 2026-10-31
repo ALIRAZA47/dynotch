@@ -108,7 +108,7 @@ final class TerminalSetupModel: ObservableObject {
         do {
             if step == .reviewingUndo {
                 try setup.undo(selection, reviewed: reviewed)
-                say("Taken out. What was there before is as it was.")
+                say("Taken out. Everything else in those files stays as it was.")
             } else {
                 try setup.install(selection, reviewed: reviewed)
                 say("Set up. A new terminal window or Claude Code session picks it up.")

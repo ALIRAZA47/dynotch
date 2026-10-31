@@ -565,14 +565,16 @@ struct TerminalFocusTests {
 struct TerminalLinkTests {
     private let center = LiveActivityCenter.shared
 
+    /// Clears what other tests left, as the center is shared: a notice on show has others waiting behind it.
+    private func clearNotices() {
+        for _ in 0...NoticeQueue.mostWaiting { center.dismissNotice() }
+        center.loadSample(recents: [], unseen: 0)
+    }
+
     private func actions(_ query: String) throws -> [NoticeAction] {
         SnapshotRenderer.useScratchDefaults()
-        center.dismissNotice()
-        center.loadSample(recents: [], unseen: 0)
-        defer {
-            center.dismissNotice()
-            center.loadSample(recents: [], unseen: 0)
-        }
+        clearNotices()
+        defer { clearNotices() }
         URLCommands.handle(try #require(URL(string: "dynotch://notify?text=Failed&" + query)))
         let shown = center.content.activity
         guard case .notice(let notice) = shown else {
@@ -891,5 +893,19 @@ struct LongCommandHookTests {
         #expect(text.contains("[--terminal NAME] [--session ID] [--tty PATH] [--folder PATH] [--bundle ID]"))
         #expect(text.contains("gets no button"))
         #expect(!text.contains("set -euo"))
+    }
+}
+
+@MainActor
+@Suite(.serialized)
+struct LinkNumberTests {
+    /// `.seconds(NaN)` traps, and any page can open a link.
+    @Test(arguments: ["nan", "inf", "-inf", "1e999"])
+    func aNoticeForATimeThatIsntOneStillShows(seconds: String) async throws {
+        SnapshotRenderer.useScratchDefaults()
+        URLCommands.handle(try #require(URL(string: "dynotch://notify?text=x&seconds=\(seconds)")))
+        // The notice's clock has to have started for this to fail.
+        try await Task.sleep(for: .milliseconds(50))
+        LiveActivityCenter.shared.dismissNotice()
     }
 }

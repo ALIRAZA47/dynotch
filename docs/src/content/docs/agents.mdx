@@ -21,6 +21,7 @@ To do it by hand, add this to `~/.claude/settings.json`:
     "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "dynotch hook", "async": true }] }],
     "PreToolUse": [{ "hooks": [{ "type": "command", "command": "dynotch hook", "async": true }] }],
     "PostToolUse": [{ "hooks": [{ "type": "command", "command": "dynotch hook", "async": true }] }],
+    "PostToolUseFailure": [{ "hooks": [{ "type": "command", "command": "dynotch hook", "async": true }] }],
     "Notification": [{ "hooks": [{ "type": "command", "command": "dynotch hook", "async": true }] }],
     "Stop": [{ "hooks": [{ "type": "command", "command": "dynotch hook", "async": true }] }],
     "PermissionRequest": [{ "hooks": [{ "type": "command", "command": "dynotch hook" }] }]
@@ -45,7 +46,7 @@ The Agents tab is there while there are sessions, with those waiting for you fir
 | Green | `Done 2 min ago` |
 | Gray | `Ready`, for one that hasn't been asked anything yet |
 
-**Back** goes to the session, on the [right tab](/terminal/) where the terminal allows that. For a session in the desktop app it brings Claude forward, and can't pick out the session. A terminal Dynotch doesn't know gets no button. **Review** turns the notch to the tool call in the [glance](/glance/). The project is the name of the folder the session started in.
+**Back** goes to the session, on the [right tab](/terminal/) where the terminal allows that. For a session in the desktop app it brings Claude forward, and can't pick out the session. A terminal Dynotch doesn't know gets no button. **Review** turns the notch to that session's tool call in the [glance](/glance/). The project is the name of the folder the session started in.
 
 ## Answering a tool call
 
@@ -53,7 +54,7 @@ While a tool call is waiting, the notch goes to the glance rather than opening, 
 
 | Tool | What it shows |
 |---|---|
-| Bash | The whole command |
+| Bash | The folder it runs in, then the whole command |
 | Write | The file's path and what it would write |
 | Edit | The file's path, then what would go and what would come |
 | Anything else | The tool's full name and its whole input |
@@ -68,13 +69,16 @@ The hook runs alongside Claude Code's own prompt, so you can answer in either pl
 
 A question nobody answers goes from the notch after a little over ten minutes. Claude Code's prompt is still there, and the session shows as waiting until it moves on.
 
+`AskUserQuestion` and the plan approval want more than a yes, so they stay in Claude Code's window. The session shows as waiting, with **Back**.
+
 ### Why Allow is hard to press by accident
 
 Allow approves something real, so:
 
-- Allow and Deny are dim and do nothing for 0.6 seconds after a tool call reaches the front, or as long as your double-click speed if that's slower. That starts again for each new one, so a double click on Allow can't approve the one behind it.
+- Allow and Deny are dim and do nothing for 0.6 seconds after a tool call reaches the front, or as long as your double-click speed if that's slower. One that takes another's place waits 1.2 seconds, so a double click on Allow can't approve the one behind it, and neither can a pointer that's still resting there.
+- What counts is when your press began. One that began while the buttons were dim, or on the tool call before this one, does nothing, however late you let go.
 - Nothing allows by itself. There's no key for it, no timeout that allows, and no script, `dynotch://` link or notice button can answer. When in doubt Dynotch says nothing, and Claude Code asks for itself.
-- What's shown can't hide. Control characters, terminal escapes, text-direction overrides and characters that draw nothing show as orange markers, like `<ESC>` or `<U+202E>`, instead of doing what they do. Tabs show as a faint arrow. Nothing is cut short.
+- What's shown can't hide. Control characters, terminal escapes, text-direction overrides, characters that draw nothing and marks stacked on one letter show as orange markers, like `<ESC>` or `<U+202E>`, instead of doing what they do. Right-to-left words keep their places in a line. Tabs show as a faint arrow. Nothing is cut short.
 
 ## When it tells you
 
@@ -92,8 +96,8 @@ A session goes when it ends. Dynotch can miss that, and the desktop app keeps id
 
 | A session that's | Leaves the list |
 |---|---|
-| Done, or hasn't started anything | An hour after it was last heard from |
-| Working or waiting | After six hours of silence |
+| Done, hasn't started anything, or waiting with nothing to answer here | An hour after it was last heard from |
+| Working | After six hours of silence |
 
 Either comes back with the next thing it does.
 

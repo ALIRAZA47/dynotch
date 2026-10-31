@@ -50,6 +50,8 @@ struct ApprovalLine: Equatable {
         case plain, path, removed, added
         /// The rest of a tool's input, under what matters.
         case quiet
+        /// Where a command would run, which a command like `rm -rf *` depends on.
+        case folder
     }
 
     var text: String
@@ -144,7 +146,7 @@ struct AgentApproval: Identifiable, Equatable {
     /// For the same row once it's allowed.
     var doing: String
 
-    init(id: UUID = UUID(), sessionID: String, project: String, tool: String, input: [String: Any],
+    init(id: UUID = UUID(), sessionID: String, project: String, tool: String, input: [String: Any], folder: String? = nil,
          isFromSubagent: Bool = false, origin: TerminalOrigin = TerminalOrigin()) {
         self.id = id
         self.sessionID = sessionID
@@ -156,18 +158,26 @@ struct AgentApproval: Identifiable, Equatable {
         asking = AgentWords.wants(tool: tool, target: target)
         doing = AgentWords.doing(tool: tool, target: target)
         lines = ApprovalLine.lines(tool: tool, input: input)
+        if tool == "Bash", let folder, !folder.isEmpty {
+            lines.insert(ApprovalLine(text: (folder as NSString).abbreviatingWithTildeInPath, tone: .folder), at: 0)
+        }
         wrappedLines = ApprovalLine.wrappedCount(of: lines)
     }
 
     /// Everything it would do, as plain text.
-    var command: String { lines.map(\.text).joined(separator: "\n") }
+    var command: String { lines.filter { $0.tone != .folder }.map(\.text).joined(separator: "\n") }
 }
 
 /// Keeps Allow and Deny inert for a moment after an approval reaches the front, so a double click
 /// meant for something else can't land on them: the click that brought the glance up, or the second
-/// click on Allow for the approval before this one. It's told the time, so it can be tested.
+/// click on Allow for the approval before this one. One that takes another's place under the pointer
+/// gets longer, to be seen as a different one. It's told the time, so it can be tested, and it's asked
+/// about when a press began: one that began too soon, or on the approval before this one, doesn't
+/// count, however late it's let go.
 struct ApprovalGuard: Equatable {
     static let shortestDelay: TimeInterval = 0.6
+    /// For one that follows another.
+    static let nextDelay: TimeInterval = 1.2
 
     /// However long the user has set a double click to take, and never less than `shortestDelay`.
     static func delay(doubleClick: TimeInterval = NSEvent.doubleClickInterval) -> TimeInterval {
@@ -177,18 +187,23 @@ struct ApprovalGuard: Equatable {
     /// The approval at the front when it was last told.
     private(set) var front: UUID?
     private var since = Date.distantFuture
+    private var followsAnother = false
     var delay: TimeInterval = ApprovalGuard.delay()
+
+    /// How long it's inert for the one at the front.
+    var wait: TimeInterval { followsAnother ? max(delay, Self.nextDelay) : delay }
 
     /// `approval` is at the front now. The clock starts over for a different one, and only then.
     mutating func show(_ approval: UUID?, at now: Date) {
         guard approval != front else { return }
+        followsAnother = front != nil && approval != nil
         front = approval
         since = now
     }
 
-    /// Whether Allow and Deny work for `approval` at `now`. Never for one that isn't at the front.
-    func accepts(_ approval: UUID, at now: Date) -> Bool {
-        approval == front && now.timeIntervalSince(since) >= delay
+    /// Whether a press that began at `pressedAt` counts for `approval`. Never for one that isn't at the front.
+    func accepts(_ approval: UUID, at pressedAt: Date) -> Bool {
+        approval == front && pressedAt.timeIntervalSince(since) >= wait
     }
 }
 
@@ -215,7 +230,7 @@ final class AgentDeck: ObservableObject {
     static let approvalBackstop: TimeInterval = 610
     /// A finished session leaves the list after an hour. The desktop keeps idle sessions alive for days.
     static let doneHiddenAfter: TimeInterval = 3600
-    /// One that's said nothing for six hours has gone without a SessionEnd, or can come back with its next event.
+    /// One still working that's said nothing for six hours has gone without a SessionEnd, or can come back with its next event.
     static let silentDroppedAfter: TimeInterval = 6 * 3600
     /// A turn this long gets a notice when it stops. A shorter one you're probably still watching.
     static let noticeWorthyTurn: TimeInterval = 120
@@ -225,6 +240,10 @@ final class AgentDeck: ObservableObject {
     private static let endEcho: TimeInterval = 60
     /// Finished calls to remember, as a PreToolUse can arrive after its PostToolUse.
     private static let mostFinished = 8
+
+    /// Tools that put something to you and want more than a yes. An allow with nothing else in it does
+    /// nothing for these, so the question stays in Claude Code's own window.
+    private static let askingTools: Set = ["AskUserQuestion", "ExitPlanMode"]
 
     /// The color that says it needs you.
     static let tint = Color.orange
@@ -349,7 +368,7 @@ final class AgentDeck: ObservableObject {
         case "PreToolUse":
             track(id, request, now: now)
             callStarted(in: id, request, now: now)
-        case "PostToolUse":
+        case "PostToolUse", "PostToolUseFailure":
             track(id, request, now: now)
             callFinished(in: id, request, now: now)
         case "PermissionRequest":
@@ -426,8 +445,15 @@ final class AgentDeck: ObservableObject {
         guard approvals.count < Self.mostApprovals, let session = sessions.first(where: { $0.id == id }) else { return nil }
         let input = request.fields["tool_input"] as? [String: Any] ?? [:]
         let tool = request.string("tool_name") ?? ""
-        let approval = AgentApproval(sessionID: id, project: session.project, tool: tool, input: input,
-                                     isFromSubagent: request.string("agent_id") != nil, origin: session.origin)
+        if Self.askingTools.contains(tool) {
+            memories[id]?.asking = "Has a question for you"
+            announceAsking(session, tool: nil, actions: session.origin.action.map { [$0] } ?? [])
+            return nil
+        }
+        // Where it runs now, which a `cd` may have moved on from where the session started.
+        let folder = request.string("cwd")
+        let approval = AgentApproval(sessionID: id, project: folder.map(Self.project(of:)) ?? session.project, tool: tool, input: input,
+                                     folder: folder, isFromSubagent: request.string("agent_id") != nil, origin: session.origin)
         approvals.append(approval)
         waiters[approval.id] = Waiter(reply: reply, tool: tool, target: AgentHook.target(of: input),
                                       deadline: now.addingTimeInterval(Self.approvalBackstop))
@@ -446,11 +472,15 @@ final class AgentDeck: ObservableObject {
             memory.asking = type == "permission_prompt" ? "Needs your permission" : "Has a question for you"
             announceAsking(session, tool: nil, actions: session.origin.action.map { [$0] } ?? [])
         case "idle_prompt":
-            // Its turn is over, if its Stop never came.
-            guard !hasApproval, memory.asking == nil, memory.phase == .working else { return }
-            memory.phase = .done(now)
-            memory.call = nil
-            memory.turnStartedAt = nil
+            // It's waiting for a new prompt, so what it asked has been answered, and if its Stop never
+            // came, as after a No at the keyboard, its turn is over.
+            retireApprovals(ofSession: id)
+            memory.asking = nil
+            if memory.phase == .working {
+                memory.phase = .done(now)
+                memory.call = nil
+                memory.turnStartedAt = nil
+            }
         default:
             return
         }
@@ -491,23 +521,29 @@ final class AgentDeck: ObservableObject {
     // MARK: Answers
 
     /// Allows a tool call. This is the only place an allow leaves the app from, and only the button in
-    /// the glance calls it, with the guard for what's on screen.
-    func allow(_ approval: AgentApproval, shown: ApprovalGuard, at now: Date = .now) {
-        guard canAnswer(approval, shown: shown, at: now), let waiter = waiters[approval.id] else { return }
+    /// the glance calls it, with the guard for what's on screen and when the press on it began.
+    func allow(_ approval: AgentApproval, shown: ApprovalGuard, pressedAt: Date) {
+        guard canAnswer(approval, shown: shown, pressedAt: pressedAt), let waiter = waiters[approval.id] else { return }
         waiter.reply(["ok": true, "decision": "allow"])
-        answered(approval, doing: approval.doing, at: now)
+        answered(approval, doing: approval.doing, at: pressedAt)
     }
 
     /// Denies a tool call.
-    func deny(_ approval: AgentApproval, shown: ApprovalGuard, at now: Date = .now) {
-        guard canAnswer(approval, shown: shown, at: now), let waiter = waiters[approval.id] else { return }
+    func deny(_ approval: AgentApproval, shown: ApprovalGuard, pressedAt: Date) {
+        guard canAnswer(approval, shown: shown, pressedAt: pressedAt), let waiter = waiters[approval.id] else { return }
         waiter.reply(["ok": true, "decision": "deny"])
-        answered(approval, doing: nil, at: now)
+        answered(approval, doing: nil, at: pressedAt)
     }
 
     /// Only for the one at the front, once the guard says so.
-    private func canAnswer(_ approval: AgentApproval, shown: ApprovalGuard, at now: Date) -> Bool {
-        approvals.first?.id == approval.id && shown.accepts(approval.id, at: now)
+    private func canAnswer(_ approval: AgentApproval, shown: ApprovalGuard, pressedAt: Date) -> Bool {
+        approvals.first?.id == approval.id && shown.accepts(approval.id, at: pressedAt)
+    }
+
+    /// Puts a session's oldest tool call at the front, for Review on its row.
+    func bringForward(session id: String) {
+        guard let index = approvals.firstIndex(where: { $0.sessionID == id }), index > 0 else { return }
+        approvals.insert(approvals.remove(at: index), at: 0)
     }
 
     private func answered(_ approval: AgentApproval, doing: String?, at now: Date) {
@@ -566,8 +602,9 @@ final class AgentDeck: ObservableObject {
     private func expiry(of session: AgentSession) -> Date? {
         guard !approvals.contains(where: { $0.sessionID == session.id }), let memory = memories[session.id] else { return nil }
         switch session.state {
-        case .ready, .done: return memory.lastHeard.addingTimeInterval(Self.doneHiddenAfter)
-        case .working, .waiting: return memory.lastHeard.addingTimeInterval(Self.silentDroppedAfter)
+        // Waiting with no approval here: nothing says when that's over, so it can't stay for long.
+        case .ready, .done, .waiting: return memory.lastHeard.addingTimeInterval(Self.doneHiddenAfter)
+        case .working: return memory.lastHeard.addingTimeInterval(Self.silentDroppedAfter)
         }
     }
 

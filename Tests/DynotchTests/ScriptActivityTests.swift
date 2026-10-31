@@ -184,6 +184,17 @@ struct ScriptActivityStoreTests {
         #expect(store.activities.isEmpty)
     }
 
+    /// `Task.sleep` traps on a time that isn't a number.
+    @Test(arguments: [Double.nan, .infinity, -.infinity])
+    func patienceThatIsntANumberIsIgnored(asked: Double) {
+        let (store, _) = store()
+        store.update("deploy", percent: 40, quietAfter: asked, now: at(0))
+        store.expire(now: at(ScriptActivityStore.quietAfter - 1))
+        #expect(store.activities.count == 1)
+        store.expire(now: at(ScriptActivityStore.quietAfter))
+        #expect(store.activities.isEmpty)
+    }
+
     @Test func aQuietScriptCanComeBack() {
         let (store, _) = store()
         store.update("deploy", percent: 40, quietAfter: 10, now: at(0))
@@ -310,8 +321,8 @@ struct ScriptPriorityTests {
     private func content(with activities: [ScriptActivity]) -> ClosedContent {
         SnapshotRenderer.useScratchDefaults()
         ScriptActivityStore.shared.loadSample(activities)
-        // Works out what the closed notch shows, with nothing to dismiss.
-        LiveActivityCenter.shared.dismissNotice()
+        // Works out what the closed notch shows, past anything other tests left waiting.
+        for _ in 0...NoticeQueue.mostWaiting { LiveActivityCenter.shared.dismissNotice() }
         return LiveActivityCenter.shared.content
     }
 

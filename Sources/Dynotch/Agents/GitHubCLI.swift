@@ -155,30 +155,67 @@ enum GitHubCLI {
     }
 
     private static func runNow(_ executable: String, _ arguments: [String], timeout: TimeInterval) -> GitHubAnswer {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = arguments
-        process.environment = environment
-        process.standardInput = FileHandle.nullDevice
         let output = Pipe(), error = Pipe()
-        process.standardOutput = output
-        process.standardError = error
-        let exited = DispatchSemaphore(value: 0)
-        process.terminationHandler = { _ in exited.signal() }
-        do {
-            try process.run()
-        } catch {
+        guard let process = spawn(executable, arguments, output: output, error: error) else {
             // `find` has just seen it there, so this is worth another try.
-            return .finished(status: -1, output: Data(), error: error.localizedDescription)
+            return .finished(status: -1, output: Data(), error: "\(executable) didn't start")
         }
+        try? output.fileHandleForWriting.close()
+        try? error.fileHandleForWriting.close()
         let printed = PipeReader(output), complained = PipeReader(error)
+        let exited = DispatchSemaphore(value: 0)
+        let watcher = DispatchSource.makeProcessSource(identifier: process, eventMask: .exit, queue: .global(qos: .utility))
+        watcher.setEventHandler { exited.signal() }
+        watcher.resume()
+        defer { watcher.cancel() }
         guard exited.wait(timeout: .now() + timeout) == .success else {
-            process.terminate()
-            if exited.wait(timeout: .now() + patience) == .timedOut { kill(process.processIdentifier, SIGKILL) }
+            kill(process, SIGTERM)
+            if exited.wait(timeout: .now() + patience) == .timedOut { kill(process, SIGKILL) }
+            _ = reap(process)
             return .timedOut
         }
-        return .finished(status: process.terminationStatus, output: printed.collected(),
+        return .finished(status: reap(process), output: printed.collected(),
                          error: String(decoding: complained.collected(), as: UTF8.self))
+    }
+
+    /// Starts `executable` with nothing of this process but the two pipes, and with macOS counting it
+    /// as responsible for itself. A child otherwise uses the permissions of the app that started it,
+    /// and `gh` usually sits in a folder this user can write to, so anything else running as them
+    /// could swap it for something that reads what Dynotch has been allowed to, and have it run.
+    static func spawn(_ executable: String, _ arguments: [String], output: Pipe, error: Pipe) -> pid_t? {
+        var attributes: posix_spawnattr_t?
+        var actions: posix_spawn_file_actions_t?
+        guard posix_spawnattr_init(&attributes) == 0 else { return nil }
+        defer { posix_spawnattr_destroy(&attributes) }
+        guard posix_spawn_file_actions_init(&actions) == 0 else { return nil }
+        defer { posix_spawn_file_actions_destroy(&actions) }
+        guard posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_CLOEXEC_DEFAULT)) == 0,
+              // From the root, as it has no claim on whatever folder this process started in.
+              posix_spawn_file_actions_addchdir_np(&actions, "/") == 0,
+              posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0) == 0,
+              posix_spawn_file_actions_adddup2(&actions, output.fileHandleForWriting.fileDescriptor, 1) == 0,
+              posix_spawn_file_actions_adddup2(&actions, error.fileHandleForWriting.fileDescriptor, 2) == 0 else { return nil }
+        // Not in any header, though browsers and debuggers rely on it. Without it, `gh` would run as any child does.
+        if let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_spawnattrs_setdisclaim") {
+            typealias Disclaim = @convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32
+            _ = unsafeBitCast(symbol, to: Disclaim.self)(&attributes, 1)
+        }
+        let argv = ([executable] + arguments).map { strdup($0) } + [nil]
+        let envp = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
+        defer {
+            argv.forEach { free($0) }
+            envp.forEach { free($0) }
+        }
+        var process = pid_t()
+        guard posix_spawn(&process, executable, &actions, &attributes, argv, envp) == 0 else { return nil }
+        return process
+    }
+
+    /// Collects what's left of a process that has ended, and how it ended.
+    private static func reap(_ process: pid_t) -> Int32 {
+        var status: Int32 = 0
+        while waitpid(process, &status, 0) == -1, errno == EINTR {}
+        return status & 0x7F == 0 ? (status >> 8) & 0xFF : 128 + (status & 0x7F)
     }
 }
 

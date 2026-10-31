@@ -1002,6 +1002,36 @@ struct GitHubRunParsingTests {
 
 /// The real way of running a program, on harmless programs. Never `gh`.
 struct GitHubCLITests {
+    /// `gh` usually sits where this user can write, so it mustn't run with what Dynotch has been allowed.
+    @Test func gitHubsCommandAnswersForItself() throws {
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_get_pid_responsible_for_pid") else { return }
+        typealias Responsible = @convention(c) (pid_t) -> pid_t
+        let output = Pipe(), error = Pipe()
+        let process = try #require(GitHubCLI.spawn("/bin/sleep", ["5"], output: output, error: error))
+        defer {
+            kill(process, SIGKILL)
+            var status: Int32 = 0
+            waitpid(process, &status, 0)
+        }
+        #expect(unsafeBitCast(symbol, to: Responsible.self)(process) == process)
+    }
+
+    @Test func nothingElseOfThisProcessGoesAlong() throws {
+        // A descriptor open here, without close-on-exec, that the child must not get.
+        let file = open("/dev/null", O_RDONLY)
+        defer { close(file) }
+        #expect(fcntl(file, F_GETFD) & FD_CLOEXEC == 0)
+        let output = Pipe(), error = Pipe()
+        let process = try #require(GitHubCLI.spawn("/bin/sh", ["-c", "if : <&\(file); then echo open; else echo closed; fi"],
+                                                   output: output, error: error))
+        try? output.fileHandleForWriting.close()
+        try? error.fileHandleForWriting.close()
+        let printed = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+        var status: Int32 = 0
+        waitpid(process, &status, 0)
+        #expect(printed == "closed\n")
+    }
+
     private final class Scratch {
         let folder = NSTemporaryDirectory() + "dyn-gh-" + UUID().uuidString.prefix(8)
         init() { try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true) }

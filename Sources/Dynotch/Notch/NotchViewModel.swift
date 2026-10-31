@@ -146,6 +146,8 @@ final class NotchViewModel: ObservableObject {
     @Published private(set) var isShowingRecent = false
     /// The glance has turned to Claude's usage.
     @Published private(set) var isShowingUsage = false
+    /// When the latest press on the notch began. Allow goes by this rather than by when it's let go.
+    var lastPress = Date.distantPast
     private var clickedForGlance = Date.distantPast
 
     /// Something was dragged out of the tray and the drag hasn't ended yet.
@@ -309,6 +311,11 @@ final class NotchViewModel: ObservableObject {
             isShowingRecent = false
             isShowingUsage = true
         }
+    }
+
+    /// Notes when a press began, by the event's own time, in case it waited its turn on a busy main thread.
+    func notePress(_ event: NSEvent) {
+        lastPress = Date.now.addingTimeInterval(event.timestamp - ProcessInfo.processInfo.systemUptime)
     }
 
     /// Turns to the tool call waiting for an answer, which is only ever answered in the glance.

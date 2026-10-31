@@ -464,7 +464,7 @@ struct TerminalSetupTests {
         let scratch = ScratchHome()
         let broken = "{ \"model\": oops\n"
         try scratch.write(broken, to: ".claude/settings.json")
-        #expect(scratch.setup.state(of: .claudeHooks) == .blocked("~/.claude/settings.json isn't valid JSON, so it stays."))
+        #expect(scratch.setup.state(of: .claudeHooks) == .blocked("~/.claude/settings.json can't be read as JSON, so it stays."))
         try scratch.install([.claudeHooks, .claudeStatusLine])
         #expect(scratch.read(".claude/settings.json") == broken)
     }
@@ -473,6 +473,50 @@ struct TerminalSetupTests {
         let scratch = ScratchHome()
         try scratch.write("[1, 2]\n", to: ".claude/settings.json")
         guard case .blocked = scratch.setup.state(of: .claudeHooks) else { Issue.record("Not blocked"); return }
+    }
+
+    /// One byte that isn't UTF-8 must not read as an empty file, or installing would replace all of it.
+    @Test func settingsInAnotherEncodingAreLeftAlone() throws {
+        let scratch = ScratchHome()
+        let url = scratch.setup.settingsURL
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        var bytes = Data(#"{"model":"opus","note":"caf"#.utf8)
+        bytes.append(0xE9)
+        bytes.append(contentsOf: Data(#"","permissions":{"allow":["Read"]}}"#.utf8))
+        try bytes.write(to: url)
+        guard case .blocked = scratch.setup.state(of: .claudeHooks) else { Issue.record("Not blocked"); return }
+        guard case .blocked = scratch.setup.state(of: .claudeStatusLine) else { Issue.record("Not blocked"); return }
+        #expect(scratch.setup.installChanges(for: [.claudeHooks, .claudeStatusLine]).filter { $0.item != .command }.isEmpty)
+        try scratch.install()
+        #expect(try Data(contentsOf: url) == bytes)
+    }
+
+    @Test func aLinkToSomethingGoneStaysALink() throws {
+        let scratch = ScratchHome()
+        let url = scratch.setup.settingsURL
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let gone = scratch.home.appendingPathComponent("dotfiles/settings.json").path
+        try FileManager.default.createSymbolicLink(atPath: url.path, withDestinationPath: gone)
+        guard case .blocked = scratch.setup.state(of: .claudeHooks) else { Issue.record("Not blocked"); return }
+        try scratch.install()
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: url.path) == gone)
+    }
+
+    @Test func aDanglingZshrcLinkStaysALink() throws {
+        let scratch = ScratchHome()
+        let gone = scratch.home.appendingPathComponent("dotfiles/zshrc").path
+        try FileManager.default.createSymbolicLink(atPath: scratch.setup.zshrcURL.path, withDestinationPath: gone)
+        guard case .blocked = scratch.setup.state(of: .longCommands) else { Issue.record("Not blocked"); return }
+        try scratch.install([.longCommands])
+        #expect(try FileManager.default.destinationOfSymbolicLink(atPath: scratch.setup.zshrcURL.path) == gone)
+    }
+
+    @Test func theReviewSaysWhenALayoutWillBeTidied() throws {
+        let scratch = ScratchHome()
+        try scratch.write("{ \"model\": \"opus\" }\n", to: ".claude/settings.json")
+        #expect(scratch.setup.installChanges(for: [.claudeHooks]).last?.text.contains("layout") == true)
+        try scratch.write("{\n  \"model\": \"opus\"\n}\n", to: ".claude/settings.json")
+        #expect(scratch.setup.installChanges(for: [.claudeHooks]).last?.text.contains("layout") == false)
     }
 
     @Test func oddHooksAreToldApart() throws {
@@ -810,7 +854,7 @@ struct TerminalSetupInstalledTests {
             let start = Date(timeIntervalSinceReferenceDate: 0)
             var shown = ApprovalGuard()
             shown.show(approval.id, at: start)
-            deck.allow(approval, shown: shown, at: start.addingTimeInterval(ApprovalGuard.delay()))
+            deck.allow(approval, shown: shown, pressedAt: start.addingTimeInterval(ApprovalGuard.delay()))
             let result = try await answer.value
             #expect(result.code == 0)
             let printed = try JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: [String: Any]]

@@ -49,6 +49,7 @@ final class NotchWindowController {
         panel.contentView = host
         layout()
         panel.orderFrontRegardless()
+        panel.onPress = { [weak self] event in self?.viewModel.notePress(event) }
         viewModel.onTurnToGlance = { [weak self] in
             self?.cancelClose()
             self?.awaitingPointer = true

@@ -36,6 +36,11 @@ enum HookPayloads {
           "tool_response": { "stdout": "SECRET-OUTPUT", "stderr": "", "interrupted": false },
           "tool_use_id": "toolu_01Sample", "duration_ms": 934 }
         """,
+        "PostToolUseFailure": """
+        { \(common("PostToolUseFailure")), "tool_name": "Bash",
+          "tool_input": { "command": "swift build --product Lantern", "description": "SECRET-DESCRIPTION Build it" },
+          "tool_use_id": "toolu_01Sample", "error": "SECRET-OUTPUT Exit code 1" }
+        """,
         "PermissionRequest": """
         { \(common("PermissionRequest")), "tool_name": "Bash",
           "tool_input": { "command": "swift build --product Lantern", "description": "SECRET-DESCRIPTION Build it" },

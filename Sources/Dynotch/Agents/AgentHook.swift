@@ -9,7 +9,8 @@ enum AgentHook {
     /// merges them beside whatever is there. Only a permission request waits for an answer.
     static let events: [(name: String, waits: Bool)] = [
         ("SessionStart", false), ("SessionEnd", false), ("UserPromptSubmit", false), ("PreToolUse", false),
-        ("PostToolUse", false), ("Notification", false), ("Stop", false), ("PermissionRequest", true),
+        ("PostToolUse", false), ("PostToolUseFailure", false), ("Notification", false), ("Stop", false),
+        ("PermissionRequest", true),
     ]
 
     /// All that goes to the notch beside the tool's input. Anything else in a hook's JSON stays here:

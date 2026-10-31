@@ -99,7 +99,8 @@ final class ScriptActivityStore: ObservableObject {
             activities.append(activity)
             startedAt[key] = now
         }
-        let patience = min(max(quietAfter ?? Self.quietAfter, Self.shortestQuiet), Self.longestQuiet)
+        let asked = quietAfter.flatMap { $0.isFinite ? $0 : nil }
+        let patience = min(max(asked ?? Self.quietAfter, Self.shortestQuiet), Self.longestQuiet)
         expiresAt[key] = now.addingTimeInterval(patience)
         wakeForNext()
         return true

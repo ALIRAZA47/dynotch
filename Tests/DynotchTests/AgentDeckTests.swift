@@ -342,7 +342,7 @@ struct AgentDeckTests {
         try send(deck, "UserPromptSubmit")
         try send(deck, "PermissionRequest", bash("swift build"))
         let approval = try #require(deck.approvals.first)
-        deck.allow(approval, shown: armed(for: approval), at: at(5.9))
+        deck.allow(approval, shown: armed(for: approval), pressedAt: at(5.9))
         try send(deck, "Notification", after: 6)
         #expect(state(deck) == .working("Running swift build"))
     }
@@ -370,12 +370,91 @@ struct AgentDeckTests {
         #expect(state(deck) == .done(at(60)))
     }
 
-    @Test func goingIdleDoesntEndAWait() throws {
+    @Test func goingIdleEndsAWait() throws {
         let (deck, _) = deck()
         try send(deck, "UserPromptSubmit")
         try send(deck, "Notification")
         try send(deck, "Notification", ["notification_type": "idle_prompt"], after: 60)
-        #expect(state(deck) == .waiting("Needs your permission"))
+        #expect(state(deck) == .done(at(60)))
+        #expect(deck.waitingCount == 0)
+    }
+
+    /// A No at the keyboard ends the turn with no Stop, so going idle is all that says so.
+    @Test func goingIdleRetiresWhatWasAnsweredAtTheKeyboard() throws {
+        let (deck, _) = deck()
+        try send(deck, "UserPromptSubmit")
+        try send(deck, "PermissionRequest", bash("rm x"))
+        try send(deck, "Notification", ["notification_type": "idle_prompt"], after: 60)
+        #expect(deck.approvals.isEmpty)
+        #expect(answers.decisions.isEmpty)
+        #expect(deck.waitingCount == 0)
+        #expect(state(deck) == .done(at(60)))
+    }
+
+    @Test func aToolThatFailedRetiresItsApproval() throws {
+        let (deck, _) = deck()
+        try send(deck, "UserPromptSubmit")
+        try send(deck, "PermissionRequest", bash("swift build"))
+        try send(deck, "PostToolUseFailure", bash("swift build"))
+        #expect(deck.approvals.isEmpty)
+        #expect(answers.decisions.isEmpty)
+    }
+
+    @Test func waitingWithNoApprovalDoesntLastForHours() throws {
+        let (deck, _) = deck()
+        try send(deck, "PermissionRequest", bash("rm x"))
+        deck.expire(now: at(AgentDeck.approvalBackstop))
+        #expect(deck.waitingCount == 1)
+        deck.expire(now: at(AgentDeck.doneHiddenAfter))
+        #expect(deck.sessions.isEmpty)
+        #expect(deck.waitingCount == 0)
+    }
+
+    // MARK: Where it runs
+
+    @Test func anApprovalNamesWhereItRunsNotWhereTheSessionStarted() throws {
+        let (deck, _) = deck()
+        try send(deck, "SessionStart", ["cwd": "/Users/sample/lantern"])
+        try send(deck, "PermissionRequest", bash("rm -rf *").merging(["cwd": "/Users/sample"]) { $1 })
+        let approval = try #require(deck.approvals.first)
+        #expect(approval.project == "sample")
+        #expect(approval.lines.first == ApprovalLine(text: "/Users/sample", tone: .folder))
+        #expect(approval.command == "rm -rf *")
+        #expect(deck.sessions.first?.project == "lantern")
+    }
+
+    @Test func onlyACommandSaysWhereItRuns() throws {
+        let (deck, _) = deck()
+        try send(deck, "PermissionRequest", ["tool_name": "Write", "tool_input": ["file_path": "/a/b.txt", "content": "hi"], "cwd": "/a"])
+        #expect(deck.approvals.first?.lines.contains { $0.tone == .folder } == false)
+    }
+
+    // MARK: Questions
+
+    @Test(arguments: ["AskUserQuestion", "ExitPlanMode"])
+    func aToolThatWantsMoreThanAYesStaysInClaudeCode(tool: String) throws {
+        let (deck, _) = deck()
+        var replied: [[String: Any]] = []
+        let request = try #require(SocketRequest(line: JSONSerialization.data(withJSONObject: [
+            "op": "hook", "hook_event_name": "PermissionRequest", "session_id": "s", "cwd": "/a/b", "tool_name": tool, "tool_input": [:],
+        ])))
+        #expect(deck.apply(request, now: at(0)) { replied.append($0) } == nil)
+        #expect(deck.approvals.isEmpty)
+        #expect(replied.count == 1)
+        #expect(replied.first?["decision"] == nil)
+        #expect(answers.decisions.isEmpty)
+        #expect(deck.sessions.first?.state == .waiting("Has a question for you"))
+    }
+
+    // MARK: Review
+
+    @Test func reviewBringsThatSessionsApprovalForward() throws {
+        let (deck, _) = deck()
+        try send(deck, "PermissionRequest", bash("first").merging(["session_id": "one"]) { $1 })
+        try send(deck, "PermissionRequest", bash("second").merging(["session_id": "two"]) { $1 })
+        #expect(deck.approvals.first?.sessionID == "one")
+        deck.bringForward(session: "two")
+        #expect(deck.approvals.map(\.sessionID) == ["two", "one"])
     }
 
     @Test func anIdleSessionStaysAsItWas() throws {
@@ -487,7 +566,7 @@ struct AgentDeckTests {
         try send(deck, "UserPromptSubmit")
         try send(deck, "PermissionRequest", bash("swift build"))
         let approval = try #require(deck.approvals.first)
-        deck.allow(approval, shown: armed(for: approval), at: at(5))
+        deck.allow(approval, shown: armed(for: approval), pressedAt: at(5))
         #expect(answers.decisions == ["allow"])
         #expect(deck.approvals.isEmpty)
         #expect(state(deck) == .working("Running swift build"))
@@ -498,7 +577,7 @@ struct AgentDeckTests {
         try send(deck, "UserPromptSubmit")
         try send(deck, "PermissionRequest", bash("swift build"))
         let approval = try #require(deck.approvals.first)
-        deck.deny(approval, shown: armed(for: approval), at: at(5))
+        deck.deny(approval, shown: armed(for: approval), pressedAt: at(5))
         #expect(answers.decisions == ["deny"])
         #expect(deck.approvals.isEmpty)
         #expect(state(deck) == .working(nil))
@@ -510,8 +589,8 @@ struct AgentDeckTests {
         let approval = try #require(deck.approvals.first)
         var justShown = ApprovalGuard()
         justShown.show(approval.id, at: at(0))
-        deck.allow(approval, shown: justShown, at: at(0.3))
-        deck.deny(approval, shown: justShown, at: at(0.3))
+        deck.allow(approval, shown: justShown, pressedAt: at(0.3))
+        deck.deny(approval, shown: justShown, pressedAt: at(0.3))
         #expect(answers.decisions.isEmpty)
         #expect(deck.approvals.count == 1)
     }
@@ -522,7 +601,7 @@ struct AgentDeckTests {
         try send(deck, "PermissionRequest", bash("swift test"))
         let first = try #require(deck.approvals.first)
         let second = try #require(deck.approvals.last)
-        deck.allow(first, shown: armed(for: second), at: at(5))
+        deck.allow(first, shown: armed(for: second), pressedAt: at(5))
         #expect(answers.decisions.isEmpty)
     }
 
@@ -531,7 +610,7 @@ struct AgentDeckTests {
         try send(deck, "PermissionRequest", bash("swift build"))
         try send(deck, "PermissionRequest", bash("swift test"))
         let second = try #require(deck.approvals.last)
-        deck.allow(second, shown: armed(for: second), at: at(5))
+        deck.allow(second, shown: armed(for: second), pressedAt: at(5))
         #expect(answers.decisions.isEmpty)
         #expect(deck.approvals.count == 2)
     }
@@ -543,14 +622,14 @@ struct AgentDeckTests {
         let first = try #require(deck.approvals.first)
         let second = try #require(deck.approvals.last)
         var shown = armed(for: first)
-        deck.allow(first, shown: shown, at: at(5))
+        deck.allow(first, shown: shown, pressedAt: at(5))
         // The glance has moved on to the next by the second click, a moment later.
         shown.show(second.id, at: at(5))
-        deck.allow(second, shown: shown, at: at(5.2))
+        deck.allow(second, shown: shown, pressedAt: at(5.2))
         #expect(answers.decisions == ["allow"])
         #expect(deck.approvals.map(\.id) == [second.id])
         // Before the view has caught up, the guard still names the first.
-        deck.allow(second, shown: armed(for: first), at: at(5.2))
+        deck.allow(second, shown: armed(for: first), pressedAt: at(5.2))
         #expect(answers.decisions == ["allow"])
     }
 
@@ -558,8 +637,8 @@ struct AgentDeckTests {
         let (deck, _) = deck()
         try send(deck, "PermissionRequest", bash("swift build"))
         let approval = try #require(deck.approvals.first)
-        deck.deny(approval, shown: armed(for: approval), at: at(5))
-        deck.allow(approval, shown: armed(for: approval), at: at(5))
+        deck.deny(approval, shown: armed(for: approval), pressedAt: at(5))
+        deck.allow(approval, shown: armed(for: approval), pressedAt: at(5))
         #expect(answers.decisions == ["deny"])
     }
 
@@ -568,7 +647,7 @@ struct AgentDeckTests {
         try send(deck, "PermissionRequest", bash("swift build"))
         let approval = try #require(deck.approvals.first)
         try send(deck, "Stop")
-        deck.allow(approval, shown: armed(for: approval), at: at(5))
+        deck.allow(approval, shown: armed(for: approval), pressedAt: at(5))
         #expect(answers.decisions.isEmpty)
     }
 
@@ -578,7 +657,7 @@ struct AgentDeckTests {
         try send(deck, "PermissionRequest", bash("second"), session: "two")
         #expect(deck.approvals.map(\.command) == ["first", "second"])
         let front = try #require(deck.approvals.first)
-        deck.deny(front, shown: armed(for: front), at: at(5))
+        deck.deny(front, shown: armed(for: front), pressedAt: at(5))
         #expect(deck.approvals.map(\.command) == ["second"])
     }
 
@@ -952,7 +1031,7 @@ struct AgentDeckTests {
         let approval = try #require(deck.approvals.first)
         #expect(approval.command == "swift build --product Lantern")
         #expect(deck.sessions.first?.origin.program == "ghostty")
-        deck.allow(approval, shown: armed(for: approval), at: .now)
+        deck.allow(approval, shown: armed(for: approval), pressedAt: .now)
         let result = await hook.finish()
         #expect(result.code == 0)
         let parsed = try JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: [String: Any]]
@@ -969,7 +1048,7 @@ struct AgentDeckTests {
         let hook = try HookProcess(input: HookPayloads.data("PermissionRequest"), socket: scratch.path)
         await waitUntil { !deck.approvals.isEmpty }
         let approval = try #require(deck.approvals.first)
-        deck.deny(approval, shown: armed(for: approval), at: .now)
+        deck.deny(approval, shown: armed(for: approval), pressedAt: .now)
         let result = await hook.finish()
         #expect(result.code == 0)
         let parsed = try JSONSerialization.jsonObject(with: Data(result.output.utf8)) as? [String: [String: Any]]
@@ -1030,7 +1109,7 @@ struct AgentDeckTests {
         #expect(approval.lines.count == 60_002)
         #expect(approval.lines.last?.text == "the very end")
         #expect(approval.wrappedLines > ApprovalLine.mostShown)
-        deck.deny(approval, shown: armed(for: approval), at: .now)
+        deck.deny(approval, shown: armed(for: approval), pressedAt: .now)
         #expect(await hook.finish().code == 0)
     }
 

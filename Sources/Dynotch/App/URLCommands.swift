@@ -90,7 +90,7 @@ enum URLCommands {
         LiveActivityCenter.shared.post(LiveNotice(key: key, symbol: symbol, tint: color(named: tint) ?? .white,
                                                   text: text, detail: detail, fromScript: true,
                                                   actions: actions, timing: .waits, recall: .whole),
-                                       for: min(max(seconds ?? 4, 1), 30))
+                                       for: min(max(seconds.flatMap { $0.isFinite ? $0 : nil } ?? 4, 1), 30))
     }
 
     private static func timer(_ action: String) {
