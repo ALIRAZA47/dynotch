@@ -39,7 +39,7 @@ struct MediaPlayerView: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(alignment: .center, spacing: 14) {
                     ArtworkView(image: media.artwork, size: side, cornerRadius: theme.cardRadius,
-                                glow: settings.artworkTint ? tint : nil)
+                                glow: settings.artworkTint && media.artwork != nil ? tint : nil)
                         .overlay { ArtworkVolumeOverlay(cornerRadius: theme.cardRadius) }
                         .overlay {
                             if !outputs.isPickerShown { VolumeScrollArea() }
@@ -193,18 +193,7 @@ private struct ArtLight: View {
     /// under it and keep all their light. Liquid Glass is brighter already and has less to spare.
     private func dimming(_ color: NSColor) -> Double {
         let cap = theme.isGlass ? 0.2 : 0.55
-        return min(1, cap / max(0.001, Self.luminance(color)))
-    }
-
-    /// WCAG relative luminance.
-    private static func luminance(_ color: NSColor) -> Double {
-        guard let color = color.usingColorSpace(.sRGB) else { return 1 }
-        func linear(_ component: CGFloat) -> Double {
-            let value = Double(component)
-            return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
-        }
-        return 0.2126 * linear(color.redComponent) + 0.7152 * linear(color.greenComponent)
-            + 0.0722 * linear(color.blueComponent)
+        return min(1, cap / max(0.001, Luminance.rgb(of: color).map(Luminance.of) ?? 1))
     }
 }
 
@@ -259,8 +248,11 @@ struct PlaybackScrubber: View {
             let elapsed = dragFraction.map { $0 * duration } ?? media.elapsed(at: context.date)
             let fraction = duration > 0 ? elapsed / duration : 0
             HStack(spacing: 8) {
+                // On one line whatever the length: an hour's time takes its room from the bar.
                 Text(Format.duration(elapsed))
-                    .frame(width: 34, alignment: .leading)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .frame(minWidth: 34, alignment: .leading)
                 GeometryReader { proxy in
                     ZStack(alignment: .leading) {
                         Capsule().fill(theme.track)
@@ -285,7 +277,9 @@ struct PlaybackScrubber: View {
                 .onHover { hovering = $0 }
                 .disabled(duration <= 0)
                 Text(duration > 0 ? "−" + Format.duration(max(0, duration - elapsed)) : "Live")
-                    .frame(width: 40, alignment: .trailing)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .frame(minWidth: 40, alignment: .trailing)
             }
             .font(NotchFont.numeric(10.5))
             .foregroundStyle(theme.tertiary)

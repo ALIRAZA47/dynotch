@@ -161,7 +161,7 @@ private struct ControlTile: View {
                 if fit.showsState {
                     Text(state)
                         .font(.system(size: 10, weight: .medium))
-                        .opacity(isOn ? 0.8 : 0.6)
+                        .foregroundStyle(isOn ? theme.onAccent.opacity(0.8) : theme.secondary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                         .frame(height: 13, alignment: .bottomLeading)

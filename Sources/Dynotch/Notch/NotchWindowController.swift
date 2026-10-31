@@ -401,7 +401,10 @@ final class NotchWindowController {
         let next = index + (forward ? 1 : -1)
         guard tabs.indices.contains(next) else { return }
         Haptics.tap()
-        withAnimation(.notchTab) { viewModel.tab = tabs[next] }
+        // Eased with Reduce Motion, as a click on a tab is. AppKit calls this, so there's no environment to ask.
+        withAnimation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? .easeOut(duration: 0.2) : .notchTab) {
+            viewModel.tab = tabs[next]
+        }
     }
 
     /// Whether what's under `point` scrolls sideways on its own, so a sideways swipe there is its to keep.

@@ -7,6 +7,7 @@ struct TimersList: View {
     @ViewState private var draft = ""
     @ViewState private var isInvalid = false
     @Environment(\.notchTheme) private var theme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -29,7 +30,7 @@ struct TimersList: View {
                     VStack(alignment: .leading, spacing: 1) {
                         ForEach(store.countdowns) { countdown in
                             row(countdown)
-                                .transition(.opacity.combined(with: .move(edge: .top)))
+                                .transition(reduceMotion ? AnyTransition.opacity : .opacity.combined(with: .move(edge: .top)))
                         }
                     }
                 }

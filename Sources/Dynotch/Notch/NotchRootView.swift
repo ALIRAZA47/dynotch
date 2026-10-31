@@ -63,6 +63,7 @@ struct NotchRootView: View {
                                                 removal: .opacity.animation(.easeOut(duration: 0.2))))
                 }
             }
+            .modifier(SnapshotLayer())
             // Glass carries a lighter shadow: a heavy one shows through it.
             .shadow(color: .black.opacity((viewModel.isOpen || viewModel.isGlancing) && settings.showOpenShadow
                         ? (viewModel.isOpen && theme.isGlass ? 0.3 : 0.5) : 0),
@@ -81,6 +82,20 @@ struct NotchRootView: View {
     private var onAirColor: Color? {
         guard settings.onAirRing, !viewModel.isOpen else { return nil }
         return mic.cameraInUse ? .green : mic.micInUse ? .orange : nil
+    }
+}
+
+/// One layer in a snapshot, so the shadow below it falls behind the notch. `ImageRenderer` otherwise
+/// shades each thing in the notch from the shadow of what's above it, which a real window never does.
+private struct SnapshotLayer: ViewModifier {
+    @Environment(\.isSnapshot) private var isSnapshot
+
+    func body(content: Content) -> some View {
+        if isSnapshot {
+            content.compositingGroup()
+        } else {
+            content
+        }
     }
 }
 
@@ -251,7 +266,7 @@ struct TrackPeekLine: View {
             .foregroundStyle(theme.primary)
         let artistRun = Text(artist.isEmpty ? "" : " · \(artist)")
             .font(.system(size: 12 * scale, weight: .medium))
-            .foregroundStyle(.white.opacity(0.55))
+            .foregroundStyle(theme.isHighContrast ? theme.secondary : .white.opacity(0.55))
         // One text, so VoiceOver reads the line as before and it truncates as a whole.
         Text("\(titleRun)\(artistRun)")
             .lineLimit(1)
@@ -282,20 +297,9 @@ private struct NoticeText: View {
         let resolved = tint.resolve(in: environment)
         // As it shows on the black: sRGB values seen through the tint's own opacity.
         let shown = [resolved.red, resolved.green, resolved.blue].map { Double(min(max($0, 0), 1) * resolved.opacity) }
-        guard Self.luminance(shown) < Self.minimumLuminance else { return tint }
-        var low = 0.0, high = 1.0
-        for _ in 0..<12 {
-            let mix = (low + high) / 2
-            if Self.luminance(shown.map { $0 + (1 - $0) * mix }) < Self.minimumLuminance { low = mix } else { high = mix }
-        }
-        let lifted = shown.map { $0 + (1 - $0) * high }
+        guard Luminance.of(shown) < Self.minimumLuminance else { return tint }
+        let lifted = Luminance.lifted(shown, to: Self.minimumLuminance)
         return Color(.sRGB, red: lifted[0], green: lifted[1], blue: lifted[2])
-    }
-
-    /// WCAG's relative luminance of sRGB values.
-    private static func luminance(_ rgb: [Double]) -> Double {
-        let linear = rgb.map { $0 <= 0.04045 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
-        return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2]
     }
 }
 

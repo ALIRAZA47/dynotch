@@ -15,6 +15,7 @@ struct NookStack: View {
     @ObservedObject private var power = PowerMonitor.shared
     @ObservedObject private var devices = DeviceBatteryMonitor.shared
     @Environment(\.isSnapshot) private var isSnapshot
+    @Environment(\.notchTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Turned to by hand, or by something that needed the room. Stays until the next turn.
     @ViewState private var picked: HomeWidget?
@@ -67,7 +68,7 @@ struct NookStack: View {
                     turn(to: widget, from: shown)
                 } label: {
                     Capsule()
-                        .fill(Color.white.opacity(isShown ? 0.75 : 0.25))
+                        .fill(isShown ? Color.white.opacity(0.75) : theme.tertiary)
                         .frame(width: 4, height: isShown ? 12 : 4)
                         .frame(width: 12, height: isShown ? 18 : 10)
                         .contentShape(Rectangle())
