@@ -1,0 +1,83 @@
+---
+title: Claude usage
+description: How much of Claude's limits you've used, as a ring in the glance.
+---
+
+If you use [Claude Code](https://claude.com/claude-code), Dynotch can show how much of your 5-hour and 7-day limits you've used and when they reset, as a ring in the [glance](/glance/). A heads-up comes when one of them reaches 80%.
+
+The numbers come from Claude Code's [status line](https://code.claude.com/docs/en/statusline), so there's one line to add to its settings.
+
+<Note warn>The status line only runs in terminal sessions. Sessions in the desktop app don't update the numbers, so while you work there, the ring stays at whatever a terminal session last reported.</Note>
+
+## Setting it up
+
+Add this to `~/.claude/settings.json`:
+
+```json
+{
+  "statusLine": { "type": "command", "command": "dynotch statusline" }
+}
+```
+
+This needs the [`dynotch` command](/dynotch-command/) on your `PATH`. Claude Code then shows a short line at the bottom of each session:
+
+```text
+Opus 5.5 · 62% of 5 h · 9% of 7 d
+```
+
+The numbers appear on Pro, Max and Ultra plans, once a session has had its first response. Until then, and with an API key, the line shows the model alone and the notch hears nothing. A spend limit behind a gateway isn't shown.
+
+## If you already have a status line
+
+Keep it. Put your command after `--then`:
+
+```json
+{
+  "statusLine": { "type": "command", "command": "dynotch statusline --then '~/.claude/statusline.sh'" }
+}
+```
+
+Your command gets the same JSON on its input, through `/bin/sh`, and what it prints is what Claude Code shows. Your status line looks as it did before, and the numbers reach the notch on the way through.
+
+Dynotch's own line takes over if your command prints nothing, or hasn't finished after 10 seconds. Your command runs in the terminal, never in the app.
+
+## Reading the ring
+
+A chip in the day's row, like **62% of 5 h**, turns the [glance](/glance/#with-the-notch-empty) to the ring, and so does **Show** on the heads-up. The chip gives way if the row is full.
+
+| It says | What that means |
+|---|---|
+| **62% of your 5 hours** | The limit in the ring. It's whichever is fuller, so the 7 days take over when they're nearer their limit |
+| **Resets in 1 h 14 min** | When that limit starts over |
+| **7 days 38%** | How the other limit stands |
+| **Updated 3m ago** | How old the numbers are |
+
+The ring turns orange at 80% and red at 95%.
+
+## How fresh the numbers are
+
+They arrive with each message, and nothing polls for them, so they're only as fresh as the last active session. The glance always says how old they are. Between sessions they stay as they were, and a relaunch doesn't lose them.
+
+Once a limit's reset time has passed, its number no longer means anything. The glance says it has reset instead of showing the old percentage, and new numbers come with your next message.
+
+## The heads-up
+
+The first time a limit reaches 80%, the closed notch says so. **Show**, in the glance, opens the ring.
+
+It comes once for each limit in each period. A limit that drops and climbs back doesn't warn again until it has reset, even after a relaunch. Two limits reaching 80% together share one notice. It waits while the Mac is [quiet](/live-activities/#quiet), and it stays in the [recent list](/glance/#recent).
+
+## Checking it
+
+`dynotch status` has a line for it, and `dynotch status --json` has the numbers under `usage`.
+
+```text
+Claude usage: 62% of 5 h · 9% of 7 d · updated 3m ago
+```
+
+## Turning it off
+
+<Path to="Settings → Live Activities" /> has a **Claude usage** switch. With it off there's no ring, no chip and no heads-up. The numbers still arrive quietly, so they're right when you turn it back on. To stop them arriving, take `statusLine` out of `settings.json`.
+
+## What Dynotch keeps
+
+The two percentages and their reset times, when they arrived, and which reset it last warned about, in its settings. Only those numbers reach it: no prompt, no path, no token and nothing about your account. They stay on your Mac.

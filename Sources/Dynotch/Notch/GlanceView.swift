@@ -667,14 +667,16 @@ private struct TodayGlance: View {
                 }
                 .padding(.horizontal, 16)
                 .frame(height: band)
-                // The weather gives up its description first, then the Tray, Keep Awake and reviews their
-                // chips, so the row never runs past the glance's edges.
+                // The weather gives up its description first, then the Tray, Keep Awake, reviews and Claude's
+                // usage their chips, so the row never runs past the glance's edges.
                 ViewThatFits(in: .horizontal) {
                     chips(at: context.date, describesSky: true, showsTray: true, showsAwake: true)
                     chips(at: context.date, describesSky: false, showsTray: true, showsAwake: true)
                     chips(at: context.date, describesSky: false, showsTray: false, showsAwake: true)
                     chips(at: context.date, describesSky: false, showsTray: false, showsAwake: false)
                     chips(at: context.date, describesSky: false, showsTray: false, showsAwake: false, showsReviews: false)
+                    chips(at: context.date, describesSky: false, showsTray: false, showsAwake: false, showsReviews: false,
+                          showsUsage: false)
                 }
                 .padding(.horizontal, 14)
             }
@@ -683,7 +685,8 @@ private struct TodayGlance: View {
         }
     }
 
-    private func chips(at now: Date, describesSky: Bool, showsTray: Bool, showsAwake: Bool, showsReviews: Bool = true) -> some View {
+    private func chips(at now: Date, describesSky: Bool, showsTray: Bool, showsAwake: Bool, showsReviews: Bool = true,
+                       showsUsage: Bool = true) -> some View {
         HStack(spacing: 6) {
             if center.unseenRecents > 0 {
                 chip(symbol: "bell.fill", tint: theme.accent, text: "\(center.unseenRecents) recent") {
@@ -714,6 +717,9 @@ private struct TodayGlance: View {
                 chip(symbol: "tray.full.fill", tint: theme.secondary, text: "Tray \(tray.items.count)") {
                     viewModel.open(tab: .tray)
                 }
+            }
+            if showsUsage {
+                UsageChip(now: now) { viewModel.showUsage() }
             }
             if weather.conditions == nil, nextEvent(at: now) == nil, tray.items.isEmpty, center.unseenRecents == 0,
                !toggles.isKeepingAwake, ci.reviewCount == 0 {

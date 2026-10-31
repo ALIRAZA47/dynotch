@@ -198,7 +198,7 @@ final class NotchViewModel: ObservableObject {
     var glanceContent: GlanceContent {
         if isShowingRecent { return .recent(rows: LiveActivityCenter.shared.recents.count) }
         if AppSettings.shared.liveAgents, let approval = AgentDeck.shared.approvals.first { return .approval(approval) }
-        if isShowingUsage { return .usage }
+        if isShowingUsage, AppSettings.shared.liveUsage { return .usage }
         return GlanceContent(activity: activity)
     }
 
@@ -297,10 +297,13 @@ final class NotchViewModel: ObservableObject {
         withAnimation(.notchGlance) { isShowingRecent = true }
     }
 
-    /// Turns the glance to Claude's usage.
+    /// Turns the glance to Claude's usage, from the recent list too.
     func showUsage() {
         glance()
-        withAnimation(.notchGlance) { isShowingUsage = true }
+        withAnimation(.notchGlance) {
+            isShowingRecent = false
+            isShowingUsage = true
+        }
     }
 
     /// Grows the hovered notch into a glance at what's live.

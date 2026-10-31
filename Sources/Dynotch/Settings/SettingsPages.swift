@@ -662,7 +662,10 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .devices:
             .notice(LiveNotice(key: "device", symbol: "airpodspro", tint: .white, text: "80%", detail: "AirPods Pro connected"))
         case .notifications: .notice(NotificationPeek.sample())
-        case .micMuted, .keepAwake, .agents, .usage: .idle
+        case .usage:
+            .notice(LiveNotice(key: "usage", symbol: Self.usage.symbol, tint: .orange, text: "Claude usage",
+                               detail: "84% of your 5 hours"))
+        case .micMuted, .keepAwake, .agents: .idle
         case .countdowns: .countdown(Self.sampleCountdown)
         case .downloads: .download
         case .focusMode: .idle
