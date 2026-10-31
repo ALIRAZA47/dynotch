@@ -17,6 +17,9 @@ final class CaptureOverlayWindow: NSPanel {
 
     /// Where the drag in progress began, so it stays with that until the mouse goes up.
     private var dragTarget: DragTarget?
+    /// Off screen for a test or a snapshot. It acts key, for what's drawn and what's typed through
+    /// `sendEvent`, and never takes the keyboard from whoever is at the Mac.
+    var isParked = false
 
     /// `isSnapshot` draws the chrome's glass as a plain dark stand-in, for `--snapshot`.
     init(display: CaptureDisplay, editor: CaptureEditor, isSnapshot: Bool = false) {
@@ -38,10 +41,12 @@ final class CaptureOverlayWindow: NSPanel {
             .environment(\.isSnapshot, isSnapshot))
         host.sizingOptions = []
         contentView = host
+        isParked = isSnapshot
     }
 
-    override var canBecomeKey: Bool { true }
+    override var canBecomeKey: Bool { !isParked }
     override var canBecomeMain: Bool { false }
+    override var isKeyWindow: Bool { isParked || super.isKeyWindow }
 
     /// The window covers the display, menu bar and all, or sits off screen for a snapshot.
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }

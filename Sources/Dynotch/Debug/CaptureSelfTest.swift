@@ -165,7 +165,6 @@ enum CaptureSelfTest {
         drag(thirdWindow, from: CGPoint(x: 100, y: 100), to: CGPoint(x: 400, y: 300))
         press("Pin", third, thirdWindow)
         let pins = PinnedCaptureWindow.all
-        pins.forEach { $0.setFrameOrigin(NSPoint(x: -30_000, y: -70_000)) }
         settle(0.3)
         check(!controller.isActive && pins.count == 1, "Pin opens a pinned window and closes the editor")
         check(pins.first?.frame.size == CGSize(width: 300, height: 200), "the pinned window is the capture's point size")
@@ -280,6 +279,7 @@ enum CaptureSelfTest {
     }
 
     private static func finish() -> Bool {
+        check(NSApp.keyWindow == nil, "the keyboard stayed with whoever is at the Mac")
         if failures.isEmpty {
             print("Capture self-test passed")
         } else {

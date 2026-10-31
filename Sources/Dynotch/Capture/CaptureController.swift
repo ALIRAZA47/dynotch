@@ -173,6 +173,7 @@ final class CaptureController: ObservableObject {
         overlays = displays.enumerated().map { index, display in
             let window = CaptureOverlayWindow(display: display, editor: editor)
             if placesOverlaysOffScreen {
+                window.isParked = true
                 window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 6_000, y: -70_000))
             }
             window.orderFrontRegardless()
@@ -233,7 +234,7 @@ final class CaptureController: ObservableObject {
             TrayStore.shared.add([url])
             NotchManager.shared.open(tab: .tray)
         case .pin:
-            PinnedCaptureWindow.pin(output, near: place)
+            PinnedCaptureWindow.pin(output, near: place, isParked: placesOverlaysOffScreen)
         }
     }
 

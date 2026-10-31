@@ -440,7 +440,6 @@ enum SnapshotRenderer {
         editor.tool = .text
         editor.color = .yellow
         editor.width = 6
-        window.makeKey()
         editor.mouseDown(at: CGPoint(x: 640, y: 236), on: display.id)
         editor.mouseUp(at: CGPoint(x: 640, y: 236), on: display.id)
         RunLoop.main.run(until: .now + 0.5)

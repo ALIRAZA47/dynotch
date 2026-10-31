@@ -39,3 +39,37 @@ struct ScratchClipboardTests {
         #expect(named == ["AppSettings.swift: nonisolated(unsafe) static var dynotch: NSPasteboard = .general"])
     }
 }
+
+/// Tests and snapshots don't take the keyboard from whoever is at the Mac, or show on their screen.
+@MainActor
+struct ParkedCaptureTests {
+    private let display = CaptureController.syntheticDisplay(id: 7, frame: CGRect(x: 0, y: 0, width: 400, height: 300), scale: 1)!
+
+    init() {
+        SnapshotRenderer.useScratchDefaults()
+    }
+
+    @Test func aParkedOverlayActsKeyButCantBecomeIt() {
+        let window = CaptureOverlayWindow(display: display, editor: CaptureEditor(displays: [display], accent: .blue), isSnapshot: true)
+        #expect(!window.canBecomeKey)
+        #expect(window.isKeyWindow)
+        window.close()
+    }
+
+    /// In real use it takes the keyboard, for the tools' keys.
+    @Test func aRealOverlayCanBecomeKey() {
+        let window = CaptureOverlayWindow(display: display, editor: CaptureEditor(displays: [display], accent: .blue))
+        #expect(window.canBecomeKey)
+        #expect(!window.isKeyWindow)
+        window.close()
+    }
+
+    @Test func aParkedPinStaysOffScreenWhereverItWasTaken() {
+        let output = CaptureOutput(image: display.image, scale: 1, pointSize: CGSize(width: 100, height: 80))
+        let pin = PinnedCaptureWindow.pin(output, near: CGRect(x: -20_000, y: -70_000, width: 100, height: 80), isParked: true)
+        #expect(!NSScreen.screens.contains { $0.frame.intersects(pin.frame) })
+        #expect(!pin.isKeyWindow)
+        pin.keyDown(with: NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                                           characters: "\u{1b}", charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53)!)
+    }
+}
