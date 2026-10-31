@@ -107,7 +107,7 @@ struct GlanceView: View {
             case .stopwatch: StopwatchGlance(band: band)
             case .download: DownloadGlance(band: band)
             case .script(let activity): ScriptGlance(activity: activity, band: band)
-            case .ci(let run): CIGlance(run: run, band: band)
+            case .ci(let run): CIGlance(run: run, viewModel: viewModel, band: band)
             case .approval(let approval): ApprovalGlance(approval: approval, viewModel: viewModel, band: band)
             case .usage: UsageGlance(band: band)
             case .notice(let notice): NoticeGlance(notice: notice, viewModel: viewModel, band: band)
@@ -643,6 +643,7 @@ private struct TodayGlance: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var center = LiveActivityCenter.shared
     @ObservedObject private var toggles = QuickToggles.shared
+    @ObservedObject private var ci = CIMonitor.shared
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
@@ -666,13 +667,14 @@ private struct TodayGlance: View {
                 }
                 .padding(.horizontal, 16)
                 .frame(height: band)
-                // The weather gives up its description first, then the Tray and Keep Awake their chips,
-                // so the row never runs past the glance's edges.
+                // The weather gives up its description first, then the Tray, Keep Awake and reviews their
+                // chips, so the row never runs past the glance's edges.
                 ViewThatFits(in: .horizontal) {
                     chips(at: context.date, describesSky: true, showsTray: true, showsAwake: true)
                     chips(at: context.date, describesSky: false, showsTray: true, showsAwake: true)
                     chips(at: context.date, describesSky: false, showsTray: false, showsAwake: true)
                     chips(at: context.date, describesSky: false, showsTray: false, showsAwake: false)
+                    chips(at: context.date, describesSky: false, showsTray: false, showsAwake: false, showsReviews: false)
                 }
                 .padding(.horizontal, 14)
             }
@@ -681,7 +683,7 @@ private struct TodayGlance: View {
         }
     }
 
-    private func chips(at now: Date, describesSky: Bool, showsTray: Bool, showsAwake: Bool) -> some View {
+    private func chips(at now: Date, describesSky: Bool, showsTray: Bool, showsAwake: Bool, showsReviews: Bool = true) -> some View {
         HStack(spacing: 6) {
             if center.unseenRecents > 0 {
                 chip(symbol: "bell.fill", tint: theme.accent, text: "\(center.unseenRecents) recent") {
@@ -700,6 +702,9 @@ private struct TodayGlance: View {
                     viewModel.open(tab: .home)
                 }
             }
+            if showsReviews, ci.reviewCount > 0 {
+                CIReviewsChip(count: ci.reviewCount, viewModel: viewModel)
+            }
             if showsAwake, toggles.isKeepingAwake {
                 chip(symbol: "cup.and.saucer.fill", tint: .orange, text: toggles.keepAwakeDescription) {
                     viewModel.open(tab: .stats)
@@ -711,7 +716,7 @@ private struct TodayGlance: View {
                 }
             }
             if weather.conditions == nil, nextEvent(at: now) == nil, tray.items.isEmpty, center.unseenRecents == 0,
-               !toggles.isKeepingAwake {
+               !toggles.isKeepingAwake, ci.reviewCount == 0 {
                 chip(symbol: "sparkles", tint: theme.secondary, text: "Nothing coming up") { viewModel.open() }
             }
         }

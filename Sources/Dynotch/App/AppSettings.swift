@@ -385,6 +385,10 @@ final class AppSettings: ObservableObject {
     @Published var liveCI: Bool = AppSettings.value("liveCI", true) {
         didSet { save("liveCI", liveCI) }
     }
+    /// CI has been asked for at least once. Until then, Dynotch doesn't call `gh` by itself.
+    @Published var hasAskedForCI: Bool = AppSettings.value("hasAskedForCI", false) {
+        didSet { save("hasAskedForCI", hasAskedForCI) }
+    }
 
     // MARK: Nook
 

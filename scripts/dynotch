@@ -14,6 +14,7 @@
 #   dynotch progress NAME [PERCENT|done|fail|clear] [--detail TEXT] [--symbol SF_SYMBOL]
 #                         [--tint COLOR] [--quiet-after SECONDS] [--button TITLE --url https://...]
 #   dynotch status [--json]
+#   dynotch ci [--repo OWNER/NAME] [--branch NAME] [--sha SHA] [--stop]
 #
 # COLOR is red, orange, yellow, green, mint, teal, cyan, blue, indigo, purple,
 # pink, white or gray, or a hex value such as #FF6B5C. A notice from here carries
@@ -25,7 +26,7 @@
 set -euo pipefail
 
 usage() {
-    sed -n '5,24p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '5,25p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
