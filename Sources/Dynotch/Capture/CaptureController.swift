@@ -11,8 +11,16 @@ struct CaptureDisplay: Identifiable {
     let scale: CGFloat
     /// The display's pixels, top row first.
     let image: CGImage
+    /// The windows on it when it froze, frontmost first, so what's hovered matches the picture.
+    /// Empty when they couldn't be listed, and a click then selects the whole display.
+    var windows: [CaptureWindow] = []
 
     var size: CGSize { frame.size }
+
+    /// A point on the desktop, in AppKit's coordinates, in the display's own points.
+    func localPoint(fromDesktop point: CGPoint) -> CGPoint {
+        CGPoint(x: point.x - frame.minX, y: frame.maxY - point.y)
+    }
 }
 
 /// Takes a screenshot the way Flameshot does: freezes every display under a dimmed overlay, lets
@@ -75,7 +83,7 @@ final class CaptureController: ObservableObject {
     func beginTest(displays: [CaptureDisplay]? = nil) {
         guard editor == nil else { return }
         show(displays ?? NSScreen.screens.compactMap { screen in
-            Self.syntheticDisplay(id: screen.displayID, frame: screen.frame, scale: screen.backingScaleFactor)
+            Self.syntheticDisplay(id: screen.displayID, frame: screen.frame, scale: screen.backingScaleFactor, withWindows: true)
         })
     }
 
@@ -131,6 +139,8 @@ final class CaptureController: ObservableObject {
         let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
         let pid = ProcessInfo.processInfo.processIdentifier
         let own = content.windows.filter { $0.owningApplication?.processID == pid }
+        let listed = CaptureWindowList.listed(content.windows)
+        let stack = CaptureWindowList.currentStack()
         var displays: [CaptureDisplay] = []
         for screen in NSScreen.screens {
             guard let display = content.displays.first(where: { $0.displayID == screen.displayID }) else { continue }
@@ -142,7 +152,8 @@ final class CaptureController: ObservableObject {
             configuration.captureResolution = .best
             let filter = SCContentFilter(display: display, excludingWindows: own)
             let image = try await SCScreenshotManager.captureImage(contentFilter: filter, configuration: configuration)
-            displays.append(CaptureDisplay(id: screen.displayID, frame: screen.frame, scale: scale, image: image))
+            let windows = CaptureWindowList.windows(on: CGDisplayBounds(screen.displayID), listed: listed, stack: stack, ownProcess: pid)
+            displays.append(CaptureDisplay(id: screen.displayID, frame: screen.frame, scale: scale, image: image, windows: windows))
         }
         guard !displays.isEmpty else { throw CaptureError.noDisplays }
         return displays
@@ -169,7 +180,12 @@ final class CaptureController: ObservableObject {
         }
         // The keyboard goes to the display under the pointer; a click moves it.
         let pointer = NSEvent.mouseLocation
-        (overlays.first { $0.display.frame.contains(pointer) } ?? overlays[0]).makeKeyAndOrderFront(nil)
+        let underPointer = overlays.first { $0.display.frame.contains(pointer) } ?? overlays[0]
+        underPointer.makeKeyAndOrderFront(nil)
+        // The pointer is already somewhere, and no move comes until it moves.
+        if !placesOverlaysOffScreen {
+            editor.mouseMoved(to: underPointer.display.localPoint(fromDesktop: pointer), on: underPointer.display.id)
+        }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             let handled = MainActor.assumeIsolated { self?.editor?.handleKey(event) ?? false }
             return handled ? nil : event
@@ -255,7 +271,9 @@ final class CaptureController: ObservableObject {
     // MARK: Test image
 
     /// A made-up display for tests and snapshots: a sky, a window with some text, and a few shapes.
-    static func syntheticDisplay(id: CGDirectDisplayID, frame: CGRect, scale: CGFloat) -> CaptureDisplay? {
+    /// `withWindows` lists the window and the sidebar as windows too. Without it, as on a display
+    /// whose windows couldn't be listed, a click selects the whole display.
+    static func syntheticDisplay(id: CGDirectDisplayID, frame: CGRect, scale: CGFloat, withWindows: Bool = false) -> CaptureDisplay? {
         let width = Int((frame.width * scale).rounded()), height = Int((frame.height * scale).rounded())
         guard width > 0, height > 0, let space = CGColorSpace(name: CGColorSpace.sRGB),
               let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: space,
@@ -273,7 +291,7 @@ final class CaptureController: ObservableObject {
         text("Finder    File    Edit    View    Go    Window    Help", at: NSPoint(x: 16, y: size.height - 18), size: 13, weight: .medium,
              color: NSColor.black.withAlphaComponent(0.75))
         // A document window with a title bar and a page of text.
-        let window = NSRect(x: size.width * 0.12, y: size.height * 0.18, width: size.width * 0.5, height: size.height * 0.6)
+        let window = syntheticDocument(in: size)
         NSColor.black.withAlphaComponent(0.18).setFill()
         NSBezierPath(roundedRect: window.offsetBy(dx: 0, dy: -6).insetBy(dx: -4, dy: -4), xRadius: 14, yRadius: 14).fill()
         NSColor.white.setFill()
@@ -302,12 +320,30 @@ final class CaptureController: ObservableObject {
                                         width: side, height: side)).fill()
         }
         NSColor.white.withAlphaComponent(0.85).setFill()
-        NSBezierPath(roundedRect: NSRect(x: size.width * 0.7, y: size.height * 0.22, width: size.width * 0.22, height: size.height * 0.26),
-                     xRadius: 12, yRadius: 12).fill()
+        NSBezierPath(roundedRect: syntheticSidebar(in: size), xRadius: 12, yRadius: 12).fill()
         text("Sidebar", at: NSPoint(x: size.width * 0.72, y: size.height * 0.42), size: 17, weight: .semibold, color: .black)
         NSGraphicsContext.restoreGraphicsState()
         guard let image = context.makeImage() else { return nil }
-        return CaptureDisplay(id: id, frame: frame, scale: scale, image: image)
+        return CaptureDisplay(id: id, frame: frame, scale: scale, image: image, windows: withWindows ? syntheticWindows(in: size) : [])
+    }
+
+    /// Where the made-up window is drawn, in the drawing's coordinates, whose origin is at the bottom-left.
+    private static func syntheticDocument(in size: CGSize) -> CGRect {
+        CGRect(x: size.width * 0.12, y: size.height * 0.18, width: size.width * 0.5, height: size.height * 0.6)
+    }
+
+    /// Where the made-up sidebar is drawn, likewise.
+    private static func syntheticSidebar(in size: CGSize) -> CGRect {
+        CGRect(x: size.width * 0.7, y: size.height * 0.22, width: size.width * 0.22, height: size.height * 0.26)
+    }
+
+    /// The drawing's window and sidebar as windows. Their y runs down from the top, the drawing's up from the bottom.
+    private static func syntheticWindows(in size: CGSize) -> [CaptureWindow] {
+        func fromTop(_ rect: CGRect) -> CGRect {
+            CGRect(x: rect.minX, y: size.height - rect.maxY, width: rect.width, height: rect.height)
+        }
+        return [CaptureWindow(id: 1, appName: "TextEdit", frame: fromTop(syntheticDocument(in: size))),
+                CaptureWindow(id: 2, appName: "Notes", frame: fromTop(syntheticSidebar(in: size)))]
     }
 
     private static func text(_ string: String, at point: NSPoint, size: CGFloat, weight: NSFont.Weight, color: NSColor) {

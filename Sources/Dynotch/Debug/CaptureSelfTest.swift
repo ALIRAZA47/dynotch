@@ -4,8 +4,9 @@ import SwiftUI
 /// `Dynotch --capture-self-test <folder>` drives the capture editor with synthesized events over a
 /// made-up display parked off screen: selects, moves and resizes a region, draws with every tool,
 /// types a text mark, undoes and redoes from the keyboard and the toolbar, then copies to a
-/// pasteboard of its own, saves into the folder and pins. It prints a line per check and leaves
-/// the finished capture in the folder.
+/// pasteboard of its own, saves into the folder and pins. On a display that lists its windows it
+/// hovers them and clicks them. It prints a line per check and leaves the finished capture in the
+/// folder.
 @MainActor
 enum CaptureSelfTest {
     private static var failures: [String] = []
@@ -175,7 +176,107 @@ enum CaptureSelfTest {
         settle(0.3)
         key("\u{1b}", controller.editor!, keyCode: 53)
         check(!controller.isActive, "Esc cancels the capture")
+        checkWindows(controller)
         return finish()
+    }
+
+    /// Hovering and clicking on a display that lists its windows, through the overlay's events.
+    private static func checkWindows(_ controller: CaptureController) {
+        let frame = CGRect(x: 0, y: 0, width: 1280, height: 800)
+        guard let display = CaptureController.syntheticDisplay(id: 8, frame: frame, scale: 2, withWindows: true),
+              let document = display.windows.first else {
+            check(false, "the display lists its windows")
+            return
+        }
+        controller.beginTest(displays: [display])
+        guard let editor = controller.editor, let window = controller.overlays.first else {
+            check(false, "the editor opens with windows")
+            return
+        }
+        settle(0.5)
+        let onWindow = CGPoint(x: document.frame.midX, y: document.frame.midY)
+        let onDesktop = CGPoint(x: 60, y: 700)
+        let selected = document.frame.integral
+
+        send(.mouseMoved, at: onWindow, in: window)
+        check(editor.hoveredWindow == document && editor.hoveredDisplay == display.id, "hovering finds the window")
+        check(editor.highlight(on: display.id)?.frame == selected, "the highlight is what a click would select")
+        check(editor.highlight(on: display.id)?.label == "TextEdit · 641 × 480", "and says so (\(editor.highlight(on: display.id)?.label ?? "nothing"))")
+        send(.mouseMoved, at: onDesktop, in: window)
+        check(editor.hover == nil, "the bare desktop highlights nothing")
+        send(.mouseMoved, at: onWindow, in: window)
+        flags(.option, in: window)
+        check(editor.hoveredDisplay == display.id && editor.hoveredWindow == nil, "pressing ⌥ highlights the whole display")
+        check(editor.highlight(on: display.id)?.frame == frame, "all of it")
+        flags([], in: window)
+        check(editor.hoveredWindow == document, "letting go goes back to the window")
+        send(.mouseMoved, at: onWindow, in: window, flags: .option)
+        check(editor.hoveredWindow == nil, "a move with ⌥ held agrees")
+        send(.mouseMoved, at: onWindow, in: window)
+
+        click(window, at: onWindow)
+        check(editor.selection == selected, "a click selects the window")
+        check(editor.hover == nil, "and the highlight makes way for the selection")
+        check(editor.render()?.image.width == Int(selected.width) * 2, "its picture is the window at 2x")
+        drag(window, from: onWindow, to: CGPoint(x: onWindow.x + 20, y: onWindow.y + 10))
+        check(editor.selection == selected.offsetBy(dx: 20, dy: 10), "dragging inside moves it like any selection")
+        click(window, at: onDesktop)
+        check(editor.selection == frame, "a click on the bare desktop selects the display")
+        click(window, at: onWindow)
+        check(editor.selection == selected, "a click inside a selection of the whole display picks the window")
+        click(window, at: onDesktop, flags: .option)
+        check(editor.selection == frame, "⌥-click on the desktop selects the display")
+        editor.cancel()
+
+        controller.beginTest(displays: [display])
+        guard let second = controller.editor, let secondWindow = controller.overlays.first else {
+            check(false, "the editor opens with windows again")
+            return
+        }
+        settle(0.3)
+        click(secondWindow, at: onWindow, flags: .option)
+        check(second.selection == frame, "⌥-click on a window selects the display")
+        second.cancel()
+
+        controller.beginTest(displays: [display])
+        guard let third = controller.editor, let thirdWindow = controller.overlays.first else {
+            check(false, "the editor opens with windows a third time")
+            return
+        }
+        settle(0.3)
+        drag(thirdWindow, from: onWindow, to: CGPoint(x: onWindow.x + 120, y: onWindow.y + 90))
+        check(third.selection == CGRect(x: onWindow.x, y: onWindow.y, width: 120, height: 90).integral, "a drag that starts on a window draws a region")
+        third.cancel()
+
+        checkStack(controller, frame: frame)
+    }
+
+    /// The Window Server's real stack, which windows are sorted by, through two overlays of the
+    /// test's own. Their order is known, and every other window in the stack is thrown away unread.
+    private static func checkStack(_ controller: CaptureController, frame: CGRect) {
+        guard let first = CaptureController.syntheticDisplay(id: 9, frame: frame, scale: 1),
+              let second = CaptureController.syntheticDisplay(id: 10, frame: frame, scale: 1) else {
+            check(false, "two displays for the stack")
+            return
+        }
+        controller.beginTest(displays: [first, second])
+        guard controller.overlays.count == 2 else {
+            check(false, "two overlays for the stack")
+            return
+        }
+        settle(0.3)
+        let (back, front) = (controller.overlays[0], controller.overlays[1])
+        let ours = [CGWindowID(back.windowNumber), CGWindowID(front.windowNumber)]
+        func stacked() -> [CGWindowID] { CaptureWindowList.currentStack().map(\.id).filter(ours.contains) }
+
+        back.orderFrontRegardless()
+        front.orderFrontRegardless()
+        settle(0.2)
+        check(stacked() == [ours[1], ours[0]], "the stack lists the frontmost first")
+        back.orderFrontRegardless()
+        settle(0.2)
+        check(stacked() == [ours[0], ours[1]], "and follows a window to the front")
+        controller.cancel()
     }
 
     private static func finish() -> Bool {
@@ -199,22 +300,32 @@ enum CaptureSelfTest {
     // MARK: Events
 
     /// A mouse event at a point in the display's top-left points.
-    private static func mouseEvent(_ type: NSEvent.EventType, at point: CGPoint, in window: NSWindow) -> NSEvent? {
-        NSEvent.mouseEvent(with: type, location: NSPoint(x: point.x, y: window.frame.height - point.y), modifierFlags: [],
+    private static func mouseEvent(_ type: NSEvent.EventType, at point: CGPoint, in window: NSWindow, flags: NSEvent.ModifierFlags = []) -> NSEvent? {
+        NSEvent.mouseEvent(with: type, location: NSPoint(x: point.x, y: window.frame.height - point.y), modifierFlags: flags,
                            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
                            eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1)
     }
 
-    private static func send(_ type: NSEvent.EventType, at point: CGPoint, in window: NSWindow) {
-        guard let event = mouseEvent(type, at: point, in: window) else { return }
+    private static func send(_ type: NSEvent.EventType, at point: CGPoint, in window: NSWindow, flags: NSEvent.ModifierFlags = []) {
+        guard let event = mouseEvent(type, at: point, in: window, flags: flags) else { return }
         window.sendEvent(event)
         settle(0.03)
     }
 
-    private static func click(_ window: NSWindow, at point: CGPoint) {
-        send(.mouseMoved, at: point, in: window)
-        send(.leftMouseDown, at: point, in: window)
-        send(.leftMouseUp, at: point, in: window)
+    private static func click(_ window: NSWindow, at point: CGPoint, flags: NSEvent.ModifierFlags = []) {
+        send(.mouseMoved, at: point, in: window, flags: flags)
+        send(.leftMouseDown, at: point, in: window, flags: flags)
+        send(.leftMouseUp, at: point, in: window, flags: flags)
+    }
+
+    /// A modifier going down or up, with no move.
+    private static func flags(_ flags: NSEvent.ModifierFlags, in window: NSWindow) {
+        guard let event = NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: flags,
+                                           timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                           context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false,
+                                           keyCode: 58) else { return }
+        window.sendEvent(event)
+        settle(0.03)
     }
 
     private static func drag(_ window: NSWindow, from: CGPoint, to: CGPoint, steps: Int = 4) {

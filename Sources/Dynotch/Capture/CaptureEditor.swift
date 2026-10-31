@@ -51,15 +51,24 @@ final class CaptureEditor: ObservableObject {
         }
     }
 
+    /// What a click would select, shown before it does: the window under the pointer, or with
+    /// ⌥ held the display it's on.
+    struct Hover: Equatable {
+        let display: CGDirectDisplayID
+        /// Nil is the whole display.
+        let window: CaptureWindow?
+    }
+
     private enum Drag {
-        case selecting(start: CGPoint)
+        /// `wholeDisplay` is ⌥ being held at the press, for if this turns out to be a click.
+        case selecting(start: CGPoint, wholeDisplay: Bool)
         case moving(grip: CGPoint)
         case resizing(Handle, original: CGRect)
         case drawing(start: CGPoint)
     }
 
     static let handleSize: CGFloat = 8
-    /// A click that travels less than this selects the whole display.
+    /// A press that travels less than this is a click: it selects the window under it, or the whole display.
     private static let clickSlop: CGFloat = 3
 
     let displays: [CaptureDisplay]
@@ -69,9 +78,14 @@ final class CaptureEditor: ObservableObject {
 
     /// The display the selection is on.
     @Published private(set) var activeDisplay: CGDirectDisplayID?
-    @Published private(set) var selection: CGRect?
+    @Published private(set) var selection: CGRect? {
+        didSet { if selection != nil { setHover(nil) } }
+    }
     /// The region being dragged out, before it becomes the selection.
     @Published private(set) var rubberBand: CGRect?
+    /// Nil over the bare desktop, and once there's a selection or a drag. Change it through
+    /// `setHover`: every overlay's view reads the editor, so it mustn't publish on each mouse move.
+    @Published private(set) var hover: Hover?
     /// Nil is the selection tool: dragging inside the selection moves it.
     @Published var tool: AnnotationTool?
     @Published var color: AnnotationColor = .red
@@ -90,6 +104,10 @@ final class CaptureEditor: ObservableObject {
     var onCancel: (() -> Void)?
 
     private var drag: Drag?
+    /// Where the pointer last was, so ⌥ can change the highlight without the pointer moving.
+    private var pointer: (point: CGPoint, display: CGDirectDisplayID)?
+    /// Whether ⌥ is asking for the whole display rather than the window.
+    private var wantsWholeDisplay = false
     /// Frames SwiftUI handles itself, in the active display's points: the text field, while it's up.
     private var chromeFrames: [String: CGRect] = [:]
 
@@ -99,6 +117,8 @@ final class CaptureEditor: ObservableObject {
     }
 
     var hasSelection: Bool { selection != nil }
+    var hoveredWindow: CaptureWindow? { hover?.window }
+    var hoveredDisplay: CGDirectDisplayID? { hover?.display }
 
     func display(_ id: CGDirectDisplayID) -> CaptureDisplay? {
         displays.first { $0.id == id }
@@ -111,7 +131,8 @@ final class CaptureEditor: ObservableObject {
 
     // MARK: Mouse
 
-    func mouseDown(at point: CGPoint, on displayID: CGDirectDisplayID) {
+    /// `wholeDisplay` is ⌥ being held, which makes a click select the display rather than the window.
+    func mouseDown(at point: CGPoint, on displayID: CGDirectDisplayID, wholeDisplay: Bool = false) {
         guard let display = display(displayID) else { return }
         if isEditingText { commitText() }
         if activeDisplay == displayID, let selection {
@@ -139,16 +160,21 @@ final class CaptureEditor: ObservableObject {
         activeDisplay = displayID
         selection = nil
         let start = clamp(point, to: display.size)
-        drag = .selecting(start: start)
-        rubberBand = CGRect(origin: start, size: .zero)
+        drag = .selecting(start: start, wholeDisplay: wholeDisplay)
+        if hover?.display != displayID { setHover(nil) }
+        // The highlight stays until the press travels, so a plain click doesn't flash the dim back.
+        if hover == nil { rubberBand = CGRect(origin: start, size: .zero) }
     }
 
     func mouseDragged(to point: CGPoint, on displayID: CGDirectDisplayID) {
         guard let display = display(activeDisplay ?? displayID), let drag else { return }
         let point = clamp(point, to: display.size)
         switch drag {
-        case .selecting(let start):
-            rubberBand = Self.rect(from: start, to: point)
+        case .selecting(let start, _):
+            let rect = Self.rect(from: start, to: point)
+            if hover != nil, Self.isClick(rect) { return }
+            setHover(nil)
+            rubberBand = rect
         case .moving(let grip):
             guard let selection else { return }
             // The size stays as it is; only the corner moves, to a whole point.
@@ -182,13 +208,15 @@ final class CaptureEditor: ObservableObject {
         self.drag = nil
         let point = clamp(point, to: display.size)
         switch drag {
-        case .selecting(let start):
+        case .selecting(let start, let wholeDisplay):
             rubberBand = nil
             let rect = Self.rect(from: start, to: point)
-            if rect.width < Self.clickSlop, rect.height < Self.clickSlop {
-                selection = CGRect(origin: .zero, size: display.size)
-            } else {
+            if !Self.isClick(rect) {
                 selection = Self.settle(rect, in: display.size)
+            } else if !wholeDisplay, let window = frontmostWindow(at: start, on: display) {
+                selection = Self.settle(window.frame, in: display.size)
+            } else {
+                selection = CGRect(origin: .zero, size: display.size)
             }
         case .moving, .resizing:
             break
@@ -196,6 +224,41 @@ final class CaptureEditor: ObservableObject {
             if let draft { document.add(draft) }
             draft = nil
         }
+    }
+
+    /// The pointer moved with nothing pressed. `wholeDisplay` is ⌥ being held. The key overlay can
+    /// hear of moves over another display, where the point falls outside its own; the overlay
+    /// under the pointer reports those.
+    func mouseMoved(to point: CGPoint, on displayID: CGDirectDisplayID, wholeDisplay: Bool = false) {
+        guard let display = display(displayID), CGRect(origin: .zero, size: display.size).contains(point) else { return }
+        pointer = (point, displayID)
+        wantsWholeDisplay = wholeDisplay
+        updateHover()
+    }
+
+    /// ⌥ went down or up. That comes with no move, and the highlight has to agree with what a click would do.
+    func wholeDisplayChanged(_ wholeDisplay: Bool) {
+        wantsWholeDisplay = wholeDisplay
+        updateHover()
+    }
+
+    private func updateHover() {
+        guard selection == nil, drag == nil, let pointer, let display = display(pointer.display) else { return }
+        if display.windows.isEmpty {
+            setHover(nil)
+        } else if wantsWholeDisplay {
+            setHover(Hover(display: display.id, window: nil))
+        } else {
+            setHover(frontmostWindow(at: pointer.point, on: display).map { Hover(display: display.id, window: $0) })
+        }
+    }
+
+    private func setHover(_ new: Hover?) {
+        if hover != new { hover = new }
+    }
+
+    private func frontmostWindow(at point: CGPoint, on display: CaptureDisplay) -> CaptureWindow? {
+        display.windows.first { $0.frame.contains(point) }
     }
 
     /// The pointer over a display: what it would do there.
@@ -225,6 +288,13 @@ final class CaptureEditor: ObservableObject {
     }
 
     // MARK: Layout
+
+    /// What's highlighted on a display: exactly what a click would select, and what to call it.
+    func highlight(on displayID: CGDirectDisplayID) -> (frame: CGRect, label: String)? {
+        guard let hover, hover.display == displayID, let display = display(displayID) else { return nil }
+        let frame = hover.window.map { Self.settle($0.frame, in: display.size) } ?? CGRect(origin: .zero, size: display.size)
+        return (frame, "\(hover.window?.appName ?? "Whole display") · \(Int(frame.width)) × \(Int(frame.height))")
+    }
 
     /// Where the toolbar goes: under the selection, above it when there's no room, inside it as a last resort.
     func toolbarFrame(on displayID: CGDirectDisplayID) -> CGRect? {
@@ -380,6 +450,10 @@ final class CaptureEditor: ObservableObject {
         CGRect(x: min(start.x, end.x), y: min(start.y, end.y), width: abs(end.x - start.x), height: abs(end.y - start.y))
     }
 
+    private static func isClick(_ rect: CGRect) -> Bool {
+        rect.width < clickSlop && rect.height < clickSlop
+    }
+
     /// Whole points, at least a point each way, inside the display.
     private static func settle(_ rect: CGRect, in size: CGSize) -> CGRect {
         var rect = rect.standardized.integral.intersection(CGRect(origin: .zero, size: size))
@@ -462,6 +536,47 @@ struct SelectionChrome: View {
     }
 }
 
+/// What a click would select: a 2-point outline around the window, or the display, and a label.
+struct HoverChrome: View {
+    let frame: CGRect
+    let label: String
+    let accent: Color
+    let displaySize: CGSize
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            // Inside the edge, so it stays whole around a window or a display that reaches the side of the screen.
+            Rectangle()
+                .strokeBorder(accent, lineWidth: 2)
+                .frame(width: frame.width, height: frame.height)
+                .offset(x: frame.minX, y: frame.minY)
+            labelView
+        }
+        .frame(width: displaySize.width, height: displaySize.height, alignment: .topLeading)
+        .allowsHitTesting(false)
+    }
+
+    /// Above the top-left corner, or just inside it at the top of the display, like the size label.
+    /// How wide it is only layout knows, so a guide keeps it off the display's right edge.
+    private var labelView: some View {
+        let fitsAbove = frame.minY >= 26
+        let x = frame.minX + (fitsAbove ? 0 : 6)
+        let y = fitsAbove ? frame.minY - 24 : frame.minY + 6
+        return Text(verbatim: label)
+            .font(NotchFont.numeric(11))
+            .lineLimit(1)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 7)
+            .frame(height: 20)
+            // Inside the window it sits on the capture at full brightness, so it darkens more.
+            .background(CaptureGlass(shape: Capsule(), isOverCapture: !fitsAbove))
+            .fixedSize()
+            .alignmentGuide(.leading) { size in -max(4, min(x, displaySize.width - size.width - 4)) }
+            .alignmentGuide(.top) { _ in -y }
+            .accessibilityLabel(label)
+    }
+}
+
 /// The marks, drawn by the same code that makes the finished image.
 struct AnnotationLayer: View {
     @ObservedObject var editor: CaptureEditor
@@ -520,15 +635,21 @@ struct TextAnnotationField: View {
     }
 }
 
-/// A hint in the middle of each display until something's selected.
+/// A hint in the middle of each display until something's selected. With no windows listed for
+/// the display, a click there can only select all of it, so the hint says that instead.
 struct SelectionHint: View {
+    var hasWindows = false
+    /// A highlighted window can lie under it, at full brightness.
+    var isOverCapture = false
+
     var body: some View {
-        Text("Drag to select a region  ·  Click for the whole display  ·  Esc to cancel")
+        Text(hasWindows ? "Drag to select a region  ·  Click a window  ·  ⌥-click for the whole display  ·  Esc to cancel"
+                        : "Drag to select a region  ·  Click for the whole display  ·  Esc to cancel")
             .font(NotchFont.body)
             .foregroundStyle(.white)
             .padding(.horizontal, 14)
             .frame(height: 30)
-            .background(CaptureGlass(shape: Capsule()))
+            .background(CaptureGlass(shape: Capsule(), isOverCapture: isOverCapture))
             .allowsHitTesting(false)
     }
 }

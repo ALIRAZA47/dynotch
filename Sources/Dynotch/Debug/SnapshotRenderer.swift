@@ -386,7 +386,8 @@ enum SnapshotRenderer {
     // MARK: Capture
 
     /// The capture editor over a made-up display: a bare selection, the toolbar with marks of every
-    /// kind, a text mark being typed, and a pinned capture.
+    /// kind, a text mark being typed, a pinned capture, and before any of that, the hint alone and
+    /// what's highlighted as the pointer goes over the windows.
     private static func renderCapture(into folder: URL) {
         // One editor makes all four, each from the one before.
         guard wanted("capture") || only.contains(where: { $0.hasPrefix("capture") }),
@@ -454,7 +455,36 @@ enum SnapshotRenderer {
                 pin.close()
             }
         }
+        count += renderCaptureHover(into: folder)
         print("Wrote \(count) capture snapshots to \(folder.path)")
+    }
+
+    /// The overlay with nothing selected: the hint, a window under the pointer, ⌥ held, and windows
+    /// at the display's corner and edge, where the label has to stay on the display.
+    private static func renderCaptureHover(into folder: URL) -> Int {
+        guard var display = CaptureController.syntheticDisplay(id: 1, frame: CGRect(x: 0, y: 0, width: 1280, height: 800), scale: 2, withWindows: true),
+              let document = display.windows.first else { return 0 }
+        let corner = CaptureWindow(id: 3, appName: "A Long Application Name", frame: CGRect(x: 1180, y: 0, width: 100, height: 300))
+        let edge = CaptureWindow(id: 4, appName: "A Long Application Name", frame: CGRect(x: 1230, y: 400, width: 50, height: 300))
+        display.windows += [corner, edge]
+        var count = 0
+        let editor = CaptureEditor(displays: [display], accent: AppSettings.shared.theme.accent)
+        let window = CaptureOverlayWindow(display: display, editor: editor, isSnapshot: true)
+        window.setFrameOrigin(NSPoint(x: -22_000, y: -62_000))
+        window.orderFrontRegardless()
+        RunLoop.main.run(until: .now + 1.2)
+        if save(window, to: folder.appendingPathComponent("capture-5-hint.png")) { count += 1 }
+        for (name, target) in [("window-hover", document), ("window-hover-corner", corner), ("window-hover-edge", edge)] {
+            editor.mouseMoved(to: CGPoint(x: target.frame.midX, y: target.frame.midY), on: display.id)
+            RunLoop.main.run(until: .now + 0.8)
+            if save(window, to: folder.appendingPathComponent("capture-5-\(name).png")) { count += 1 }
+        }
+        editor.mouseMoved(to: CGPoint(x: document.frame.midX, y: document.frame.midY), on: display.id, wholeDisplay: true)
+        RunLoop.main.run(until: .now + 0.8)
+        if save(window, to: folder.appendingPathComponent("capture-5-whole-display.png")) { count += 1 }
+        window.orderOut(nil)
+        window.close()
+        return count
     }
 
     /// Puts a theme in the settings, where the notch reads it. Only writes what differs.
