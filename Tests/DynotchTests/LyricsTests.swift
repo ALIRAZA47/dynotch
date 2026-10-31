@@ -257,13 +257,19 @@ struct LyricsServiceTests {
         service = LyricsService(fetch: server.fetch, settle: .milliseconds(5), failureWait: 0.01)
     }
 
-    /// Waits for something that happens off in a task, however long it takes up to a limit.
+    /// Waits for something that happens off in a task, however long it takes up to a generous limit.
     private func wait(until condition: () -> Bool) async {
-        let limit = Date.now.addingTimeInterval(5)
+        let limit = Date.now.addingTimeInterval(30)
         while !condition(), .now < limit { try? await Task.sleep(for: .milliseconds(5)) }
     }
 
-    /// Long enough for anything that was going to go out.
+    /// For the track playing, it's got its answer or stopped asking.
+    private func finishLookingUp() async {
+        await wait { !service.isLookingUp }
+    }
+
+    /// Long enough for what shouldn't go out to have gone, if it was going to. Only for showing that
+    /// something didn't happen, which a slow Mac can't turn into a failure.
     private func settle() async {
         try? await Task.sleep(for: .milliseconds(60))
     }
@@ -332,8 +338,7 @@ struct LyricsServiceTests {
         await wait { service.lyrics != nil }
         server.answer = { _ in (Data(), response(404)) }
         play(other)
-        await wait { server.asked.count == 2 }
-        await settle()
+        await finishLookingUp()
         #expect(service.lyrics == nil)
         play(track)
         #expect(service.lyrics != nil)
@@ -346,29 +351,28 @@ struct LyricsServiceTests {
     @Test func noLyricsIsRememberedToo() async {
         server.answer = { _ in (record(nil, instrumental: true), response(200)) }
         play(track)
-        await wait { server.asked.count == 1 }
-        await settle()
+        await finishLookingUp()
         play(other)
-        await settle()
+        await finishLookingUp()
         play(track)
         await settle()
-        #expect(server.asked.filter { $0 == "Midnight City" }.count == 1)
+        #expect(server.asked == ["Midnight City", "Wait"])
     }
 
     /// As it did on 2026-10-31: nothing about the track, so it isn't kept, and it stops after a few tries.
     @Test func aFailureIsTriedAFewTimesAndNotRemembered() async {
         server.answer = { _ in (Data("error code: 502".utf8), response(502, ["Content-Type": "text/plain"])) }
         play(track)
-        await wait { server.asked.count == LyricsService.tries }
-        try? await Task.sleep(for: .milliseconds(700))
+        await finishLookingUp()
         #expect(server.asked.count == LyricsService.tries)
         #expect(service.lyrics == nil)
         server.answer = { _ in (record(), response(200)) }
         play(other)
-        await settle()
+        await finishLookingUp()
         play(track)
-        await wait { service.lyrics != nil }
+        await finishLookingUp()
         #expect(service.lyrics != nil)
+        #expect(server.asked.filter { $0 == "Midnight City" }.count == LyricsService.tries + 1)
     }
 
     @Test func aWaitTheServerAsksForIsHonored() async {

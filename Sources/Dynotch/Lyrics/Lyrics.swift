@@ -10,6 +10,9 @@ struct Lyrics: Equatable {
 
     /// In the order they're sung.
     let lines: [Line]
+    /// How wide the longest line is on the closed notch's row, so the notch stays one width for the
+    /// whole song instead of changing with each line. Worked out once, as the notch asks often.
+    let rowWidth: CGFloat
 
     /// More than any song has, and longer than any line should be. These come from a stranger.
     private static let mostLines = 3000
@@ -31,6 +34,8 @@ struct Lyrics: Equatable {
         }
         guard lines.contains(where: { !$0.text.isEmpty }) else { return nil }
         self.lines = lines.sorted { $0.time < $1.time }
+        let font = NSFont.systemFont(ofSize: 12, weight: .medium)
+        rowWidth = lines.lazy.map { ($0.text as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
     }
 
     /// The time at the start of `text`, and what's after it. Tags like [ar:M83] aren't times.
@@ -53,12 +58,5 @@ struct Lyrics: Equatable {
         }
         guard low > 0, !lines[low - 1].text.isEmpty else { return nil }
         return lines[low - 1].text
-    }
-
-    /// How wide the longest line is on the closed notch's row, so the notch stays one width for the
-    /// whole song instead of changing with each line.
-    var rowWidth: CGFloat {
-        let font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        return lines.lazy.map { ($0.text as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
     }
 }

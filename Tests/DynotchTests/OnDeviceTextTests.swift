@@ -74,13 +74,89 @@ struct TranslationRequestTests {
     }
 }
 
+/// What the real answers do before they reach the frameworks, on any macOS, with no languages
+/// installed and no Apple Intelligence, as on CI's Mac. Nothing here starts a session or a model.
+struct OnDeviceTextTests {
+    private let english = Locale.Language(identifier: "en")
+    private let spanish = Locale.Language(identifier: "es")
+
+    @Test func beforeMacOS26NeitherRuns() async {
+        let translation = await OnDeviceText.translate("hola", from: spanish, to: english, name: "English", isAvailable: false)
+        #expect(translation == .failure(.needsNewerMacOS))
+        #expect(await OnDeviceText.summarize("Some text.", isAvailable: false) == .failure(.needsNewerMacOS))
+    }
+
+    @Test func theSameLanguageIsNoTranslation() async {
+        guard OnDeviceText.isAvailable else { return }
+        #expect(await OnDeviceText.translate("hello", from: english, to: english, name: "English") == .failure(.alreadyIn("English")))
+        let regional = Locale.Language(identifier: "en-GB")
+        #expect(await OnDeviceText.translate("hello", from: regional, to: english, name: "English") == .failure(.alreadyIn("English")))
+    }
+
+    @Test func nothingToGoOnIsNoLanguage() async {
+        guard OnDeviceText.isAvailable else { return }
+        #expect(await OnDeviceText.translate("", from: nil, to: english, name: "English") == .failure(.unknownLanguage))
+    }
+
+    @Test func whatMacOSSaysOfTheLanguages() {
+        guard #available(macOS 26, *) else { return }
+        #expect(OnDeviceText.failure(for: .installed, from: spanish, to: "English", knowsTarget: true) == nil)
+        #expect(OnDeviceText.failure(for: .supported, from: spanish, to: "English", knowsTarget: true) == .notInstalled("Spanish to English"))
+        #expect(OnDeviceText.failure(for: .unsupported, from: spanish, to: "Urdu", knowsTarget: false) == .unsupported("Urdu"))
+        #expect(OnDeviceText.failure(for: .unsupported, from: Locale.Language(identifier: "ur"), to: "English", knowsTarget: true)
+            == .unsupported("Urdu"))
+    }
+
+    @Test func whatMacOSSaysOfTheModel() {
+        guard #available(macOS 26, *) else { return }
+        #expect(OnDeviceText.failure(for: .available) == nil)
+        #expect(OnDeviceText.failure(for: .unavailable(.appleIntelligenceNotEnabled)) == .appleIntelligenceOff)
+        #expect(OnDeviceText.failure(for: .unavailable(.modelNotReady)) == .modelNotReady)
+        #expect(OnDeviceText.failure(for: .unavailable(.deviceNotEligible)) == .deviceNotEligible)
+    }
+
+    // MARK: Text files
+
+    private func file(_ name: String, _ data: Data) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("dynotch-\(UUID().uuidString)-\(name)")
+        try data.write(to: url)
+        return url
+    }
+
+    @Test func aTextFileIsRead() async throws {
+        let url = try file("note.txt", Data("Bonjour tout le monde".utf8))
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(await FileActions.text(of: url) == "Bonjour tout le monde")
+    }
+
+    @Test func anEncodingThatSaysSoIsRead() async throws {
+        let url = try file("note.txt", try #require("Grüße".data(using: .utf16)))
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(await FileActions.text(of: url) == "Grüße")
+    }
+
+    @Test func aLargeOrMissingFileIsLeftAlone() async throws {
+        let url = try file("large.txt", Data(repeating: 97, count: 4_000_001))
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(await FileActions.text(of: url) == nil)
+        #expect(await FileActions.text(of: url.appendingPathExtension("gone")) == nil)
+    }
+
+    @MainActor
+    @Test func whichFilesAreText() {
+        #expect(FileActions.isText(URL(fileURLWithPath: "/tmp/notes.txt")))
+        #expect(FileActions.isText(URL(fileURLWithPath: "/tmp/notes.md")))
+        #expect(!FileActions.isText(URL(fileURLWithPath: "/tmp/photo.png")))
+        #expect(!FileActions.isText(URL(fileURLWithPath: "/tmp/report.pdf")))
+    }
+}
+
 /// With a stand-in for the Mac and a pasteboard of their own.
 @MainActor
 @Suite(.serialized)
 final class TextActionsTests {
     private let pasteboard = NSPasteboard(name: .init("app.dynotch.text-actions-tests"))
     private var notices: [LiveNotice] = []
-    private var seconds: [TimeInterval] = []
 
     /// What was asked of the stand-in.
     private final class Asked: @unchecked Sendable {
@@ -101,10 +177,7 @@ final class TextActionsTests {
     }
 
     private var notify: TextActions.Notify {
-        { [unowned self] notice, duration in
-            notices.append(notice)
-            seconds.append(duration)
-        }
+        { [unowned self] notice, _ in notices.append(notice) }
     }
 
     private func system(_ answer: Result<String, OnDeviceText.Failure>) -> OnDeviceText.System {
@@ -229,9 +302,38 @@ final class TextActionsTests {
         #expect(intelligence.kind == .openURL(URL(string: "x-apple.systempreferences:com.apple.Siri-Settings.extension")!))
     }
 
-    @Test func aQuickAnswerNeverSaysItsWorking() async {
-        await TextActions.summarize("Some text.", to: pasteboard, system: system(.success("Short.")), notify: notify)
-        #expect(notices.count == 1)
+    /// An answer that won't come until it's told to, so nothing here depends on how fast this Mac is.
+    @Test func aSlowAnswerSaysItsWorkingAndTheAnswerTakesItsPlace() async {
+        let gate = Gate()
+        let system = OnDeviceText.System(translate: { _, _, _, _ in .failure(.failed) }, summarize: { _ in
+            await gate.wait()
+            return .success("Short.")
+        })
+        let work = Task { await TextActions.summarize("Some text.", to: pasteboard, system: system, notify: notify) }
+        let limit = Date.now.addingTimeInterval(30)
+        while notices.isEmpty, .now < limit { try? await Task.sleep(for: .milliseconds(20)) }
+        #expect(notices.first?.text == "Summarizing")
+        await gate.open()
+        await work.value
+        #expect(notices.last?.text == "Copied")
+        #expect(notices.first?.key == notices.last?.key)
+    }
+}
+
+/// Holds whatever waits on it until it's opened.
+private actor Gate {
+    private var isOpen = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        waiting.forEach { $0.resume() }
+        waiting = []
     }
 }
 

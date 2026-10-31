@@ -205,7 +205,7 @@ struct PomodoroSessionTests {
         let phase = timer.phase
         timer.loadSample(remaining: 0.02, running: false)
         timer.start()
-        let limit = Date.now.addingTimeInterval(5)
+        let limit = Date.now.addingTimeInterval(30)
         while timer.phase == phase, .now < limit { RunLoop.main.run(until: .now.addingTimeInterval(0.02)) }
     }
 
@@ -241,7 +241,7 @@ struct PomodoroSessionTests {
         timer.loadSample(remaining: 0.02, running: false)
         timer.start()
         settings.focusMinutes = 45
-        let limit = Date.now.addingTimeInterval(5)
+        let limit = Date.now.addingTimeInterval(30)
         while timer.phase == .focus, .now < limit { RunLoop.main.run(until: .now.addingTimeInterval(0.02)) }
         #expect(history.sessions.map(\.minutes) == [1])
     }

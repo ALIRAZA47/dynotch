@@ -56,7 +56,8 @@ enum OnDeviceText {
         var translate: @Sendable (String, Locale.Language?, Locale.Language, String) async -> Result<String, Failure>
         var summarize: @Sendable (String) async -> Result<String, Failure>
 
-        static let live = System(translate: OnDeviceText.translate, summarize: OnDeviceText.summarize)
+        static let live = System(translate: { await OnDeviceText.translate($0, from: $1, to: $2, name: $3) },
+                                 summarize: { await OnDeviceText.summarize($0) })
     }
 
     /// This macOS has both.
@@ -72,21 +73,18 @@ enum OnDeviceText {
         return recognizer.dominantLanguage.map { Locale.Language(identifier: $0.rawValue) }
     }
 
-    /// `name` is what to call the target.
-    private static func translate(_ text: String, from source: Locale.Language?, to target: Locale.Language,
-                                  name: String) async -> Result<String, Failure> {
-        guard #available(macOS 26, *) else { return .failure(.needsNewerMacOS) }
+    /// `name` is what to call the target. `isAvailable` is for the tests, to go the way an older macOS
+    /// does on any Mac. Everything up to `LanguageAvailability` runs without the framework.
+    static func translate(_ text: String, from source: Locale.Language?, to target: Locale.Language, name: String,
+                          isAvailable: Bool = OnDeviceText.isAvailable) async -> Result<String, Failure> {
+        guard isAvailable, #available(macOS 26, *) else { return .failure(.needsNewerMacOS) }
         guard let source = source ?? language(of: text) else { return .failure(.unknownLanguage) }
         guard source.languageCode != target.languageCode else { return .failure(.alreadyIn(name)) }
         let availability = LanguageAvailability()
-        switch await availability.status(from: source, to: target) {
-        case .installed: break
-        case .supported: return .failure(.notInstalled("\(TranslationRequest.name(of: source)) to \(name)"))
-        case .unsupported:
-            let knowsTarget = await availability.supportedLanguages.contains { $0.languageCode == target.languageCode }
-            return .failure(.unsupported(knowsTarget ? TranslationRequest.name(of: source) : name))
-        @unknown default: return .failure(.failed)
-        }
+        let status = await availability.status(from: source, to: target)
+        let supported = status == .unsupported ? await availability.supportedLanguages : []
+        let knowsTarget = supported.contains { $0.languageCode == target.languageCode }
+        if let failure = failure(for: status, from: source, to: name, knowsTarget: knowsTarget) { return .failure(failure) }
         do {
             return .success(try await TranslationSession(installedSource: source, target: target).translate(text).targetText)
         } catch {
@@ -94,15 +92,21 @@ enum OnDeviceText {
         }
     }
 
-    private static func summarize(_ text: String) async -> Result<String, Failure> {
-        guard #available(macOS 26, *) else { return .failure(.needsNewerMacOS) }
-        switch SystemLanguageModel.default.availability {
-        case .available: break
-        case .unavailable(.appleIntelligenceNotEnabled): return .failure(.appleIntelligenceOff)
-        case .unavailable(.modelNotReady): return .failure(.modelNotReady)
-        case .unavailable(.deviceNotEligible): return .failure(.deviceNotEligible)
-        case .unavailable: return .failure(.failed)
+    /// What's in the way of translating, going by what macOS says of the two languages.
+    @available(macOS 26, *)
+    static func failure(for status: LanguageAvailability.Status, from source: Locale.Language, to name: String,
+                        knowsTarget: Bool) -> Failure? {
+        switch status {
+        case .installed: nil
+        case .supported: .notInstalled("\(TranslationRequest.name(of: source)) to \(name)")
+        case .unsupported: .unsupported(knowsTarget ? TranslationRequest.name(of: source) : name)
+        @unknown default: .failed
         }
+    }
+
+    static func summarize(_ text: String, isAvailable: Bool = OnDeviceText.isAvailable) async -> Result<String, Failure> {
+        guard isAvailable, #available(macOS 26, *) else { return .failure(.needsNewerMacOS) }
+        if let failure = failure(for: SystemLanguageModel.default.availability) { return .failure(failure) }
         let session = LanguageModelSession(instructions: "Summarize the text you're given in two or three short sentences. "
             + "Use the text's own language. Answer with the summary and nothing else.")
         do {
@@ -115,6 +119,18 @@ enum OnDeviceText {
             }
         } catch {
             return .failure(.failed)
+        }
+    }
+
+    /// What's in the way of summarizing, going by what macOS says of the model.
+    @available(macOS 26, *)
+    static func failure(for availability: SystemLanguageModel.Availability) -> Failure? {
+        switch availability {
+        case .available: nil
+        case .unavailable(.appleIntelligenceNotEnabled): .appleIntelligenceOff
+        case .unavailable(.modelNotReady): .modelNotReady
+        case .unavailable(.deviceNotEligible): .deviceNotEligible
+        case .unavailable: .failed
         }
     }
 }

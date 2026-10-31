@@ -16,12 +16,12 @@ struct EventTextTests {
         event(text).map { $0.end.timeIntervalSince($0.start).rounded() }
     }
 
-    /// Today's date as a person would type it, like "31 oct".
-    private var today: String {
+    /// A date as a person would type it, like "31 oct".
+    private func day(_ offset: Int = 0) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "d MMM"
-        return formatter.string(from: .now)
+        return formatter.string(from: Calendar.current.date(byAdding: .day, value: offset, to: .now)!)
     }
 
     /// An hour after three this afternoon, whenever the tests run.
@@ -43,7 +43,7 @@ struct EventTextTests {
     @Test(arguments: [
         ("dentist fri 3 pm", "dentist", 15), ("Dentist Fri 3PM", "Dentist", 15), ("fri 3p dentist", "dentist", 15),
         ("flight BA117 fri 6:30am", "flight BA117", 6), ("standup tue 9.30am", "standup", 9), ("review tue 14:30", "review", 14),
-        ("party 31 dec 9pm", "party", 21), ("dentist fri at 3pm", "dentist", 15), ("dentist fri at 15", "dentist", 15),
+        ("dentist fri at 3pm", "dentist", 15), ("dentist fri at 15", "dentist", 15),
         ("drinks fri noon", "drinks", 12), ("drinks tomorrow at noon", "drinks", 12), ("walk tomorrow morning", "walk", 9),
     ])
     func waysOfSayingWhen(text: String, title: String, hour expected: Int) {
@@ -71,7 +71,7 @@ struct EventTextTests {
     /// These come back as a day at noon and a time today, and either alone would be a wrong event.
     @Test(arguments: [
         ("tomorrow call sam 5pm", "call sam", 17), ("fri dentist 3pm", "dentist", 15), ("monday standup 9am", "standup", 9),
-        ("next friday team lunch 1pm", "team lunch", 13), ("25 dec party 9pm", "party", 21),
+        ("next friday team lunch 1pm", "team lunch", 13),
     ])
     func aDayApartFromItsTime(text: String, title: String, hour expected: Int) throws {
         let event = try #require(event(text))
@@ -79,6 +79,16 @@ struct EventTextTests {
         #expect(hour(event.start) == expected)
         #expect(event.start > .now)
         #expect(!Calendar.current.isDateInToday(event.start))
+    }
+
+    @Test func aDateBesideOrApartFromItsTime() throws {
+        let next = day(3)
+        for text in ["party \(next) 9pm", "\(next) party 9pm"] {
+            let event = try #require(event(text))
+            #expect(event.title == "party")
+            #expect(hour(event.start) == 21)
+            #expect(Calendar.current.isDate(event.start, inSameDayAs: Calendar.current.date(byAdding: .day, value: 3, to: .now)!))
+        }
     }
 
     @Test func aRangeApartFromItsDay() {
@@ -200,7 +210,7 @@ struct EventTextTests {
     }
 
     @Test func aDateThatsGoneStaysGone() {
-        guard case .past = EventText.read("dentist \(today) 3pm", now: pastThree) else {
+        guard case .past = EventText.read("dentist \(day()) 3pm", now: pastThree) else {
             Issue.record("It should have said the time had passed")
             return
         }

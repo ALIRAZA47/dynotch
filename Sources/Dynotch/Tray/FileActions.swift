@@ -53,13 +53,19 @@ enum FileActions {
         UTType(filenameExtension: url.pathExtension)?.conforms(to: .text) == true
     }
 
-    /// The text in a file, read off the main thread. A file this large isn't what Translate is for.
+    /// The text in a file, or nil past 4 MB, which isn't what Translate is for. Read on a thread that's
+    /// no task's, since a file in iCloud Drive or on a network volume can take its time.
     nonisolated static func text(of url: URL) async -> String? {
-        await Task.detached(priority: .userInitiated) {
-            guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 4_000_000 else { return nil }
-            var encoding = String.Encoding.utf8
-            return try? String(contentsOf: url, usedEncoding: &encoding)
-        }.value
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 4_000_000 else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                var encoding = String.Encoding.utf8
+                continuation.resume(returning: (try? String(contentsOf: url, encoding: .utf8)) ?? (try? String(contentsOf: url, usedEncoding: &encoding)))
+            }
+        }
     }
 
     static func isArchive(_ url: URL) -> Bool {

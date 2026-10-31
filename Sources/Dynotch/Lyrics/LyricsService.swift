@@ -114,6 +114,9 @@ final class LyricsService: ObservableObject {
     /// The lyrics of the track playing, when it has any with times.
     @Published private(set) var lyrics: Lyrics?
 
+    /// It's waiting to ask, or waiting for an answer.
+    var isLookingUp: Bool { lookup != nil }
+
     /// One track, whatever the player says about its length this time.
     private struct Key: Hashable {
         let title: String
