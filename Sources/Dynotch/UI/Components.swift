@@ -424,11 +424,10 @@ struct CardField: View {
                     .foregroundStyle(theme.tertiary)
                     .lineLimit(1)
             } else {
-                // The prompt brings its own color: the system's placeholder color is far fainter on
-                // older versions of macOS. The title stays the field's label.
-                TextField(placeholder, text: $text, prompt: Text(placeholder).foregroundStyle(theme.tertiary))
+                TextField(placeholder, text: $text, prompt: Text(""))
                     .textFieldStyle(.plain)
                     .font(NotchFont.body)
+                    .fieldPlaceholder(placeholder, isEmpty: text.isEmpty, font: NotchFont.body, color: theme.tertiary)
                     .focused($isFocused)
                     .onSubmit(onSubmit)
             }
@@ -442,6 +441,50 @@ struct CardField: View {
         .onHover { hovering = $0 }
         .animation(.notchHighlight, value: hovering)
         .animation(.notchHighlight, value: isFocused)
+    }
+}
+
+/// A text field's placeholder, drawn behind it. AppKit draws a prompt in its own faint color, under
+/// 3:1, however the prompt is styled, so the field gets an empty one. Its title then stops reaching
+/// VoiceOver, so this names the field too.
+private struct FieldPlaceholder: ViewModifier {
+    let title: String
+    let isEmpty: Bool
+    let font: Font
+    let color: Color
+    /// An input method is at work here. Its text only reaches the field's binding once it's
+    /// committed, and the placeholder mustn't show under it until then.
+    @ViewState private var isComposing = false
+    /// Every field's editor posts the same notification, so this tells this field's from the rest.
+    @FocusState private var hasFocus: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .focused($hasFocus)
+            .accessibilityLabel(title)
+            .background(alignment: .leading) {
+                if isEmpty, !isComposing {
+                    Text(title)
+                        .font(font)
+                        .foregroundStyle(color)
+                        .lineLimit(1)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSText.didChangeNotification)) { notification in
+                guard hasFocus || isComposing, let editor = notification.object as? NSTextView, editor.isFieldEditor else { return }
+                // A cancelled composition is still marked at this point, but its text has gone.
+                let composing = editor.hasMarkedText() && !editor.string.isEmpty
+                if composing != isComposing { isComposing = composing }
+            }
+    }
+}
+
+extension View {
+    /// For a `TextField` with an empty prompt: `title` shows in `color` while `isEmpty`.
+    func fieldPlaceholder(_ title: String, isEmpty: Bool, font: Font, color: Color) -> some View {
+        modifier(FieldPlaceholder(title: title, isEmpty: isEmpty, font: font, color: color))
     }
 }
 
@@ -519,7 +562,7 @@ struct CardButtonLabel: View {
         HStack(spacing: 2) {
             if let text {
                 Text(text)
-                    .font(NotchFont.numeric(9.5, .bold))
+                    .font(NotchFont.numeric(10.5))
                     .fixedSize()
             }
             if let symbol {
@@ -592,6 +635,8 @@ struct Keycap: View {
         Text(label)
             .font(style == .window ? .system(size: 12, weight: .semibold, design: .rounded) : NotchFont.keycap)
             .foregroundStyle(foreground)
+            // The font sets these two high, above the middle of the key.
+            .offset(y: label == "⌃" || label == "↩" ? (style == .window ? 2 : 1) : 0)
             .padding(.horizontal, style == .window ? 7 : label.count > 1 ? 4 : 0)
             .frame(minWidth: side)
             .frame(height: side)

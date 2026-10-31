@@ -4,6 +4,7 @@ import SwiftUI
 /// and saving the setup you have now as a new one.
 struct ProfilesSection: View {
     @ObservedObject private var store = ProfileStore.shared
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private static let anchor = "profiles"
 
@@ -22,7 +23,8 @@ struct ProfilesSection: View {
                     }
                     NewProfileRow()
                 }
-                .animation(.spring(response: 0.35, dampingFraction: 0.85), value: store.profiles.map(\.id))
+                .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.35, dampingFraction: 0.85),
+                           value: store.profiles.map(\.id))
             }
             .id(Self.anchor)
             .onAppear { reveal(with: proxy) }
@@ -34,7 +36,9 @@ struct ProfilesSection: View {
     private func reveal(with proxy: ScrollViewProxy) {
         guard store.revealRequested else { return }
         DispatchQueue.main.async {
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.9)) { proxy.scrollTo(Self.anchor, anchor: .top) }
+            withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.45, dampingFraction: 0.9)) {
+                proxy.scrollTo(Self.anchor, anchor: .top)
+            }
             store.revealRequested = false
         }
     }
@@ -125,9 +129,11 @@ private struct ProfileRow: View {
     }
 
     private var nameField: some View {
-        TextField("Name", text: $draft)
+        TextField("Name", text: $draft, prompt: Text(""))
             .textFieldStyle(.plain)
             .font(.system(size: 13, weight: .medium))
+            .fieldPlaceholder("Name", isEmpty: draft.isEmpty, font: .system(size: 13, weight: .medium),
+                              color: Palette.secondaryText)
             .focused($isEditing)
             .onSubmit(commitRename)
             .onExitCommand { isRenaming = false }
@@ -212,7 +218,7 @@ private struct RulePicker: View {
                     .lineLimit(1)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 8.5, weight: .bold))
-                    .foregroundStyle(hasRule ? AnyShapeStyle(accent.color.opacity(0.7)) : AnyShapeStyle(.secondary))
+                    .foregroundStyle(hasRule ? accent.color : Color.primary.opacity(0.78))
             }
             .foregroundStyle(hasRule ? accent.color : Color.primary.opacity(0.78))
             .padding(.horizontal, 11)
@@ -289,12 +295,15 @@ private struct NewProfileRow: View {
     var body: some View {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         let taken = store.isNameTaken(trimmed)
+        let placeholder = store.profiles.isEmpty ? "Name it, like Work or Home" : "Another profile's name"
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 12) {
                 SymbolBadge(symbol: "plus", isActive: !trimmed.isEmpty && !taken, size: 28)
-                TextField(store.profiles.isEmpty ? "Name it, like Work or Home" : "Another profile's name", text: $name)
+                TextField(placeholder, text: $name, prompt: Text(""))
                     .textFieldStyle(.plain)
                     .font(.system(size: 12.5))
+                    .fieldPlaceholder(placeholder, isEmpty: name.isEmpty, font: .system(size: 12.5),
+                                      color: Palette.secondaryText)
                     .onSubmit(save)
                     .padding(.horizontal, 12)
                     .frame(height: 28)

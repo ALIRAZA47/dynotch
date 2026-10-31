@@ -12,6 +12,21 @@ struct DevicesWidget: View {
 
     /// Looked up once: `Host` can be slow to answer.
     private static let macName = Host.current().localizedName ?? "This Mac"
+    private static let bluetoothMessage = "See your AirPods, keyboard and more."
+    private static let bluetoothButton = "Allow Bluetooth"
+
+    /// `PermissionPrompt` without its symbol, for a card too short for it.
+    private var bluetoothAsk: some View {
+        VStack(spacing: 6) {
+            Text(Self.bluetoothMessage)
+                .font(NotchFont.footnote)
+                .foregroundStyle(theme.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            PillButton(title: Self.bluetoothButton, action: monitor.requestAccess)
+        }
+        .frame(maxWidth: .infinity)
+    }
 
     var body: some View {
         WidgetCard(title: "Batteries", symbol: "battery.75percent") {
@@ -24,10 +39,19 @@ struct DevicesWidget: View {
                             rows(compact: compact)
                         }
                     } else {
-                        VStack(alignment: .leading, spacing: 8) {
-                            macRow(compact: compact)
-                            PermissionPrompt(symbol: "dot.radiowaves.right", message: "See your AirPods, keyboard and more.",
-                                             buttonTitle: "Allow Bluetooth", action: monitor.requestAccess)
+                        // As much as the card has room for: the whole prompt, then the words and the
+                        // button under the Mac, then those alone.
+                        ViewThatFits(in: .vertical) {
+                            VStack(alignment: .leading, spacing: 8) {
+                                macRow(compact: compact)
+                                PermissionPrompt(symbol: "dot.radiowaves.right", message: Self.bluetoothMessage,
+                                                 buttonTitle: Self.bluetoothButton, action: monitor.requestAccess)
+                            }
+                            VStack(spacing: 8) {
+                                macRow(compact: compact)
+                                bluetoothAsk
+                            }
+                            bluetoothAsk
                         }
                     }
                 }

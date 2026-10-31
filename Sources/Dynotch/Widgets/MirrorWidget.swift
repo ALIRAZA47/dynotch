@@ -85,9 +85,10 @@ struct MirrorWidget: View {
         let shape = RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous)
         ZStack {
             if camera.isRunning {
-                // Set into the pane like a picture in a frame, its corners following the card's.
+                // Set into the pane like a picture in a frame, its corners following the card's. The
+                // card's own padding leaves the stack's pager dots on the frame, clear of the picture.
                 CameraPreview(session: camera.session, cornerRadius: theme.controlRadius)
-                    .padding(theme.controlRadius)
+                    .padding(NotchTheme.cardPadding)
                     .transition(.opacity)
             } else {
                 VStack(spacing: 6) {
