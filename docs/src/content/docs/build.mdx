@@ -1,0 +1,93 @@
+---
+title: Build from source
+description: A native SwiftUI and AppKit app, with no third-party dependencies.
+---
+
+You need a Swift toolchain with the macOS 26 SDK or newer: Xcode, or the Command Line Tools (`xcode-select --install`). Dynotch itself runs on macOS 14 or later. The newer SDK is what the Glass material compiles against.
+
+```bash
+git clone https://github.com/ALIRAZA47/dynotch.git
+cd dynotch
+./scripts/build.sh
+open build/Dynotch.app
+```
+
+`scripts/build.sh` builds a release binary, generates the app icon if it's missing, assembles `build/Dynotch.app` and signs it. Move the app to `/Applications` before turning on **Launch at login**.
+
+For a quick loop, `swift build` and `.build/debug/Dynotch` also work.
+
+## Signing
+
+Run this once first:
+
+```bash
+./scripts/make-signing-identity.sh
+```
+
+It creates a self-signed "Dynotch Local Signing" certificate in a keychain of its own, `~/Library/Keychains/dynotch-signing.keychain-db`, with a password you choose. `build.sh` signs with it, so macOS keeps Dynotch's permissions across rebuilds.
+
+That keychain stays out of the keychain search list and locks when the Mac sleeps or an hour after it was last used, so nothing else on the Mac can sign with the identity unnoticed. `build.sh` asks for the password when it's locked.
+
+Without an identity, the app is signed ad hoc, which looks like a new app to macOS after every build.
+
+The app is signed with the hardened runtime. `Support/Dynotch.entitlements` lists what it may still reach: the camera, location, calendars and Apple events.
+
+## Packaging a release
+
+```bash
+./scripts/package.sh
+```
+
+This builds and signs a release, puts `Dynotch-<version>.dmg` and a `.zip` of the app in `dist/`, and prints their SHA-256 checksums. The version comes from `Support/Info.plist`.
+
+## Tools for development
+
+| Flag | What it does |
+|---|---|
+| `--snapshot <folder>` | Renders every state of the notch with sample data to PNGs. Add `--only <prefix>,<prefix>` for some of them. It's how the screenshots in these docs are made |
+| `--energy-probe` | Counts how often the polls would run and wake the Mac in an hour. See [Energy](/dynotch/energy/) |
+| `--capture-test` | Opens the capture editor over a made-up picture of each display, so its tools can be tried without Screen Recording |
+| `--capture-self-test <folder>` | Drives the capture tools with synthesized events off screen, and prints a line per check |
+
+## How the code is laid out
+
+```text
+Sources/Dynotch/
+  App/            entry point, settings model, hot key, energy coordinator, helpers
+  Notch/          panel, geometry, shape, pointer handling, live activities, open and closed views
+  Media/          Now Playing service, player UI
+  Calendar/       EventKit service, calendar and reminders widgets
+  Tray/           tray store, file actions, tray UI and drop zones, screenshot watcher, Quick Look
+  Capture/        freezing the displays, the overlay and editor, rendering, pinned captures
+  Command/        the command field and what it understands
+  Widgets/        mirror, focus timer, notes, stats, batteries, quick toggles, shortcuts, weather
+  HUD/            volume and brightness monitors, media-key tap
+  Notifications/  Notification Center reader, settings
+  Activities/     microphone and camera, downloads, Focus
+  Profiles/       saved setups and the rules that switch them
+  Settings/       settings window and permissions page
+  Welcome/        the first-run welcome tour
+  UI/             theme, shared components
+  Debug/          snapshot renderer, energy probe, capture self-test
+Support/          Info.plist, entitlements, app icon
+scripts/          build and signing scripts, icon generator, the dynotch command and the zsh hook
+docs/             this site
+```
+
+The notch panel is as large as the open notch but only accepts the mouse while the pointer is over the visible shape. Everywhere else, clicks pass through to the apps underneath. A global and a local event monitor track the pointer for hover, swipes and file drags.
+
+## Contributing
+
+`main` is protected, so every change lands through a pull request that the maintainer approves. Keep each one to one topic. The [contributing guide](https://github.com/ALIRAZA47/dynotch/blob/main/.github/CONTRIBUTING.md) has the rest, including one rule that matters: use the `@ViewState` wrapper instead of `@State`, because the macOS SDK ships the `@State` macro only with Xcode, and the app builds with the Command Line Tools.
+
+## These docs
+
+This site lives in `docs/`. It's built with [Astro](https://astro.build) and needs Node 22.23.4 or later.
+
+```bash
+cd docs
+npm install
+npm run dev
+```
+
+Every page is an `.mdx` file in `src/content/docs`, and `src/data/nav.ts` sets the order. `npm run screens` renders the screenshots again from the app, so they can't drift from it. Its header says what to watch for.

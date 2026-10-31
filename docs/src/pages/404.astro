@@ -1,0 +1,21 @@
+---
+import Base from '../layouts/Base.astro';
+
+const base = import.meta.env.BASE_URL;
+---
+
+<Base title="Page not found · Dynotch" description="There's nothing at this address.">
+  <main class="home" id="content">
+    <div class="home-light"></div>
+    <div class="wrap hero">
+      <h1>Nothing for this address.</h1>
+      <div class="hero-side">
+        <p>The page may have moved. Search the docs, or start from the top.</p>
+        <div class="hero-actions">
+          <a class="button jewel" href={base}>Go to the home page</a>
+          <button class="button control" type="button" data-open-search>Search the docs</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</Base>

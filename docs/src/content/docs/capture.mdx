@@ -1,0 +1,67 @@
+---
+title: Capture
+description: Freeze the screen, select a region, mark it up, then copy, save or pin it.
+open:
+  label: Capture the Screen
+  href: dynotch://capture
+---
+
+Press <Keys k="⌃⌥S" />, choose **Capture Screen** in the menu bar menu, click the Control tab's **Capture** tile, or run `dynotch capture`. Every display freezes under a dimmed overlay, like Flameshot.
+
+<Shot name="capture-2-editor-dark" eager alt="The capture editor over a frozen screen, with a region selected and marked up with a rectangle, a circle, an arrow, numbered badges, blurred text and a handwritten line, and a toolbar under the selection." />
+
+## Selecting a region
+
+Drag out a region, or click for the whole display. Drag inside it to move it, or drag one of its eight handles to resize it. Its size shows beside it.
+
+<Shot name="capture-1-selection" alt="A region selected over a frozen screen, with its size shown above it and the toolbar under it." />
+
+## Marking it up
+
+A toolbar appears under the selection. Each tool has a key:
+
+| Tool | Key | What it does |
+|---|---|---|
+| Pencil | <Keys k="P" /> | Draws freehand |
+| Line | <Keys k="L" /> | Draws a straight line |
+| Arrow | <Keys k="A" /> | Draws an arrow |
+| Rectangle | <Keys k="R" /> | Draws a rectangle |
+| Ellipse | <Keys k="C" /> | Draws an ellipse |
+| Marker | <Keys k="M" /> | Draws a wide highlighter stroke |
+| Text | <Keys k="T" /> | Click to place, type in place, and Return commits |
+| Blur | <Keys k="B" /> | Pixelates what's under it |
+| Counter | <Keys k="N" /> | Places numbered badges |
+| Select | <Keys k="S" /> | Goes back to moving the selection |
+
+There are eight colors and a width from 1 to 16 points, which the text's size follows. <Keys k="⌘Z" /> undoes and <Keys k="⇧⌘Z" /> redoes.
+
+## Finishing
+
+| Action | Key | What it does |
+|---|---|---|
+| Copy | <Keys k="⌘C" /> | Puts a PNG on the clipboard |
+| Save | <Keys k="⌘S" /> | Writes a PNG into the folder the Screenshot app saves to, named as macOS names its own, so it lands in the Tray too |
+| Add to Tray | | Does that and opens the Tray |
+| Pin | | Floats the capture above every window |
+| | <Keys k="Return" /> | Copies, saves or both, as <Path to="Settings → Tray" /> says under **After capture** |
+| | <Keys k="Esc" /> | Cancels |
+
+The result is drawn at the display's scale, pixel for pixel what was on screen.
+
+## Pinned captures
+
+A pinned capture stays above every window until you press <Keys k="Esc" /> or <Keys k="⌘W" />, or click its close glyph.
+
+<Shot name="capture-4-pinned-dark" alt="A pinned capture floating as its own window, with its markup in place." />
+
+## Settings
+
+All in <Path to="Settings → Tray → Screenshots" />.
+
+| Setting | What it does | Starts as |
+|---|---|---|
+| Capture with <Keys k="⌃⌥S" /> | The keyboard shortcut. The menu bar menu still works without it | On |
+| Shutter sound | The Screenshot app's click when a capture is taken | On |
+| After capture | What Return does: **Copy**, **Save** or **Copy and save** | Copy |
+
+<Note>Capture needs Screen Recording. macOS asks the first time you capture. After a refusal, <Path to="Settings → Permissions" /> opens its pane in System Settings.</Note>

@@ -1,0 +1,66 @@
+---
+title: Command field
+description: Timers, notes, reminders, toggles and sums, all from one field.
+---
+
+Press <Keys k="⌃⌥K" /> from anywhere, or click **Type a command** in the open notch's header. With nothing typed, it suggests one of each thing it can do.
+
+<Shot name="command-1-empty" eager alt="The command field open and empty, suggesting a timer, a note, a reminder, Dark Mode, a profile and a sum." />
+
+## What you can type
+
+| Type | And Dynotch |
+|---|---|
+| `tea 4m` | Starts a timer called Tea |
+| `note Buy coffee` | Adds a note |
+| `remind Call Sam 5pm` | Adds a reminder |
+| `18% of 240` | Answers, and Return copies it |
+| `5 km to mi` | Converts, and Return copies it |
+| `dark` | Flips Dark Mode |
+| `awake` | Keeps the Mac awake |
+| `mute` | Mutes the microphone |
+| `pomodoro` | Starts or pauses a focus session |
+| `stopwatch` | Starts or pauses the stopwatch |
+| `color` | Picks a color from the screen and copies its hex code |
+| `screenshot` | Starts a [capture](/dynotch/capture/) |
+| `sleep` | Sleeps the display |
+| `run Morning routine` | Runs a Shortcut |
+| `Work`, or `profile Work` | Switches to that [profile](/dynotch/profiles/) |
+| `tray`, `focus`, `control` | Opens a tab |
+| `settings` | Opens Settings |
+
+It also finds notes and Tray files by what's in their names and text, so typing a word from a note brings it up.
+
+<Note>`focus` starts with the same word as a focus session, so that row comes first and Return runs it. To open the tab, press <Keys k="↓" /> first.</Note>
+
+## Timers
+
+A name and a time starts a timer. `eggs 90s`, `nap 1h30` and `laundry 45` all work, and a number on its own means minutes. Timers run up to 24 hours. See [Focus](/dynotch/focus/#named-timers).
+
+<Shot name="command-2-timer" alt="The command field with tea 4m typed in, offering to start Tea for four minutes." />
+
+## Reminders
+
+The time comes out of the title, so `remind Call Sam 5pm` makes a reminder called "Call Sam", due at five. A time that's passed means tomorrow.
+
+<Shot name="command-4-reminder" alt="The command field with remind Call Sam 5pm typed in, offering a reminder called Call Sam for today at 17:00." />
+
+The reminder goes to the Reminders app, so it needs the Reminders permission. The field asks for it the first time.
+
+## Sums and conversions
+
+Answers show up as you type, and Return copies them.
+
+<Shot name="command-3-sum" alt="The command field with 18% of 240 typed in, answering 43.2." />
+
+## Moving around
+
+| Key | What it does |
+|---|---|
+| <Keys k="↑ ↓" /> | Picks a row |
+| <Keys k="Return" /> | Runs it |
+| <Keys k="Esc" /> | Clears what's typed, and then leaves |
+
+## Turning it off
+
+**Open it with <Keys k="⌃⌥K" />** in <Path to="Settings → General → Command field" /> turns off the shortcut. The field is still there in the open notch's header.

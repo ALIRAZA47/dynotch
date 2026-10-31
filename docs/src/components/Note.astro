@@ -1,0 +1,23 @@
+---
+interface Props {
+  warn?: boolean;
+}
+
+const { warn = false } = Astro.props;
+---
+
+<aside class:list={['note', { warn }]}>
+  <svg aria-hidden="true" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round">
+    {
+      warn ? (
+        <path d="M9 2.6 16.4 15H1.6L9 2.6ZM9 7.5v3.7M9 13.1v.1" stroke-linejoin="round" />
+      ) : (
+        <>
+          <circle cx="9" cy="9" r="7" />
+          <path d="M9 8.2V13M9 5.2v.1" />
+        </>
+      )
+    }
+  </svg>
+  <div class="note-body"><slot /></div>
+</aside>

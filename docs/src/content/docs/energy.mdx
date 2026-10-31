@@ -1,0 +1,37 @@
+---
+title: Energy
+description: Dynotch runs all day, so it keeps quiet when nobody's looking.
+---
+
+## When you're away
+
+While the displays sleep, the screen is locked, the screen saver runs or another user has the Mac, nothing polls. The notch closes and takes its views off the screen, which stops their animations, the Control tab's sampling, the Mirror's camera and the live equalizer's audio tap.
+
+Timers still end on time, with their sound. When you're back, whatever came due meanwhile runs once.
+
+## On battery
+
+On battery and in Low Power Mode, the polls run less often. Everything else (music, volume, the microphone, notifications, files arriving) is driven by events, so it costs nothing until something happens.
+
+| Poll | On power | On battery | Low Power Mode |
+|---|---|---|---|
+| Control tab's system line, only while it's open | 1.5 s | 3 s | 5 s |
+| Focus schedules | 30 s | 1 min | 2 min |
+| Event alerts | 30 s | 45 s | 45 s |
+| Bluetooth batteries | 2 min | 5 min | 10 min |
+| Weather | 10 min | 15 min | 20 min |
+| The Screenshot app's save folder | 1 min | 2 min | 5 min |
+| A download: moving, stalled, still for half an hour | 1 s, 10 s, 30 s | 2 s, 20 s, 1 min | 3 s, 30 s, 2 min |
+| A running timer's countdown | 0.5 s | 0.5 s | 1 s |
+| Update check, with **Check automatically** on | 24 h | 24 h | 24 h |
+| Accessibility, for up to 10 minutes after asking for it | 2 s | 2 s | 4 s |
+
+## How much that is
+
+With Focus, events, weather, Bluetooth and screenshots on, the polls run about 310 times an hour on power, 170 on battery, 120 in Low Power Mode, and none while the displays sleep. Timers get leeway, so macOS runs them alongside other wakeups.
+
+The equalizer's bars bounce in Core Animation, which the window server runs without waking the app. The closed notch with music playing wakes Dynotch about once every three seconds, the same as with nothing playing.
+
+## Measuring it yourself
+
+`Dynotch --energy-probe` counts how often the polls would run and wake the Mac in an hour, in each of these conditions. `Dynotch --energy-probe notch` measures just the closed notch.

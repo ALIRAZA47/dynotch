@@ -1,0 +1,52 @@
+---
+title: Privacy and network
+navTitle: Privacy and network
+description: What stays on your Mac, and the few things that leave it.
+---
+
+Dynotch has no account, no analytics and no server of its own. It runs on your Mac, and it talks to the network for exactly three things.
+
+## What leaves your Mac
+
+| For | It talks to | What it sends |
+|---|---|---|
+| Update checks | `api.github.com` | One request that carries nothing but the app's version. Once a day with **Check automatically** on, and when you ask |
+| Installing an update | GitHub | Downloads the release's zip, when you click **Install and Relaunch** |
+| Weather | `api.open-meteo.com` | The coordinates of your city, or of your Mac with **Use my location** on, rounded to about a kilometer |
+| Finding a city | `geocoding-api.open-meteo.com` | What you type in the city search, and your system's language |
+| Naming your town | Apple | With **Use my location** on: where your Mac is, to find the town's name for the widget |
+| Artwork from Spotify | Spotify's image servers | Asks for the link Spotify gave it |
+| Artwork from Apple Music | `itunes.apple.com` and Apple's image servers | For a track with no artwork of its own: the artist and album, or the title if it has no album, to find it |
+
+**Join** opens a meeting's link in the app that handles it.
+
+## What stays on your Mac
+
+| What | Where |
+|---|---|
+| Settings | The preferences domain `app.dynotch.Dynotch` |
+| Notes | `~/Library/Application Support/Dynotch/Notes`, or the folder you chose. If that's iCloud Drive, they sync through it |
+| The Tray's list | `~/Library/Application Support/Dynotch/tray.json` |
+| Tray files | `~/Library/Application Support/Dynotch/Tray`, for copies with **Keep copies** on, and for files made from dropped images, links and text |
+
+## Notifications
+
+Dynotch reads Notification Center's database, opened read-only. It shows a notification and forgets it: nothing a notification says is logged or saved. All it keeps, and only while it runs, is the time of the newest notification it has seen and the row numbers of the last few, so it doesn't show one twice.
+
+## Camera and microphone
+
+- **Mirror** turns the camera on only when you click it, and it stops when the widget leaves the screen.
+- **Live equalizer** listens to Music or Spotify only while it plays and some bars are on screen, and nothing is recorded.
+- The **on-air ring** shows when a camera or the mic is in use. It reads that state, not what they capture.
+
+## Sharing your screen
+
+Peeks stay hidden while a Focus is on and while a display is mirrored. Dynotch can't tell when the screen is shared, so turn on **Hide message text** in <Path to="Settings → Live Activities → Notifications" /> if you share it.
+
+## Security
+
+- The app is signed with the hardened runtime, which keeps other processes from loading code into it. `Support/Dynotch.entitlements` lists what it may still reach: the camera, location, calendars and Apple events.
+- Downloaded updates are checked against the certificate of the copy you have.
+- `dynotch://` links can only do what you could see and undo. See [What links can't do](/dynotch/links/#what-links-cant-do).
+
+To report a security problem, see the [security policy](https://github.com/ALIRAZA47/dynotch/blob/main/.github/SECURITY.md).

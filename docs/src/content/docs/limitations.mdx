@@ -1,0 +1,40 @@
+---
+title: Limitations
+description: What Dynotch can't do, and why.
+---
+
+## Now Playing covers Apple Music and Spotify
+
+Since macOS 15.4, other players (browsers, Podcasts and so on) only report to the private MediaRemote framework, which macOS reserves for Apple-signed processes. Apps that show every player work around this by loading code into an Apple-signed binary. Dynotch doesn't do that.
+
+## The volume HUD shows alongside the system's
+
+The volume and brightness HUD appears alongside the system one unless **Replace system HUD** is on, which needs Accessibility. See [Audio and keys](/dynotch/audio-keys/#replace-system-hud).
+
+## The equalizer is decorative by default
+
+The bars are decorative unless **Live equalizer** is on. That needs macOS 14.2 or later and the System Audio Recording permission, and follows Music and Spotify only. macOS has no public API to check that permission, so Dynotch asks the private TCC framework, as other audio tools do.
+
+## Brightness relies on a private framework
+
+The brightness HUD and the Control tab's brightness slider reach the built-in display through the private DisplayServices framework. If that's unavailable, the HUD stays quiet and the slider isn't shown.
+
+## Which Focus is on is read from undocumented files
+
+Which Focus is on comes from Focus settings files that Apple doesn't document. A scheduled Focus switched off by hand is recognized by the record macOS keeps of what was switched off, using the key names in macOS's own Focus code, but that hasn't been checked against a real switch-off yet. See [The notch shows the wrong Focus](/dynotch/troubleshooting/#the-notch-shows-the-wrong-focus).
+
+## Notification peeks read an undocumented database
+
+Its location and layout have changed between macOS versions before. If they change again, Settings says notifications can't be read on that Mac. They were last checked on macOS 27.0.1.
+
+## Glass needs macOS 26
+
+Liquid Glass is on macOS 26 and later. On earlier versions, the open notch is black.
+
+## Not notarized
+
+Dynotch isn't notarized by Apple, so the first launch needs [one extra step](/dynotch/install/#get-past-the-first-launch).
+
+## Left out on purpose
+
+Not included from MacNotch: AI translation, and Night Shift and True Tone toggles, which have no public API.

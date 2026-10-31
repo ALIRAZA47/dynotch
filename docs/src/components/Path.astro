@@ -1,0 +1,10 @@
+---
+interface Props {
+  /** Where something is, as `Settings → Tray → Keep copies`. */
+  to: string;
+}
+
+const steps = Astro.props.to.split(' → ');
+---
+
+<span class="path">{steps.map((step, index) => (index === 0 ? step : <><span class="path-sep">›</span>{step}</>))}</span>

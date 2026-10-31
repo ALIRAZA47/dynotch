@@ -1,0 +1,50 @@
+---
+title: Install
+description: Download the disk image, drag Dynotch to Applications and open it.
+---
+
+Dynotch needs macOS 14 or later. It's made for MacBooks with a notch, and draws a virtual one on displays without.
+
+## Download
+
+Get `Dynotch-<version>.dmg` from the [latest release](https://github.com/ALIRAZA47/dynotch/releases/latest). Or use the [GitHub CLI](https://cli.github.com):
+
+```bash
+gh release download --repo ALIRAZA47/dynotch --pattern '*.dmg'
+```
+
+## Put it in Applications
+
+1. Open the disk image.
+2. Drag **Dynotch** onto **Applications**.
+3. Open Dynotch from Applications.
+
+## Get past the first launch
+
+Dynotch isn't notarized by Apple, so the first time you open it, macOS says it can't check it for malicious software.
+
+1. Click **Done**.
+2. Open <Path to="System Settings → Privacy & Security" />.
+3. Under **Security**, click **Open Anyway** next to the message about Dynotch.
+
+Or remove the download mark in Terminal instead:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/Dynotch.app
+```
+
+<Note>A disk image fetched with `gh` doesn't carry that mark, so macOS doesn't ask.</Note>
+
+## Check the download
+
+Each release lists the SHA-256 checksums of its disk image and zip at the end of its notes. To compare yours:
+
+```bash
+shasum -a 256 Dynotch-*.dmg
+```
+
+## What happens next
+
+Dynotch lives in the notch and the menu bar. It only shows in the Dock while Settings or the tour is open. On first launch the [welcome tour](/dynotch/first-run/) walks through the permissions worth allowing, and <Path to="Settings → Permissions" /> lists them all.
+
+To use the `dynotch` command from Terminal, see [The dynotch command](/dynotch/dynotch-command/).

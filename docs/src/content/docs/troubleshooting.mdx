@@ -1,0 +1,65 @@
+---
+title: Troubleshooting
+description: The usual suspects, and what to do about them.
+---
+
+## macOS says it can't check Dynotch
+
+Dynotch isn't notarized. Click **Done**, then **Open Anyway** under **Security** in <Path to="System Settings → Privacy & Security" />. See [Install](/dynotch/install/#get-past-the-first-launch).
+
+## No notification peeks
+
+Go through these in order:
+
+1. **The switch.** **Notifications** has to be on in <Path to="Settings → Live Activities" />. With it off, the section the next two steps need is hidden.
+2. **Full Disk Access.** <Path to="Settings → Live Activities → Notifications" /> says **Needs Full Disk Access** when it's missing. Turn it on in System Settings, and reopen Dynotch if macOS asks.
+3. **The app.** Check it's picked under **Show notifications from**.
+4. **A Focus.** Peeks stay hidden while any Focus is on.
+5. **A mirrored display.** Peeks stay hidden while a display is mirrored.
+6. **Notification Center.** The app's **Show in Notification Center** has to stay on, because that's where Dynotch reads them from.
+
+Peeks also come a few seconds after the system banner. [Here's why](/dynotch/notifications/#why-its-a-few-seconds-behind).
+
+## The system banner still shows
+
+Dynotch only reads notifications, so macOS keeps showing its own banner. To see only the peek, set the app's alert style to **None**. See [Showing only the peek](/dynotch/notifications/#showing-only-the-peek).
+
+## Nothing shows for Focus
+
+macOS only tells apps whether a Focus is on, so Dynotch reads which one from the Focus settings, which takes Full Disk Access. Without it, nothing shows.
+
+## The notch shows the wrong Focus
+
+<Path to="Settings → About → Diagnostics" /> saves a report of what the Focus settings hold. It keeps their shape, identifiers and times, and leaves names and places out, so it can be shared. [Open an issue](https://github.com/ALIRAZA47/dynotch/issues) and attach it.
+
+## The player doesn't show what's playing
+
+The player follows Apple Music and Spotify only. [Here's why](/dynotch/limitations/#now-playing-covers-apple-music-and-spotify). If it's one of those two, check that Dynotch is allowed to control it in <Path to="System Settings → Privacy & Security → Automation" />.
+
+## No brightness slider
+
+The slider reaches the built-in display through a private framework. If that's unavailable, the slider isn't shown. It doesn't work on external displays.
+
+## Keys still show the system HUD
+
+**Replace system HUD** needs Accessibility, and **Volume & brightness** on. Keys Dynotch can't handle, like an output without a volume control or an external display, go to macOS as usual.
+
+## Install and Relaunch isn't offered
+
+A copy that can't replace itself, like one run straight from the disk image, offers **Download** instead. Put Dynotch in Applications first.
+
+## Launch at login doesn't stick
+
+Move Dynotch to Applications before turning it on. If the switch stays off, allow Dynotch in <Path to="System Settings → General → Login Items" />.
+
+## Esc doesn't close the notch
+
+The notch never takes the keyboard from the app you're in, so <Keys k="Esc" /> only reaches it while you're typing in one of its fields, or after clicking a file in the Tray. Otherwise, click anywhere outside it, move the pointer away, or press <Keys k="⌃⌥N" />.
+
+## Permissions disappeared after a rebuild
+
+That happens with an ad hoc build, which looks like a new app to macOS. Sign with the local identity. See [Build from source](/dynotch/build/#signing).
+
+## Reporting a bug
+
+[Open an issue](https://github.com/ALIRAZA47/dynotch/issues) with what you expected, what happened, your macOS version and Mac model. For anything security-related, see the [security policy](https://github.com/ALIRAZA47/dynotch/blob/main/.github/SECURITY.md) and please don't open a public issue.

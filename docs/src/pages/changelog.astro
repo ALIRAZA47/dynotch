@@ -1,0 +1,33 @@
+---
+import { getReleases, latestReleaseURL } from '../data/site';
+import Doc from '../layouts/Doc.astro';
+
+const releases = await getReleases();
+const formatted = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+const headings = releases.map((release) => ({
+  depth: 2,
+  slug: `v${release.version.replaceAll('.', '-')}`,
+  text: release.version,
+}));
+---
+
+<Doc slug="changelog" title="Changelog" description="What each version brought." {headings}>
+  {
+    releases.length === 0 && (
+      <p>
+        <a href={latestReleaseURL}>The releases are on GitHub.</a>
+      </p>
+    )
+  }
+  {
+    releases.map((release, index) => (
+      <section>
+        <h2 id={headings[index].slug}>{release.version}</h2>
+        <p>
+          {formatted.format(release.date)} · <a href={release.url}>Release notes and downloads</a>
+        </p>
+        <Fragment set:html={release.html} />
+      </section>
+    ))
+  }
+</Doc>

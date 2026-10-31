@@ -1,0 +1,68 @@
+---
+title: Tray
+description: A shelf in the notch for the files you're using.
+open:
+  label: Open the Tray
+  href: dynotch://open?tab=tray
+---
+
+Tray items keep their Quick Look thumbnails and sizes, drag back out to any app, and survive relaunches.
+
+<Shot name="12-open-tray" eager alt="The Tray tab with five files on a shelf and a tile for adding more." />
+
+## Keeping files
+
+Drag files toward the notch and it opens with four drop zones. Let go on the one you want.
+
+<Shot name="13-open-tray-dropping" alt="The four drop zones: Keep in Tray, AirDrop, Compress and Copy to." />
+
+| Zone | What it does |
+|---|---|
+| Keep in Tray | Stashes them for later |
+| AirDrop | Sends them nearby |
+| Compress | Makes a .zip |
+| Copy to… | Asks for a folder, and copies them there |
+
+Only files and images open the notch as you drag. With the Tray already open, you can drop links and text on it too, and they become files, as dropped images do. The last tile, which takes whatever room the files leave, adds files from an Open panel.
+
+## Previewing
+
+Click a file and press <Keys k="Space" /> to see it in Quick Look, as in Finder. The arrow keys move between files.
+
+<Shot name="92-open-tray-selected" alt="The Tray with Hero shot.png selected." />
+
+## What a file can do
+
+Right-click a file for the full list:
+
+- Quick Look, Open, Open With and Show in Finder
+- Copy, AirDrop and Share
+- Compress and Extract
+- Convert Image to PNG, JPEG or HEIC, and Make Smaller
+- Copy to…, Move to… and Remove
+
+The toolbar above the shelf AirDrops, shares, compresses or clears everything at once.
+
+## Screenshots
+
+New screenshots and screen recordings land in the Tray as macOS saves them, from whichever folder the Screenshot app uses. Turn this off with **Add screenshots to the tray** in <Path to="Settings → Tray → Screenshots" />.
+
+Dynotch's own [captures](/dynotch/capture/) save to the same folder, so they land there too.
+
+## Copies or originals
+
+By default a Tray item points at the file where it is, so moving or deleting the original affects the item.
+
+With **Keep copies** on in <Path to="Settings → Tray → Dropping files" />, the Tray keeps its own copy of every dropped file, so the originals can be moved or deleted. Copies go to the Trash when you remove them.
+
+## Settings
+
+| Setting | What it does | Starts as |
+|---|---|---|
+| Open on drag | Opens the Tray when files are dragged toward the notch | On |
+| Keep copies | Keeps a copy of every dropped file | Off |
+| Add screenshots to the tray | New screenshots and screen recordings show up here | On |
+
+**Show Folder** and **Clear Tray** are at the bottom of the same page. To send finished downloads here as well, turn on **Downloads to the Tray** in <Path to="Settings → Live Activities → Options" />.
+
+From a script, `dynotch tray` adds files. See [The dynotch command](/dynotch/dynotch-command/#tray).

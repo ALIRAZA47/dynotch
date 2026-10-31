@@ -1,0 +1,41 @@
+---
+import type { MarkdownHeading } from 'astro';
+import { getLatest, repositoryURL } from '../data/site';
+import Sheet from './Sheet.astro';
+
+interface Props {
+  /** The sections of the page you're on. */
+  headings?: MarkdownHeading[];
+}
+
+const { headings = [] } = Astro.props;
+const base = import.meta.env.BASE_URL;
+const { download } = await getLatest();
+---
+
+<Sheet id="more" title="More">
+  {
+    headings.length > 0 && (
+      <section>
+        <p class="sheet-label">On this page</p>
+        <div class="sheet-list pane">
+          {headings.map((heading) => (
+            <a href={`#${heading.slug}`}>{heading.text}</a>
+          ))}
+        </div>
+      </section>
+    )
+  }
+  <section>
+    <p class="sheet-label">Theme</p>
+    <div class="sheet-theme well" role="group" aria-label="Theme">
+      <button type="button" data-set-theme="dark">Dark</button>
+      <button type="button" data-set-theme="light">Light</button>
+    </div>
+  </section>
+  <section class="sheet-list pane">
+    <a href={download}>Download for Mac</a>
+    <a href={`${base}changelog/`}>Changelog</a>
+    <a href={repositoryURL}>GitHub</a>
+  </section>
+</Sheet>
