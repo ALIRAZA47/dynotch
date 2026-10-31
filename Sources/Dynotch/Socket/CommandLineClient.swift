@@ -4,10 +4,11 @@ import Foundation
 /// `scripts/dynotch` comes here for those and keeps to `dynotch://` links for the rest. This runs
 /// before anything of the app starts, and it never touches the app's settings.
 enum CommandLineClient {
-    /// What a command reads and writes, so tests can stand in for the terminal.
+    /// What a command reads and writes, so tests can stand in for the terminal. These are the calls
+    /// that throw: the older ones raise an exception that ends the process if either end is closed.
     struct IO {
-        var input: () -> Data = { FileHandle.standardInput.readDataToEndOfFile() }
-        var output: (String) -> Void = { FileHandle.standardOutput.write(Data($0.utf8)) }
+        var input: () -> Data = { (try? FileHandle.standardInput.readToEnd()) ?? Data() }
+        var output: (String) -> Void = { try? FileHandle.standardOutput.write(contentsOf: Data($0.utf8)) }
         var error: (String) -> Void = { FileHandle.standardError.write(Data($0.utf8)) }
         var environment = ProcessInfo.processInfo.environment
     }
@@ -121,6 +122,7 @@ enum CommandLineClient {
             if let detail = script["detail"] as? String { line += " · \(detail)" }
             lines.append(line)
         }
+        if let usage = report["usage"] as? [String: Any], let line = UsageStatusLine.summary(of: usage) { lines.append(line) }
         return lines.joined(separator: "\n") + "\n"
     }
 

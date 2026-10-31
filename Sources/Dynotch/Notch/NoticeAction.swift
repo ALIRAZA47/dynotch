@@ -13,6 +13,8 @@ struct NoticeAction: Equatable {
         case openTab(NotchTab)
         case installUpdate
         case showRecent
+        /// Claude's usage, in the glance.
+        case showUsage
         /// Back to the terminal a command ran in.
         case focusTerminal(TerminalOrigin)
     }
@@ -47,6 +49,10 @@ struct NoticeAction: Equatable {
         case .showRecent:
             if !fromRecent { center.dismissNotice() }
             viewModel.showRecent()
+            return
+        case .showUsage:
+            if !fromRecent { center.dismissNotice() }
+            viewModel.showUsage()
             return
         case .focusTerminal(let origin):
             origin.focus()
