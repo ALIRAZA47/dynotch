@@ -40,6 +40,8 @@ final class NotesStore: ObservableObject {
 
     /// ~/Library/Application Support/Dynotch/Notes
     let defaultFolder: URL
+    /// How long after a failed save it's tried again.
+    var retryDelay: Duration = .seconds(30)
 
     private var stream: FSEventStreamRef?
     private var saveTasks: [Note.ID: Task<Void, Never>] = [:]
@@ -67,6 +69,13 @@ final class NotesStore: ObservableObject {
         }
     }
 
+    /// A store that keeps to `folder`, for the tests, which must never reach the real notes.
+    init(folder: URL) {
+        defaultFolder = folder
+        self.folder = folder
+        folderWasMissing = false
+    }
+
     var current: Note? { notes.first { $0.id == currentID } }
 
     var isUsingDefaultFolder: Bool { folder.standardizedFileURL == defaultFolder.standardizedFileURL }
@@ -91,12 +100,7 @@ final class NotesStore: ObservableObject {
     func update(_ id: Note.ID, text: String) {
         guard let index = notes.firstIndex(where: { $0.id == id }), notes[index].text != text else { return }
         notes[index].text = text
-        saveTasks[id]?.cancel()
-        saveTasks[id] = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(0.6))
-            guard !Task.isCancelled else { return }
-            self?.save(id)
-        }
+        scheduleSave(id, after: .seconds(0.6))
     }
 
     func select(_ id: Note.ID) {
@@ -159,7 +163,7 @@ final class NotesStore: ObservableObject {
     func bringLeftBehind() {
         guard let leftBehind else { return }
         saveAll()
-        move(Self.noteFiles(in: leftBehind.folder), to: folder)
+        move(Self.noteFiles(in: leftBehind.folder) ?? [], to: folder)
         self.leftBehind = nil
         notes = []
         reload()
@@ -189,11 +193,19 @@ final class NotesStore: ObservableObject {
     // MARK: Saving
 
     func saveAll() {
-        for (id, task) in saveTasks {
-            task.cancel()
-            save(id)
-        }
+        saveTasks.values.forEach { $0.cancel() }
         saveTasks.removeAll()
+        // Every note, not just those with a save waiting: `save` passes over the ones with nothing new.
+        notes.map(\.id).forEach(save)
+    }
+
+    private func scheduleSave(_ id: Note.ID, after delay: Duration) {
+        saveTasks[id]?.cancel()
+        saveTasks[id] = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            self?.save(id)
+        }
     }
 
     private func save(_ id: Note.ID) {
@@ -208,7 +220,11 @@ final class NotesStore: ObservableObject {
             let name = NoteLine.fileName(for: note.text)
             if !note.isOnDisk || (!note.isBlank && !Self.isNamed(url, after: name)) {
                 let target = FileActions.uniqueURL(for: folder.appendingPathComponent(name + ".md"))
-                if note.isOnDisk { try FileManager.default.moveItem(at: url, to: target) }
+                if note.isOnDisk {
+                    try FileManager.default.moveItem(at: url, to: target)
+                    // Now, so that a retry after a failed write doesn't look for the old name.
+                    notes[index].url = target
+                }
                 url = target
             }
             try note.text.write(to: url, atomically: true, encoding: .utf8)
@@ -219,6 +235,7 @@ final class NotesStore: ObservableObject {
             if id == currentID { UserDefaults.dynotch.set(url.lastPathComponent, forKey: Self.currentKey) }
         } catch {
             saveFailed = true
+            scheduleSave(id, after: retryDelay)
         }
     }
 
@@ -251,14 +268,22 @@ final class NotesStore: ObservableObject {
     // MARK: Loading
 
     /// Reads every Markdown file in the folder. Notes edited here keep their edits; others take what's on disk.
-    private func reload() {
-        let files = Self.noteFiles(in: folder)
+    func reload() {
+        // A folder that can't be read just now says nothing about its notes, so they stay as they are.
+        guard let files = Self.noteFiles(in: folder) else {
+            if notes.isEmpty { newNote() }
+            return
+        }
         let paths = Set(files.map(\.standardizedFileURL.path))
         let known = Dictionary(notes.map { ($0.url.standardizedFileURL.path, $0) }, uniquingKeysWith: { first, _ in first })
         var gone = notes.filter { $0.isOnDisk && !paths.contains($0.url.standardizedFileURL.path) }
         var loaded: [Note] = []
         for url in files {
-            guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+                // Not readable as text just now. A note we have keeps what it has.
+                if let note = known[url.standardizedFileURL.path], note.isOnDisk { loaded.append(note) }
+                continue
+            }
             if var note = known[url.standardizedFileURL.path] {
                 if text != note.savedText {
                     // Changed elsewhere. Unsaved edits here win; they're written out shortly.
@@ -276,6 +301,11 @@ final class NotesStore: ObservableObject {
                 loaded.append(Note(id: UUID(), url: url, text: text, savedText: text, isOnDisk: true, created: created))
             }
         }
+        // Gone from the folder with edits that never reached it: they stay, and save as a new file.
+        for var note in gone where note.text != note.savedText && !note.isBlank {
+            note.isOnDisk = false
+            loaded.append(note)
+        }
         loaded += notes.filter { !$0.isOnDisk }
         loaded.sort { $0.created < $1.created }
         if loaded != notes { notes = loaded }
@@ -287,10 +317,11 @@ final class NotesStore: ObservableObject {
         if notes.isEmpty { newNote() }
     }
 
-    private static func noteFiles(in folder: URL) -> [URL] {
+    /// The folder's notes, or nil when it can't be listed, which isn't the same as having none.
+    private static func noteFiles(in folder: URL) -> [URL]? {
         let keys: [URLResourceKey] = [.creationDateKey, .isRegularFileKey]
-        return ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys,
-                                                              options: [.skipsHiddenFiles])) ?? [])
+        return (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys,
+                                                             options: [.skipsHiddenFiles]))?
             .filter { ["md", "markdown"].contains($0.pathExtension.lowercased()) }
     }
 
