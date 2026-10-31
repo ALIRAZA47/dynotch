@@ -2,9 +2,24 @@ import AppKit
 import EventKit
 import SwiftUI
 
+/// An event that's about to be added: `EventText` reads one from what's typed.
+struct NewEvent: Equatable {
+    let title: String
+    let start: Date
+    let end: Date
+}
+
+/// What `cal` asks of the calendar. The tests stand in for it, so they never reach the real one.
+@MainActor
+protocol EventAdding {
+    var hasEventAccess: Bool { get }
+    func requestEventAccess()
+    func addEvent(_ event: NewEvent) -> Bool
+}
+
 /// Upcoming events and open reminders from EventKit.
 @MainActor
-final class CalendarService: ObservableObject {
+final class CalendarService: ObservableObject, EventAdding {
     static let shared = CalendarService()
 
     struct Event: Identifiable, Equatable {
@@ -122,6 +137,26 @@ final class CalendarService: ObservableObject {
             return true
         } catch {
             NSSound.beep()
+            return false
+        }
+    }
+
+    // MARK: Events
+
+    /// Adds an event to the default calendar, which then has its own say on alerts.
+    @discardableResult
+    func addEvent(_ event: NewEvent) -> Bool {
+        guard let calendar = store.defaultCalendarForNewEvents else { return false }
+        let item = EKEvent(eventStore: store)
+        item.title = event.title
+        item.startDate = event.start
+        item.endDate = event.end
+        item.calendar = calendar
+        do {
+            try store.save(item, span: .thisEvent, commit: true)
+            loadEvents()
+            return true
+        } catch {
             return false
         }
     }

@@ -302,6 +302,9 @@ enum SnapshotRenderer {
             Scene(name: "command-17-size", phase: .open, command: "1.5 gb to mb"),
             Scene(name: "command-18-color", phase: .open, command: "#a894ff to rgb"),
             Scene(name: "command-19-date", phase: .open, command: "2026-10-31"),
+            Scene(name: "command-21-event", phase: .open, command: "cal dentist fri 3pm"),
+            Scene(name: "command-22-event-length", phase: .open, command: "cal standup mon 9am 30m"),
+            Scene(name: "command-23-event-no-time", phase: .open, command: "cal dentist fri"),
             // What's been used comes first, and the suggestions fill the rest.
             Scene(name: "command-20-learned", phase: .open, command: "", setUp: {
                 for (id, uses) in [("stopwatch", 4), ("tab-tray", 3), ("awake", 2)] {

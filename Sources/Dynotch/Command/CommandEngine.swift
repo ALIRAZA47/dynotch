@@ -63,6 +63,10 @@ enum CommandEngine {
             results.append(reminder(body))
             saidWhat = true
         }
+        if let body = remainder(of: text, after: ["calendar", "cal"]) {
+            results.append(event(body))
+            saidWhat = saidWhat || !body.isEmpty
+        }
         // These only speak for the line if they found something, so a shortcut called Connect VPN or
         // a timer called Output still get their turn.
         var found: [CommandResult] = []
@@ -164,6 +168,9 @@ enum CommandEngine {
             CommandResult(id: "brightness", symbol: "sun.max.fill", tint: .yellow, title: "Set the brightness", hint: "bright 60") { _ in
                 .fill("bright ")
             },
+            CommandResult(id: "cal", symbol: "calendar.badge.plus", tint: .red, title: "Add an event", hint: "cal Dentist fri 3pm") { _ in
+                .fill("cal ")
+            },
         ]
     }
 
@@ -207,7 +214,7 @@ enum CommandEngine {
 
     private static let learnedCommands: Set<String> = [
         "timer", "note", "remind", "dark", "awake", "mic", "pomodoro", "stopwatch", "color", "screenshot", "sleep",
-        "play", "next", "previous", "join", "volume", "brightness", "settings",
+        "play", "next", "previous", "join", "volume", "brightness", "settings", "cal",
     ]
 
     /// What goes in the history for a row. Answers all count as the one row that offers them.
@@ -253,6 +260,42 @@ enum CommandEngine {
                          detail: due.map { "\(title) · \(ReminderText.describe($0))" } ?? title)
             }
             return .close
+        }
+    }
+
+    /// An event, once the row can say when. Whatever it can't read, it says, and Return does nothing.
+    static func event(_ body: String, calendar: EventAdding? = nil, now: Date = .now) -> CommandResult {
+        let calendar = calendar ?? CalendarService.shared
+        let symbol = "calendar.badge.plus"
+        guard calendar.hasEventAccess else {
+            return CommandResult(id: "cal", symbol: symbol, tint: .red, title: "Allow Calendar first") { _ in
+                calendar.requestEventAccess()
+                return .stay
+            }
+        }
+        guard !body.isEmpty else {
+            return CommandResult(id: "cal", symbol: symbol, tint: .red, title: "Add an event", hint: "what, and when")
+        }
+        switch EventText.read(body, now: now) {
+        case .noTime:
+            return CommandResult(id: "cal", symbol: symbol, tint: .gray, title: "No time in that yet", hint: "fri 3pm")
+        case .severalTimes:
+            return CommandResult(id: "cal", symbol: symbol, tint: .gray, title: "That reads as more than one time", hint: "one at a time")
+        case .noTitle:
+            return CommandResult(id: "cal", symbol: symbol, tint: .gray, title: "An event needs a name", hint: "dentist fri 3pm")
+        case .past(let date):
+            return CommandResult(id: "cal", symbol: symbol, tint: .gray, title: "That time has passed", hint: ReminderText.describe(date))
+        case .event(let event):
+            let when = ReminderText.describe(event.start)
+            return CommandResult(id: "cal", symbol: symbol, tint: .red, title: "Add event: \(event.title)",
+                                 hint: "\(when) · \(length(event.end.timeIntervalSince(event.start)))") { _ in
+                if calendar.addEvent(event) {
+                    announce(symbol: symbol, tint: .red, text: "Event added", detail: "\(event.title) · \(when)")
+                } else {
+                    announce(symbol: "exclamationmark.triangle.fill", tint: .orange, text: "Not added", detail: "The calendar wouldn't take it")
+                }
+                return .close
+            }
         }
     }
 
