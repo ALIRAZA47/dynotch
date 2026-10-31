@@ -226,9 +226,15 @@ final class CaptureEditor: ObservableObject {
         }
     }
 
-    /// The pointer moved with nothing pressed. `wholeDisplay` is ⌥ being held. The key overlay can
-    /// hear of moves over another display, where the point falls outside its own; the overlay
-    /// under the pointer reports those.
+    /// The pointer moved with nothing pressed, at a point on the desktop in AppKit's coordinates.
+    /// The key overlay can hear of moves over another display, so it's the point that says which
+    /// display they're on, not who reported them.
+    func mouseMoved(toDesktop point: CGPoint, wholeDisplay: Bool = false) {
+        guard let display = displays.first(where: { $0.frame.contains(point) }) else { return }
+        mouseMoved(to: display.localPoint(fromDesktop: point), on: display.id, wholeDisplay: wholeDisplay)
+    }
+
+    /// The pointer moved with nothing pressed, in a display's own points. `wholeDisplay` is ⌥ being held.
     func mouseMoved(to point: CGPoint, on displayID: CGDirectDisplayID, wholeDisplay: Bool = false) {
         guard let display = display(displayID), CGRect(origin: .zero, size: display.size).contains(point) else { return }
         pointer = (point, displayID)

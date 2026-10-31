@@ -78,7 +78,10 @@ final class CaptureOverlayWindow: NSPanel {
             // SwiftUI gets it too, for the toolbar's hover highlights.
             super.sendEvent(event)
             let point = localPoint(event)
-            editor.mouseMoved(to: point, on: display.id, wholeDisplay: event.modifierFlags.contains(.option))
+            // Where it is on the desktop, from the display's frame: the overlay's, or off screen in a test.
+            editor.mouseMoved(toDesktop: CGPoint(x: display.frame.minX + event.locationInWindow.x,
+                                                 y: display.frame.minY + event.locationInWindow.y),
+                              wholeDisplay: event.modifierFlags.contains(.option))
             (editor.isOverChrome(point, on: display.id) ? NSCursor.arrow : editor.cursor(at: point, on: display.id)).set()
         case .flagsChanged:
             super.sendEvent(event)

@@ -321,6 +321,15 @@ struct CaptureWindowTests {
         #expect(editor.hoveredWindow == front)
     }
 
+    /// The point says which display a move is on, whichever overlay heard it.
+    @Test func aMoveOnTheDesktopFindsItsDisplay() {
+        let second = CaptureWindow(id: 3, appName: "Mail", frame: CGRect(x: 50, y: 50, width: 300, height: 300))
+        let editor = editor(display(windows: [front]), display(id: 2, frame: CGRect(x: 1280, y: 0, width: 800, height: 600), windows: [second]))
+        editor.mouseMoved(toDesktop: CGPoint(x: 1380, y: 500))
+        #expect(editor.hoveredWindow == second)
+        #expect(editor.hoveredDisplay == 2)
+    }
+
     @Test func noPublishWhileTheTargetStaysTheSame() {
         let editor = twoWindows
         editor.mouseMoved(to: inBoth, on: 1)
