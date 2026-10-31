@@ -7,7 +7,8 @@
 # on your PATH. DYNOTCH_LONG_COMMAND sets the threshold in seconds (30 by default).
 # The notice names the command alone, such as "make": its arguments can hold tokens
 # and passwords, and the notch is on screen when you share it. To show them anyway,
-# set DYNOTCH_LONG_COMMAND_DETAIL=full.
+# set DYNOTCH_LONG_COMMAND_DETAIL=full. It also says which terminal and folder the
+# command ran in, so a button on the notice can go back there.
 
 zmodload zsh/datetime
 typeset -g _dynotch_started _dynotch_command
@@ -50,10 +51,23 @@ _dynotch_precmd() {
         what=$(_dynotch_name "$_dynotch_command")
     fi
     local detail="$what · $took"
-    if (( exit_code == 0 )); then
-        "$bin" notify "Done" --detail "$detail" --symbol checkmark.circle.fill --tint green &!
+    # Where it ran, for the notice's button back there. Inside tmux no tab can be picked, and the
+    # session and tty are the pane's, so the marker and the app are all that go along.
+    local -a origin
+    origin=(--folder "$PWD")
+    [[ -n ${__CFBundleIdentifier:-} ]] && origin+=(--bundle "$__CFBundleIdentifier")
+    if [[ -n ${TMUX:-} ]]; then
+        origin+=(--terminal tmux)
     else
-        "$bin" notify "Failed" --detail "$detail" --symbol xmark.octagon.fill --tint red &!
+        local session=${ITERM_SESSION_ID:-${TERM_SESSION_ID:-}}
+        [[ -n ${TERM_PROGRAM:-} ]] && origin+=(--terminal "$TERM_PROGRAM")
+        [[ -n $session ]] && origin+=(--session "$session")
+        [[ -n ${TTY:-} ]] && origin+=(--tty "$TTY")
+    fi
+    if (( exit_code == 0 )); then
+        "$bin" notify "Done" --detail "$detail" --symbol checkmark.circle.fill --tint green "${origin[@]}" &!
+    else
+        "$bin" notify "Failed" --detail "$detail" --symbol xmark.octagon.fill --tint red "${origin[@]}" &!
     fi
 }
 

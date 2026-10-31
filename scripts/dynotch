@@ -4,6 +4,7 @@
 #
 #   dynotch notify TEXT [--detail TEXT] [--symbol SF_SYMBOL] [--tint COLOR] [--seconds N]
 #                       [--button TITLE --url https://...] [--key NAME]
+#                       [--terminal NAME] [--session ID] [--tty PATH] [--folder PATH] [--bundle ID]
 #   dynotch open [home|tray|focus|stats|agents]
 #   dynotch close
 #   dynotch timer [start|pause|toggle|reset|skip]
@@ -19,10 +20,12 @@
 # a small terminal badge, so it can't pass for one of Dynotch's own. Tray items
 # point at the files where they are; nothing under ~/Library is taken. A progress
 # line is keyed by NAME, and goes away if its script is quiet for two minutes.
+# --terminal and the options after it say where a command ran, for a button on the
+# notice that goes back there. A terminal Dynotch doesn't know gets no button.
 set -euo pipefail
 
 usage() {
-    sed -n '5,22p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '5,24p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -62,7 +65,7 @@ case "$command" in
         shift
         while [ $# -gt 0 ]; do
             case "$1" in
-                --detail|--symbol|--tint|--seconds|--button|--url|--key)
+                --detail|--symbol|--tint|--seconds|--button|--url|--key|--terminal|--session|--tty|--folder|--bundle)
                     [ $# -gt 1 ] || usage 1
                     query+="&${1#--}=$(encode "$2")"
                     shift 2 ;;

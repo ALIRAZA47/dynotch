@@ -319,7 +319,7 @@ enum SnapshotRenderer {
                 QuickToggles.shared.loadSample(awakeUntil: sampleTime.addingTimeInterval(102 * 60))
             }),
             Scene(name: "79-open-tray-pinned", phase: .open, tab: .tray, setUp: { TrayStore.shared.loadSample(pinned: 1) }),
-        ] + scriptScenes(tea: tea) + agentScenes() + usageScenes() + ciScenes() + widgetScenes() + [
+        ] + scriptScenes(tea: tea) + agentScenes() + usageScenes() + ciScenes() + terminalScenes() + widgetScenes() + [
             // The other widgets beside the player, busy cards and empty ones. These change the samples, so they go last.
             Scene(name: "96-open-nook-timer-toggles", phase: .open, tab: .home, prepare: {
                 (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.timer, .toggles)
