@@ -317,8 +317,13 @@ final class ImageFileTests {
         var texts: [String] { posted.map(\.notice.text) }
     }
 
+    /// Keeps what a test is after. A notice that only says work's going on comes whenever this machine
+    /// reads slower than `patience`, as GitHub's runner does, so it stays out.
     private func collecting(_ notices: Notices) -> ImageActions.Notify {
-        { notices.posted.append(($0, $1)) }
+        { notice, seconds in
+            guard !["Reading", "Cutting out"].contains(notice.text) else { return }
+            notices.posted.append((notice, seconds))
+        }
     }
 
     // MARK: Decoding
