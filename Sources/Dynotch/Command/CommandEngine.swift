@@ -25,7 +25,8 @@ struct CommandResult: Identifiable {
 
 /// Turns what's typed into the command field into things to do: timers, notes, reminders, toggles,
 /// the music, volume and brightness, outputs and Bluetooth devices, the next meeting, profiles, tabs,
-/// Settings pages, shortcuts, sums and conversions, and the notes and Tray files that match.
+/// Settings pages, shortcuts, sums and conversions, and the notes and Tray files that match. Copied
+/// text only ever shows on a line that starts with `clip`.
 @MainActor
 enum CommandEngine {
     static let maximumResults = 6
@@ -72,6 +73,10 @@ enum CommandEngine {
         }
         results += found
         saidWhat = saidWhat || !found.isEmpty
+        if let words = remainder(of: text, after: ["clipboard", "clips", "clip"]) {
+            results.append(contentsOf: clips(matching: words, in: .shared))
+            saidWhat = true
+        }
         if let spec = remainder(of: text, after: ["timer", "start timer"]) {
             results.append(timer(spec.isEmpty ? nil : spec))
             saidWhat = true
@@ -401,6 +406,30 @@ enum CommandEngine {
                     return .close
                 }
             }
+    }
+
+    /// The clips with these words in them, pinned first. It never turns the history on: with that off
+    /// and nothing pinned, the row goes to the setting.
+    static func clips(matching words: String, in store: ClipboardStore) -> [CommandResult] {
+        let symbol = "doc.on.clipboard.fill"
+        let found = store.clips(matching: words)
+        guard found.isEmpty else {
+            return found.prefix(maximumResults).map { clip in
+                CommandResult(id: "clip-\(clip.id)", symbol: symbol, tint: .teal, title: clip.title,
+                              hint: clip.isPinned ? "pinned" : "clip") { _ in
+                    store.copy(clip)
+                    return .close
+                }
+            }
+        }
+        if !AppSettings.shared.clipboardHistory, store.clips.isEmpty {
+            return [CommandResult(id: "clip-off", symbol: symbol, tint: .teal, title: "Turn on clipboard history in Settings") { _ in
+                SettingsWindowController.shared.show(page: .tray)
+                return .close
+            }]
+        }
+        return [CommandResult(id: "clip-none", symbol: symbol, tint: .gray,
+                              title: words.isEmpty ? "Nothing copied yet" : "No clips with “\(words)”")]
     }
 
     private static func notes(matching text: String) -> [CommandResult] {

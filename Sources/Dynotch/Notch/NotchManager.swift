@@ -167,6 +167,7 @@ final class NotchManager {
     private func route(_ event: NSEvent) {
         guard !isPointerSuspended else { return }
         EnergyCoordinator.shared.sawInput()
+        ClipboardStore.shared.sawInput()
         let point = NSEvent.mouseLocation
         switch event.type {
         case .mouseMoved:

@@ -38,6 +38,9 @@ extension Cadence {
     static let trayTidying = Cadence(name: "Tray tidying", every: 3600, onBattery: 3600, lowPower: 3600)
     /// Accessibility is granted in System Settings, which doesn't tell the app.
     static let accessibilityCheck = Cadence(name: "Accessibility check", every: 2, onBattery: 2, lowPower: 4)
+    /// Nothing says when something's copied, so this compares a number, only while Clipboard history
+    /// is on. The pointer and app switches look too, so it can afford to be slow.
+    static let clipboard = Cadence(name: "Clipboard", every: 5, onBattery: 10, lowPower: 20)
 }
 
 /// Keeps Dynotch quiet when nobody's looking. Polls pause while the displays sleep, the screen is

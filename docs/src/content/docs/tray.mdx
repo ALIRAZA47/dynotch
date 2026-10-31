@@ -63,6 +63,41 @@ By default a Tray item points at the file where it is, so moving or deleting the
 
 With **Keep copies** on in <Path to="Settings → Tray → Dropping files" />, the Tray keeps its own copy of every dropped file, so the originals can be moved or deleted. Copies go to the Trash when you remove them.
 
+## Clipboard
+
+The switch above the shelf turns it over to the last 50 things you copied as text, with pins for what you reuse. This is off until you turn it on: click **Turn On** on the Clipboard side, or use **Keep clipboard history** in <Path to="Settings → Tray → Clipboard" />.
+
+A card shows a few lines of what you copied. A command or some code is set in monospace, a lone hex color fills a swatch, and a lone link shows its host.
+
+- **Click a card** to copy it back and close the notch.
+- **Right-click a card** for Copy, Pin or Unpin, Open Link on a web link, and Remove.
+- **Search clips** finds the clips with every word you type.
+- The trash button clears everything that isn't pinned. What's on the clipboard itself stays.
+
+`clip` in the [command field](/command-field/) finds them too. Dragging files to the notch still brings up the drop zones, and a drop goes back to Files.
+
+### What's kept
+
+Text, up to 100,000 characters. Copying the same thing again moves it to the front, and pins don't count toward the 50.
+
+Copies stay in memory, and they're gone when Dynotch quits or you turn the history off. Pins stay until you remove them, and they still work with the history off, though unpinning one then removes it. See [Privacy](/privacy/#clipboard).
+
+These are left out:
+
+- Files and images
+- Anything an app marks as a password or as temporary, as **Copy Code** on a login code does
+- Anything copied with a password manager in front: 1Password, Bitwarden, LastPass, Dashlane, KeePassXC, Keeper, Enpass, NordPass, Proton Pass, Passwords or Keychain Access
+- What arrives from another device through Universal Clipboard
+- Whatever was already on the clipboard when you turned this on, or when Dynotch started
+
+macOS doesn't say when something's copied, so Dynotch looks when the pointer moves, when you switch apps and every few seconds. Two copies within a few seconds, with neither of those in between, keep only the second.
+
+### If macOS asks
+
+macOS can ask before an app reads what another app copied, so your first copy after turning this on may bring up its alert. If macOS is set to ask every time, or not to allow it, Dynotch stops reading rather than bring up an alert for each copy, and says so on the Clipboard side and in Settings.
+
+The button beside that opens <Path to="System Settings → Privacy & Security → Paste from Other Apps" />. Set Dynotch to **Allow**. If that doesn't do it, quit Dynotch and open it again.
+
 ## Settings
 
 | Setting | What it does | Starts as |
@@ -71,7 +106,8 @@ With **Keep copies** on in <Path to="Settings → Tray → Dropping files" />, t
 | Keep copies | Keeps a copy of every dropped file | Off |
 | Add screenshots to the tray | New screenshots and screen recordings show up here | On |
 | Keep screenshots and downloads | How long they stay: a day, a week, or until removed | A week |
+| Keep clipboard history | The last 50 things you copy, on the Clipboard side and with `clip` in the command field | Off |
 
-**Show Folder** and **Clear Tray** are at the bottom of the same page. To send finished downloads here as well, turn on **Downloads to the Tray** in <Path to="Settings → Live Activities → Options" />.
+**Show Folder**, **Clear Tray** and **Clear Clipboard History** are on the same page. To send finished downloads here as well, turn on **Downloads to the Tray** in <Path to="Settings → Live Activities → Options" />.
 
 From a script, `dynotch tray` adds files. See [The dynotch command](/dynotch-command/#tray).

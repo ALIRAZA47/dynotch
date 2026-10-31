@@ -28,6 +28,18 @@ Dynotch has no account, no analytics and no server of its own. It runs on your M
 | Notes | `~/Library/Application Support/Dynotch/Notes`, or the folder you chose. If that's iCloud Drive, they sync through it |
 | The Tray's list | `~/Library/Application Support/Dynotch/tray.json` |
 | Tray files | `~/Library/Application Support/Dynotch/Tray`, for copies with **Keep copies** on, and for files made from dropped images, links and text |
+| Pinned clips | `~/Library/Application Support/Dynotch/clipboard.json`, which only your user can read |
+
+## Clipboard
+
+**Keep clipboard history** is off until you turn it on. While it's off, Dynotch doesn't look at the clipboard at all. With it on:
+
+- What you copy stays in memory, and it's gone when Dynotch quits or you turn this off. Only what you pin is saved.
+- Files, images, anything an app marks as a password or as temporary, copies made with a password manager in front, and what arrives through Universal Clipboard are left out, and that's decided without reading what was copied. [Here's the whole list](/tray/#whats-kept).
+- What you copied never goes in a log, a notice or the Recent list. Copying a clip back only says **Copied**, and clips only show in the command field on a line that starts with `clip`.
+- Nothing leaves your Mac.
+
+macOS may ask before Dynotch reads what another app copied. See [If macOS asks](/tray/#if-macos-asks).
 
 ## Notifications
 

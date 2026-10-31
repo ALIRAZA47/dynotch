@@ -435,6 +435,11 @@ final class AppSettings: ObservableObject {
     @Published var trayKeeps: TrayRetention = AppSettings.value("trayKeeps", TrayRetention.week) {
         didSet { save("trayKeeps", trayKeeps.rawValue) }
     }
+    /// Keeps the last 50 copies for the Tray's Clipboard side. Off until asked for: until then nothing
+    /// looks at the clipboard at all.
+    @Published var clipboardHistory: Bool = AppSettings.value("clipboardHistory", false) {
+        didSet { save("clipboardHistory", clipboardHistory) }
+    }
 
     // MARK: Capture
 

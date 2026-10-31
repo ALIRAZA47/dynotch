@@ -45,6 +45,10 @@ enum SnapshotRenderer {
         var activity: ClosedActivity = .idle
         var secondary: CompactActivity?
         var tab: NotchTab = .home
+        /// Which side of the Tray shows.
+        var traySide = NotchViewModel.TraySide.files
+        /// Typed into the Clipboard side's search field.
+        var clipSearch = ""
         var draggingFiles = false
         /// One drop target has the files over it. See `snapshotDrop`.
         var targetsDrop = false
@@ -329,7 +333,7 @@ enum SnapshotRenderer {
                 CalendarService.shared.loadSample(events: [], reminders: [])
                 NotesStore.shared.loadSample([""])
             }),
-        ] + sizeScenes() + edgeScenes(virtualNotch: virtualNotch)
+        ] + clipboardScenes() + sizeScenes() + edgeScenes(virtualNotch: virtualNotch)
 
         let settings = AppSettings.shared
         let savedTheme = settings.theme
@@ -351,7 +355,8 @@ enum SnapshotRenderer {
             let sceneGeometry = scene.geometry ?? geometry
             let viewModel = NotchViewModel(geometry: sceneGeometry)
             viewModel.stage(phase: scene.phase, activity: scene.activity, secondary: scene.secondary, tab: scene.tab,
-                            draggingFiles: scene.draggingFiles, command: scene.command, showingRecent: scene.showingRecent)
+                            traySide: scene.traySide, clipSearch: scene.clipSearch, draggingFiles: scene.draggingFiles,
+                            command: scene.command, showingRecent: scene.showingRecent)
             // The command field can make the notch taller than the setting.
             let height = max(size.height, viewModel.metrics.height + 40)
             let content = ZStack(alignment: .top) {
@@ -376,6 +381,7 @@ enum SnapshotRenderer {
         print("Wrote \(written) snapshots to \(folder.path)")
         loadSampleProfiles()
         renderSettings(into: folder)
+        renderClipboardSettings(into: folder)
         renderThemes(into: folder)
         renderProfiles(into: folder)
         renderWelcome(into: folder)
@@ -624,6 +630,38 @@ enum SnapshotRenderer {
         renderSpotlights(into: folder)
     }
 
+    /// The end of the Tray page, where the Clipboard section is: the history on, and macOS in the way.
+    private static func renderClipboardSettings(into folder: URL) {
+        let samples: [(name: String, access: ClipboardStore.Access, appearance: NSAppearance.Name)] = [
+            ("on-dark", .allowed, .darkAqua), ("on-light", .allowed, .aqua),
+            ("asks-dark", .asks, .darkAqua), ("denied-light", .denied, .aqua),
+        ]
+        var count = 0
+        for (index, sample) in samples.enumerated() where wanted("settings-5-tray-clipboard-\(sample.name)") {
+            loadClips(sampleClips, access: sample.access)
+            let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
+                                         styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
+            let navigation = SettingsNavigation()
+            navigation.page = .tray
+            SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
+            window.appearance = NSAppearance(named: sample.appearance)
+            window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -70_000))
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: .now + 1.2)
+            if let scrollView = window.contentView.flatMap(overflowingScrollView), let document = scrollView.documentView {
+                let viewport = scrollView.contentView.bounds.height
+                scrollView.contentView.scroll(to: NSPoint(x: 0, y: document.isFlipped ? document.frame.height - viewport : 0))
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+                RunLoop.main.run(until: .now + 0.8)
+            }
+            if save(window, to: folder.appendingPathComponent("settings-5-tray-clipboard-\(sample.name).png")) { count += 1 }
+            window.orderOut(nil)
+            window.close()
+        }
+        loadClips([], isOn: false)
+        print("Wrote \(count) clipboard settings snapshots to \(folder.path)")
+    }
+
     /// The Live Activities page with its preview held on each activity, as when pointing at its tile.
     private static func renderSpotlights(into folder: URL) {
         var count = 0
@@ -774,7 +812,31 @@ enum SnapshotRenderer {
         LiveActivityCenter.shared.loadSample(recents: [], unseen: 0)
         QuickToggles.shared.loadSample(awakeUntil: nil)
         TrayStore.shared.loadSample(pinned: nil)
+        loadClips([], isOn: false)
     }
+
+    /// Made-up clips, never what's really on the clipboard, which a snapshot run doesn't look at.
+    private static func loadClips(_ clips: [ClipboardStore.Clip], isOn: Bool = true, access: ClipboardStore.Access = .allowed) {
+        AppSettings.shared.clipboardHistory = isOn
+        ClipboardStore.shared.loadSample(clips, access: access)
+    }
+
+    /// One of each kind of card, and enough behind them to fill the history.
+    private static let sampleClips: [ClipboardStore.Clip] = {
+        func clip(_ text: String, minutes: Double, isPinned: Bool = false) -> ClipboardStore.Clip {
+            ClipboardStore.Clip(text: text, copiedAt: sampleTime.addingTimeInterval(-minutes * 60), isPinned: isPinned)
+        }
+        let cards = [
+            clip("git rebase -i HEAD~3", minutes: 50, isPinned: true),
+            clip("#A894FF", minutes: 1),
+            clip("https://example.com/launch/checklist?from=notch", minutes: 3),
+            clip("We're moving the launch to Tuesday, so the docs have time to catch up with the release.", minutes: 6),
+            clip("func greeting(for name: String) -> String {\n    \"Hello, \\(name)\"\n}", minutes: 9),
+            clip("Kitchen Speaker, the one on the shelf by the window", minutes: 12),
+            clip("npm run build --workspace docs", minutes: 15),
+        ]
+        return cards + (0..<43).map { clip("Sample clip \($0 + 1)", minutes: 20 + Double($0)) }
+    }()
 
     private static func loadRecents() {
         func recent(_ symbol: String, _ tint: Color, _ title: String, detail: String? = nil, minutes: Double, count: Int = 1,
@@ -899,6 +961,35 @@ enum SnapshotRenderer {
                       setUp: { (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (stack.first, stack.second) })
             }
         }
+    }
+
+    /// The Tray's Clipboard side, at the usual size and the smallest and largest, with `clip` in the
+    /// command field after them.
+    private static func clipboardScenes() -> [Scene] {
+        let pins = Array(sampleClips.prefix(1))
+        let sizes: [(suffix: String, size: CGSize?)] = [("", nil), ("-small", CGSize(width: 600, height: 196)),
+                                                        ("-large", CGSize(width: 840, height: 260))]
+        func scene(_ name: String, search: String = "", _ setUp: @escaping @MainActor () -> Void) -> [Scene] {
+            sizes.map { suffix, size in
+                Scene(name: "clipboard-\(name)\(suffix)", phase: .open, tab: .tray, traySide: .clipboard, clipSearch: search,
+                      openSize: size, setUp: setUp)
+            }
+        }
+        return scene("1-full") { loadClips(sampleClips) }
+            + scene("2-searching", search: "git") { loadClips(sampleClips) }
+            + scene("3-off") { loadClips([], isOn: false) }
+            + scene("4-off-pins") { loadClips(pins, isOn: false) }
+            + scene("5-refused") { loadClips(sampleClips, access: .asks) }
+            + scene("6-refused-empty") { loadClips([], access: .denied) }
+            + scene("7-empty") { loadClips([]) }
+            + scene("8-no-match", search: "lunch") { loadClips(sampleClips) } + [
+                Scene(name: "clipboard-9-dropping", phase: .open, tab: .tray, traySide: .clipboard, draggingFiles: true),
+                Scene(name: "clipboard-10-glass", phase: .open, tab: .tray, traySide: .clipboard,
+                      theme: NotchTheme(material: .glass, accent: .yellow), setUp: { loadClips(sampleClips) }),
+                Scene(name: "command-12-clip", phase: .open, command: "clip", setUp: { loadClips(sampleClips) }),
+                Scene(name: "command-13-clip-search", phase: .open, command: "clip build", setUp: { loadClips(sampleClips) }),
+                Scene(name: "command-14-clip-off", phase: .open, command: "clip", setUp: { loadClips([], isOn: false) }),
+            ]
     }
 
     /// Each tab at the smallest and the largest open size the settings allow, with more in every

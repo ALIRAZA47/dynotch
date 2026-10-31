@@ -1280,6 +1280,7 @@ struct TraySettings: View {
                 .padding(14)
                 .background(CardBackground())
             }
+            ClipboardSettings()
         }
     }
 }

@@ -110,7 +110,15 @@ final class NotchViewModel: ObservableObject {
             LiveActivityCenter.shared.glanceChanged(isGlancing: phase == .glance)
         }
     }
+    /// The Tray's two sides: its files, and what's been copied.
+    enum TraySide: Hashable {
+        case files, clipboard
+    }
+
     @Published var tab: NotchTab = .home
+    @Published var traySide = TraySide.files
+    /// What's typed in the Clipboard side's search field.
+    @Published var clipSearch = ""
     /// Files are being dragged toward the notch; the tray shows its drop zones.
     @Published var isDraggingFiles = false
     @Published private(set) var activity: ClosedActivity
@@ -244,6 +252,8 @@ final class NotchViewModel: ObservableObject {
 
     func open(tab: NotchTab? = nil) {
         if let tab { self.tab = tab }
+        // Whatever opens the Tray by name means its files, like a screenshot's Show.
+        if tab == .tray { traySide = .files }
         guard phase != .open else { return }
         withAnimation(.notchOpen) {
             phase = .open
@@ -285,6 +295,7 @@ final class NotchViewModel: ObservableObject {
             isShowingRecent = false
         }
         commandQuery = ""
+        clipSearch = ""
     }
 
     func setHovering(_ hovering: Bool) {
@@ -344,12 +355,15 @@ final class NotchViewModel: ObservableObject {
     // MARK: Snapshots
 
     func stage(phase: Phase, activity: ClosedActivity, secondary: CompactActivity? = nil, tab: NotchTab = .home,
+               traySide: TraySide = .files, clipSearch: String = "",
                draggingFiles: Bool = false, command: String? = nil, showingRecent: Bool = false) {
         self.phase = phase
         isShowingRecent = showingRecent
         self.activity = activity
         self.secondary = secondary
         self.tab = tab
+        self.traySide = traySide
+        self.clipSearch = clipSearch
         isDraggingFiles = draggingFiles
         isCommandMode = command != nil
         commandQuery = command ?? ""

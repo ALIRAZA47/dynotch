@@ -78,6 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // First, so a profile a rule picks is in place before the services read their settings.
         ProfileStore.shared.start()
         TrayStore.shared.load()
+        ClipboardStore.shared.start()
         NotesStore.shared.start()
         NowPlayingService.shared.start()
         PowerMonitor.shared.start()
