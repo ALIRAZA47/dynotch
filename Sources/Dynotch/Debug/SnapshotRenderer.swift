@@ -12,8 +12,11 @@ enum SnapshotRenderer {
 
     // MARK: Scratch defaults
 
-    /// One a run, so two runs side by side don't trade settings.
-    private static let scratchDomain = "app.dynotch.snapshot.\(ProcessInfo.processInfo.processIdentifier)"
+    /// One a run, so two runs side by side don't trade settings. A path, not a plain name: cfprefsd
+    /// writes out a plain name's changes up to ten seconds later, so its emptied domain would come
+    /// back to ~/Library/Preferences after the run has gone. A path is written to its file at once.
+    private static let scratchDomain = FileManager.default.temporaryDirectory
+        .appendingPathComponent("app.dynotch.snapshot.\(ProcessInfo.processInfo.processIdentifier)").path
 
     /// Points every setting at a scratch domain holding sample values. Called before anything
     /// reads a setting; `discardScratchDefaults` clears it again when the run is done.
@@ -33,8 +36,7 @@ enum SnapshotRenderer {
         UserDefaults.dynotch.removePersistentDomain(forName: scratchDomain)
         // An emptied domain still leaves its file behind, and every run has its own.
         UserDefaults.dynotch.synchronize()
-        try? FileManager.default.removeItem(at: FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Preferences/\(scratchDomain).plist"))
+        try? FileManager.default.removeItem(atPath: scratchDomain + ".plist")
     }
 
     private struct Scene {
