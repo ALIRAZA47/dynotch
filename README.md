@@ -340,6 +340,8 @@ Sources/Dynotch/
   HUD/        volume (CoreAudio) and brightness monitors, media-key tap
   Notifications/  notification peeks: Notification Center reader, settings
   Activities/ microphone and camera, downloads, Focus
+  Socket/     the local socket, the dynotch command's side of it, and what scripts report
+  Agents/     Claude Code's sessions and usage, CI, and going back to a terminal
   Profiles/   saved setups and the rules that switch them
   Settings/   settings window and permissions page
   Welcome/    the first-run welcome tour
