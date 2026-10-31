@@ -41,21 +41,32 @@ enum ImageReader {
 
     // MARK: Reading
 
+    /// Reads take turns here, on a thread that's no task's. Vision's text reader holds its thread until
+    /// work of its own has run on the threads tasks share, so reads run in tasks could fill those and
+    /// wait for each other for good, and everything else in a task would wait behind them.
+    private static let queue = DispatchQueue(label: "app.dynotch.image-reader", qos: .userInitiated)
+
+    private static func inTurn<Value: Sendable>(_ work: @escaping @Sendable () -> Value) async -> Value {
+        await withCheckedContinuation { continuation in
+            queue.async { continuation.resume(returning: work()) }
+        }
+    }
+
     static func read(_ image: CGImage) async -> Reading {
-        await Task.detached(priority: .userInitiated) { recognize(image) }.value
+        await inTurn { recognize(image) }
     }
 
     static func read(contentsOf url: URL) async throws -> Reading {
-        try await Task.detached(priority: .userInitiated) { recognize(try decode(url)) }.value
+        try await inTurn { Result { recognize(try decode(url)) } }.get()
     }
 
     /// The subject on a clear background, cropped to it.
     static func cutOut(_ image: CGImage) async throws -> CGImage {
-        try await Task.detached(priority: .userInitiated) { try subject(of: image) }.value
+        try await inTurn { Result { try subject(of: image) } }.get()
     }
 
     static func cutOut(contentsOf url: URL) async throws -> CGImage {
-        try await Task.detached(priority: .userInitiated) { try subject(of: try decode(url)) }.value
+        try await inTurn { Result { try subject(of: try decode(url)) } }.get()
     }
 
     /// The file's picture, the right way up. `CGImageSourceCreateImageAtIndex` ignores EXIF orientation,

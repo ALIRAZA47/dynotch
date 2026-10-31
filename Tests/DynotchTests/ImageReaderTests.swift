@@ -127,6 +127,21 @@ struct ImageReaderTests {
         #expect(reading.link == nil)
     }
 
+    /// Vision's text reader holds its thread until work of its own has run on the threads tasks share.
+    /// If reads filled those threads themselves, that work would have nowhere to run and nothing in a
+    /// task would ever run again. CI has three of them, and froze on its first run this way.
+    @Test func moreReadsAtOnceThanThreadsForTasksAllFinish() async {
+        let picture = Picture.text(["Hello from Dynotch"])
+        let count = ProcessInfo.processInfo.activeProcessorCount + 1
+        let readings = await withTaskGroup(of: [String].self, returning: [[String]].self) { group in
+            for _ in 0..<count {
+                group.addTask { await ImageReader.read(picture).lines }
+            }
+            return await group.reduce(into: []) { $0.append($1) }
+        }
+        #expect(readings == Array(repeating: ["Hello from Dynotch"], count: count))
+    }
+
     @Test func aCodeAlreadyInTheLinesIsntCopiedTwice() {
         let reading = ImageReader.Reading(lines: ["Scan me", "See https://example.com/a now"],
                                           codes: ["https://example.com/a", "other", "other"])
@@ -302,8 +317,13 @@ final class ImageFileTests {
         var texts: [String] { posted.map(\.notice.text) }
     }
 
+    /// Keeps what a test is after. A notice that only says work's going on comes whenever this machine
+    /// reads slower than `patience`, as GitHub's runner does, so it stays out.
     private func collecting(_ notices: Notices) -> ImageActions.Notify {
-        { notices.posted.append(($0, $1)) }
+        { notice, seconds in
+            guard !["Reading", "Cutting out"].contains(notice.text) else { return }
+            notices.posted.append((notice, seconds))
+        }
     }
 
     // MARK: Decoding
