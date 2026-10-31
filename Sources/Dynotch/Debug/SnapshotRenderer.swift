@@ -92,6 +92,10 @@ enum SnapshotRenderer {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         PowerMonitor.shared.start()
         loadSamples(in: folder)
+        // Before a settings page can read anything of the real home folder.
+        let setupHome = FileManager.default.temporaryDirectory.appendingPathComponent("dynotch-snapshot-home-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: setupHome) }
+        TerminalSetupModel.shared.useSample(home: setupHome)
 
         let geometry = NotchGeometry(screenFrame: CGRect(x: 0, y: 0, width: 1728, height: 1117),
                                      closedSize: CGSize(width: 185, height: 32), hasHardwareNotch: true)
@@ -381,6 +385,7 @@ enum SnapshotRenderer {
         renderSettings(into: folder)
         renderThemes(into: folder)
         renderProfiles(into: folder)
+        renderTerminalSetup(into: folder)
         renderWelcome(into: folder)
         renderCapture(into: folder)
         renderNotesLeftBehind(into: folder)
@@ -524,6 +529,41 @@ enum SnapshotRenderer {
 
     /// The General page scrolled to its Profiles section, as the menu bar's Profile Settings opens it:
     /// with sample profiles in dark mode, and before there are any in light mode.
+    /// The Terminal setup card on the General page: at rest with one thing in the way, the review, then
+    /// the undo. It works on the scratch home `render` gave it, as the real thing would.
+    private static func renderTerminalSetup(into folder: URL) {
+        let model = TerminalSetupModel.shared
+        let stages: [(name: String, appearance: NSAppearance.Name, stage: @MainActor () -> Void)] = [
+            ("setup-1-rest", .darkAqua, { model.cancel() }),
+            ("setup-2-review", .darkAqua, { model.stageReview() }),
+            ("setup-3-installed", .aqua, {
+                model.stageReview()
+                model.applyForSample()
+            }),
+            ("setup-4-undo", .aqua, { model.stageReview(undo: true) }),
+        ]
+        var count = 0
+        for (index, stage) in stages.enumerated() {
+            stage.stage()
+            guard wanted(stage.name) else { continue }
+            model.revealRequested = true
+            let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
+                                         styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
+            let navigation = SettingsNavigation()
+            navigation.page = .general
+            SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
+            window.appearance = NSAppearance(named: stage.appearance)
+            window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -80_000))
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: .now + 1.5)
+            if save(window, to: folder.appendingPathComponent(stage.name + ".png")) { count += 1 }
+            window.orderOut(nil)
+            window.close()
+        }
+        model.cancel()
+        print("Wrote \(count) terminal setup snapshots to \(folder.path)")
+    }
+
     private static func renderProfiles(into folder: URL) {
         var count = 0
         for (index, appearance) in [NSAppearance.Name.darkAqua, .aqua].enumerated() {

@@ -155,6 +155,8 @@ struct GeneralSettings: View {
 
             ProfilesSection()
 
+            TerminalSetupSection()
+
             SettingsSection(title: "App") {
                 SettingsCard {
                     LaunchAtLoginRow()
