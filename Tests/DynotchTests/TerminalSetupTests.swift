@@ -671,3 +671,85 @@ struct TerminalSetupModelTests {
         #expect(scratch.read(".zshrc")?.hasPrefix("changed\n") == true)
     }
 }
+
+/// What the card installs, run for real: a made-up Dynotch.app holding the real script, the real hook
+/// and the real binary, a scratch home, and a real zsh and bash.
+struct TerminalSetupInstalledTests {
+    private static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    private static let binary = root.appendingPathComponent(".build/debug/Dynotch").path
+    private static var hasBinary: Bool { FileManager.default.isExecutableFile(atPath: binary) }
+
+    /// Puts the app in place and installs everything.
+    private func installed() throws -> ScratchHome {
+        let scratch = ScratchHome()
+        let manager = FileManager.default
+        for name in ["dynotch", "notify-long-commands.zsh"] {
+            try manager.copyItem(at: Self.root.appendingPathComponent("scripts/\(name)"), to: scratch.resources.appendingPathComponent(name))
+        }
+        let macOS = scratch.resources.deletingLastPathComponent().appendingPathComponent("MacOS")
+        try manager.createDirectory(at: macOS, withIntermediateDirectories: true)
+        try manager.createSymbolicLink(atPath: macOS.appendingPathComponent("Dynotch").path, withDestinationPath: Self.binary)
+        try scratch.install()
+        return scratch
+    }
+
+    private func run(_ executable: String, _ arguments: [String], environment: [String: String]) throws -> (code: Int32, output: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        process.environment = environment
+        let output = Pipe()
+        process.standardOutput = output
+        process.standardError = Pipe()
+        process.standardInput = FileHandle.nullDevice
+        try process.run()
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+    }
+
+    @Test(.enabled(if: hasBinary)) func theLinkFindsTheBinaryInsideTheApp() throws {
+        let scratch = try installed()
+        let socket = NSTemporaryDirectory() + "dyn-" + UUID().uuidString.prefix(8) + "/run/s.sock"
+        let server = LocalSocketServer(path: socket) { _, connection in connection.reply(["ok": true, "version": "9.9"]) }
+        try server.start()
+        defer {
+            server.stop()
+            try? FileManager.default.removeItem(atPath: ((socket as NSString).deletingLastPathComponent as NSString).deletingLastPathComponent)
+        }
+        // No DYNOTCH_BIN: only the link, the way a terminal would run it.
+        let result = try run(scratch.setup.linkURL.path, ["status", "--json"], environment: ["DYNOTCH_SOCKET": socket, "PATH": "/usr/bin:/bin"])
+        #expect(result.code == 0)
+        #expect(result.output.contains("9.9"))
+    }
+
+    @Test(.enabled(if: hasBinary)) func aNewShellHasTheCommandAndTheHook() throws {
+        let scratch = try installed()
+        let check = "whence -p dynotch; print -r -- ${+functions[_dynotch_precmd]} ${precmd_functions[(I)_dynotch_precmd]}"
+        let result = try run("/bin/zsh", ["-i", "-c", check], environment: ["HOME": scratch.home.path, "PATH": "/usr/bin:/bin"])
+        let lines = result.output.split(separator: "\n").map(String.init)
+        #expect(lines.first == scratch.setup.linkURL.path)
+        // The function exists, and it's one of the hooks that run before each prompt.
+        #expect(lines.last?.hasPrefix("1 ") == true)
+        #expect(lines.last != "1 0")
+    }
+
+    @Test func theHooksFileIsWhatClaudeCodeReads() throws {
+        let scratch = ScratchHome()
+        try scratch.install()
+        let settings = try scratch.settings()
+        let line = try #require(settings["statusLine"] as? [String: Any])
+        #expect(line["type"] as? String == "command")
+        #expect(line["command"] as? String == scratch.setup.linkURL.path + " statusline")
+    }
+
+    @Test(.enabled(if: hasBinary)) func movingTheAppLeavesAHookThatSaysNothing() throws {
+        let scratch = try installed()
+        try FileManager.default.removeItem(at: scratch.root.appendingPathComponent("Applications"))
+        // What Claude Code runs, with the app gone: a failed hook, which leaves its own prompt in charge.
+        let result = try run("/bin/sh", ["-c", scratch.setup.hookCommand], environment: ["PATH": "/usr/bin:/bin"])
+        #expect(result.code != 0)
+        #expect(result.code != 2)
+        #expect(result.output.isEmpty)
+    }
+}

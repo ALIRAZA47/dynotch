@@ -3,13 +3,14 @@ title: The dynotch command
 description: Drive the notch from the shell.
 ---
 
-`dynotch` is a small script that wraps [`dynotch://` links](/links/), and the app carries a copy. Link it onto your `PATH` to use it anywhere:
+`dynotch` is a small script that wraps [`dynotch://` links](/links/), and the app carries a copy. [Terminal setup](/settings/#terminal-setup) puts it on your `PATH` in a click. To do it by hand:
 
 ```bash
-sudo ln -s /Applications/Dynotch.app/Contents/Resources/dynotch /usr/local/bin/dynotch
+mkdir -p ~/.local/bin
+ln -s /Applications/Dynotch.app/Contents/Resources/dynotch ~/.local/bin/dynotch
 ```
 
-Whatever app you're in stays at the front. If Dynotch isn't running, the command starts it, and runs once it's up.
+Whatever app you're in stays at the front. If Dynotch isn't running, the command starts it, and runs once it's up. The exceptions are [`progress`](#progress) and [`status`](#status), which have to hear back from the notch.
 
 ## notify
 
@@ -28,6 +29,7 @@ dynotch notify "Done" --detail "make test · 2m 14s" --symbol checkmark.circle.f
 | `--tint COLOR` | `red`, `orange`, `yellow`, `green`, `mint`, `teal`, `cyan`, `blue`, `indigo`, `purple`, `pink`, `white` or `gray`, or a hex value like `#FF6B5C` |
 | `--seconds N` | How long it stays, from 1 to 30. It's 4 by default |
 | `--button TITLE --url URL` | A button on the notice, in the [glance](/glance/#a-notices-buttons). The link has to be https; anything else leaves the button out |
+| `--key NAME` | Its own notice. Without one, every script shares a notice, and the latest takes its place |
 
 Over 18 characters, the text moves to the row underneath, or with `--detail` it's cut short. The row shows one line. The notice carries a small terminal badge, so it can't pass for one of Dynotch's own.
 
@@ -80,3 +82,76 @@ Freezes the screen to [capture](/capture/) a region, like <Keys k="⌃⌥S" />.
 ```bash
 dynotch capture
 ```
+
+## progress
+
+Draws a thin line along the foot of the closed notch, with the percentage in the [glance](/glance/). Each name is its own, so two scripts at once don't overwrite each other.
+
+```bash
+dynotch progress deploy 40 --detail "Uploading"
+dynotch progress deploy 80
+dynotch progress deploy done --detail "2m 14s"
+```
+
+After the name comes a percentage from 0 to 100, or one of these:
+
+| Word | What it does |
+|---|---|
+| `done` | Takes the line down and shows a **Done** notice |
+| `fail` | Takes the line down and shows a **Failed** notice |
+| `clear` | Takes the line down and says nothing |
+
+With nothing after the name, it starts without a number, and the line stays empty until one comes.
+
+| Option | What it does |
+|---|---|
+| `--detail TEXT` | What it's doing, in the glance, or on the notice when it ends |
+| `--symbol NAME` | An SF Symbol. It's a terminal by default, and any other carries the terminal badge |
+| `--tint COLOR` | The line's color. The colors are the same as for `notify` |
+| `--quiet-after SECONDS` | How long it can stay silent, from 5 to 3600. It's 120 by default |
+| `--button TITLE --url URL` | A button on the notice when it ends. The link has to be https |
+
+A script that says nothing for two minutes is taken down with a **Went quiet** notice, since it may have died halfway. A word from it starts that clock again, and one that comes later brings the line back. Up to eight can run at once. The first one started has the notch, and the glance counts the rest.
+
+A script's progress comes before timers in the closed notch, and a timer keeps a small ring beside it.
+
+If Dynotch isn't running, `progress` says so and exits with 1, rather than starting it. In a script that shouldn't stop for that, add `|| true`.
+
+## status
+
+Says what the notch is showing.
+
+```bash
+dynotch status
+dynotch status --json
+```
+
+`--json` is for scripts:
+
+```json
+{
+  "notch": {
+    "activity": "script",
+    "heldNotices": 0,
+    "isOpen": false,
+    "isQuiet": false
+  },
+  "ok": true,
+  "scripts": [
+    {
+      "detail": "Uploading",
+      "key": "deploy",
+      "percent": 40,
+      "secondsLeft": 118,
+      "secondsRunning": 42
+    }
+  ],
+  "version": "1.5.0"
+}
+```
+
+`activity` is what the closed notch is showing: `idle`, `music`, `trackPeek`, `timer`, `notice`, `countdown`, `stopwatch`, `download`, `script` or `ci`. It's only ever the kind. What a notice says isn't in there.
+
+## How it talks to the app
+
+`progress` and `status` go through a local socket, since a link can't answer back. It's a Unix domain socket in `~/Library/Application Support/Dynotch/run`, a folder only your user can open, and never a network port. Dynotch also checks who's on the other end of each connection. The socket can tell the notch something or ask what it's showing. It can't run anything, and nothing sent to it can answer a tool call.
