@@ -145,13 +145,14 @@ struct FocusStrip: View {
         let summary = history.summary()
         Group {
             if summary.sessionsThisWeek > 0 {
-                // The notes' buttons share the row, and the smallest notch has less of it.
+                // The notes' buttons share the row and keep their size, and the smallest notch has less of it.
                 ViewThatFits(in: .horizontal) {
                     HStack(spacing: 6) {
                         numbers(summary)
                         bars(summary)
                     }
                     bars(summary)
+                    Color.clear.frame(width: 0, height: 0)
                 }
                 .help(Self.spoken(summary))
                 .accessibilityElement(children: .ignore)

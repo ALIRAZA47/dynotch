@@ -223,9 +223,9 @@ enum EventText {
 
     /// Anywhere in the line, these move the day it names: "dentist fri 3pm next week".
     private static let otherDays = #"\b(?:every|fortnight|from now|next (?:week|month|year)|in (?:a|an|one|two|three|four|five|six|[0-9]+) (?:days?|weeks?|wks?|months?|mos?|years?)|(?:days?|weeks?|wks?|months?) (?:from|after|before|later|ago|on))\b"#
-    /// Last in the name, right before the day, these move it or repeat it: "a week fri", "in december
-    /// fri", "gym weekly mon".
-    private static let beforeTheDay = #"\b(?:(?:a|an|one|two|three|four|five|six|seven|eight|nine|ten|few|couple of|next|this|following|[0-9]+) (?:days?|weeks?|wks?|months?|mos?|weekend)|(?:in|late|early|mid|next|this|end of|start of) (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*|weekly|fortnightly|biweekly|daily|monthly)$"#
+    /// Last in the name, right before the day, these move it or repeat it: "a week fri", "december fri",
+    /// "gym weekly mon". On its own, a month that's also a name isn't one: "lunch with june fri".
+    private static let beforeTheDay = #"\b(?:(?:a|an|one|two|three|four|five|six|seven|eight|nine|ten|few|couple(?: of)?|next|this|following|[0-9]+) (?:days?|weeks?|wks?|months?|mos?|weekend)|(?:in|late|early|mid|next|this|end of|start of) (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*|january|february|march|july|september|october|november|december|end of (?:the )?(?:month|week|year)|weekly|fortnightly|biweekly|daily|monthly|quarterly)$"#
 
     /// "tutor SAT 3pm": in a line that's otherwise in lowercase, these are more likely something else.
     private static func isAnExam(_ day: Substring, in line: String) -> Bool {
