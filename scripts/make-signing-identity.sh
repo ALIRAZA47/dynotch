@@ -5,9 +5,9 @@
 #
 # The identity goes in a keychain of its own, ~/Library/Keychains/dynotch-signing.keychain-db,
 # with a password you choose here. That keychain stays out of the search list and locks when
-# the Mac sleeps and an hour after it was last used, so another process on this Mac can't
-# quietly sign a changed Dynotch with the identity and inherit the permissions you gave the
-# app. build.sh asks for the password when the keychain is locked.
+# a build ends, when the Mac sleeps and an hour after it was last used, so another process on
+# this Mac can't quietly sign a changed Dynotch with the identity and inherit the permissions
+# you gave the app. build.sh asks for the password when the keychain is locked.
 #
 # An identity an earlier version of this script put in the login keychain is moved across,
 # so the permissions macOS tied to its certificate stay.
@@ -97,5 +97,5 @@ printf 'int main(void) { return 0; }\n' > "$WORK/probe.c"
 clang -o "$WORK/probe" "$WORK/probe.c"
 codesign --force --sign "$NAME" --keychain "$KEYCHAIN" --timestamp=none "$WORK/probe"
 codesign --display --verbose=2 "$WORK/probe" 2>&1 | grep '^Authority'
-echo "build.sh signs with it. The keychain is open now; it locks when the Mac sleeps or after an hour,"
+echo "build.sh signs with it. The keychain is open now; it locks when a build ends, when the Mac sleeps or after an hour,"
 echo "and \"security lock-keychain '$KEYCHAIN'\" locks it sooner."

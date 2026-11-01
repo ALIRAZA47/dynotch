@@ -65,6 +65,27 @@ struct CommandSeparationTests {
         #expect(named.map(\.name) == [])
     }
 
+    /// These write and delete in a folder they're told, with all the app has been allowed.
+    @Test func theFlagsThatTakeAFolderAreForDebugBuilds() throws {
+        var isInDebug = false
+        var found = 0
+        for line in try text(of: "Sources/Dynotch/App/DynotchApp.swift").split(separator: "\n") {
+            let code = line.trimmingCharacters(in: .whitespaces)
+            if code == "#if DEBUG" { isInDebug = true }
+            if code == "#endif" { isInDebug = false }
+            if line.contains("\"--snapshot\"") || line.contains("\"--capture-self-test\"") {
+                found += 1
+                #expect(isInDebug, "\(code)")
+            }
+        }
+        #expect(found >= 3)
+    }
+
+    /// The keychain is only open while a build needs it.
+    @Test func aBuildLeavesTheSigningKeychainLocked() throws {
+        #expect(try text(of: "scripts/build.sh").contains("trap 'security lock-keychain \"$KEYCHAIN\"' EXIT"))
+    }
+
     /// The updater's script is fixed, and takes nothing from a request or the command line.
     @Test func onlyTheUpdaterStartsAShell() throws {
         let named = try appSources().filter { source in

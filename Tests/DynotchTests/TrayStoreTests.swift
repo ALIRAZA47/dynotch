@@ -106,4 +106,100 @@ final class TrayStoreTests {
         #expect(reopened.items.first?.isPinned == false)
         #expect(reopened.items.first?.isAutomatic == false)
     }
+
+    // MARK: What comes from outside
+
+    private func filesInTheFolder() throws -> [String] {
+        try FileManager.default.contentsOfDirectory(atPath: store.folder.path)
+    }
+
+    /// Screenshots and downloads come from folders macOS keeps other apps out of, and the Tray's isn't one.
+    @Test func whatComesByItselfIsNeverCopied() throws {
+        AppSettings.shared.trayCopiesFiles = true
+        defer { AppSettings.shared.trayCopiesFiles = false }
+        store.add([file], automatically: true)
+        #expect(store.items.map(\.url) == [file])
+        #expect(store.items.first?.isOwned == false)
+        #expect(try filesInTheFolder().isEmpty)
+    }
+
+    @Test func whatSomeonePutsThereIsCopied() throws {
+        AppSettings.shared.trayCopiesFiles = true
+        defer { AppSettings.shared.trayCopiesFiles = false }
+        store.add([file])
+        #expect(store.items.first?.isOwned == true)
+        #expect(try filesInTheFolder() == ["Screenshot.png"])
+    }
+
+    /// What the Tray makes of a list that says this path is its own.
+    private func ownership(of url: URL) throws -> Bool? {
+        let listed = TrayStore.Item(id: UUID(), url: url, isOwned: true, addedAt: .now)
+        try JSONEncoder().encode([listed]).write(to: support.appendingPathComponent("tray.json"))
+        let reopened = TrayStore(support: support)
+        reopened.load()
+        return reopened.items.first?.isOwned
+    }
+
+    @Test func aPathThroughALinkInTheFolderIsntTheTrays() throws {
+        let outside = support.appendingPathComponent("Outside", isDirectory: true)
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try Data("mine".utf8).write(to: outside.appendingPathComponent("Kept.txt"))
+        let link = store.folder.appendingPathComponent("Linked")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
+        #expect(try ownership(of: link.appendingPathComponent("Kept.txt")) == false)
+    }
+
+    @Test func aLinkInTheFolderIsntTheTrays() throws {
+        let link = store.folder.appendingPathComponent("Shortcut.png")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
+        #expect(try ownership(of: link) == false)
+    }
+
+    @Test func aFileTheTrayMadeIsStillItsOwn() throws {
+        store.add(data: Data("dropped".utf8), named: "Dropped.txt")
+        #expect(try ownership(of: try #require(store.items.first?.url)) == true)
+    }
+
+    /// Links a scratch support folder's Tray to `target`.
+    private func linkedSupport(to target: URL) throws -> URL {
+        let linked = support.appendingPathComponent("Linked Support", isDirectory: true)
+        try FileManager.default.createDirectory(at: linked, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: linked.appendingPathComponent("Tray"), withDestinationURL: target)
+        return linked
+    }
+
+    @Test func aLinkInPlaceOfTheFolderGoesAtLaunch() throws {
+        let target = support.appendingPathComponent("Elsewhere", isDirectory: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        let reopened = TrayStore(support: try linkedSupport(to: target))
+        #expect((try reopened.folder.resourceValues(forKeys: [.isSymbolicLinkKey])).isSymbolicLink == false)
+        #expect(FileManager.default.fileExists(atPath: target.path))
+    }
+
+    @Test func aLinkInPlaceOfTheFolderDoesntGetACopy() throws {
+        AppSettings.shared.trayCopiesFiles = true
+        defer { AppSettings.shared.trayCopiesFiles = false }
+        let target = support.appendingPathComponent("Elsewhere", isDirectory: true)
+        try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+        try FileManager.default.removeItem(at: store.folder)
+        try FileManager.default.createSymbolicLink(at: store.folder, withDestinationURL: target)
+        store.add([file])
+        #expect(try FileManager.default.contentsOfDirectory(atPath: target.path).isEmpty)
+        #expect(try filesInTheFolder() == ["Screenshot.png"])
+    }
+
+    /// The real `~/Library`, by other names. All this asks of it is whether those paths exist.
+    @Test func otherSpellingsOfTheLibraryAreStillTheLibrary() {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let onTheDataVolume = "/System/Volumes/Data" + home + "/Library/Preferences"
+        #expect(FileManager.default.fileExists(atPath: onTheDataVolume))
+        store.addFromScript([onTheDataVolume, home + "/LIBRARY/Preferences", home + "/lIbRaRy/preferences"].map { URL(fileURLWithPath: $0) })
+        #expect(store.items.isEmpty)
+    }
+
+    @Test func whatsOutsideTheLibraryIsStillTaken() {
+        store.addFromScript([file])
+        #expect(store.items.count == 1)
+        LiveActivityCenter.shared.dismissNotice()
+    }
 }

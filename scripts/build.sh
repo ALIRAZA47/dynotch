@@ -45,6 +45,8 @@ ensure_unlocked() {
 if [ -f "$KEYCHAIN" ] && security find-identity -p codesigning "$KEYCHAIN" 2> /dev/null | grep -Fq "\"$IDENTITY\""; then
     SIGNING=keychain
     ensure_unlocked
+    # Only open while a build needs it.
+    trap 'security lock-keychain "$KEYCHAIN"' EXIT
 elif security find-identity -p codesigning | grep -Fq "\"$IDENTITY\""; then
     SIGNING=login
 else

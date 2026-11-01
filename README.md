@@ -139,12 +139,13 @@ calendars and Apple events.
 
 For development, `swift build` and `.build/debug/Dynotch` also work, and `./scripts/test.sh` runs
 the tests.
-`Dynotch --snapshot <folder>` renders every notch state with sample data to PNGs,
+In a debug build, `Dynotch --snapshot <folder>` renders every notch state with sample data to PNGs,
 which is handy for reviewing UI changes. `Dynotch --energy-probe` counts how often the polls
 would run and wake the Mac in an hour, in each of the conditions under [Energy](#energy).
 `Dynotch --capture-test` opens the capture editor over a made-up picture of each display, so
-its tools can be tried without Screen Recording access, and `Dynotch --capture-self-test <folder>`
-drives them with synthesized events off screen, prints a line per check and leaves the result there.
+its tools can be tried without Screen Recording access, and in a debug build
+`Dynotch --capture-self-test <folder>` drives them with synthesized events off screen, prints a line
+per check and leaves the result there.
 
 ## Scripting
 
