@@ -31,6 +31,22 @@ Its location and layout have changed between macOS versions before. If they chan
 
 Liquid Glass is on macOS 26 and later. On earlier versions, the open notch is black.
 
+## The first Copy Text can take a while
+
+The first time Dynotch reads text, macOS prepares its models for it, which took up to half a minute on a busy Mac. The capture closes at once, and the notch says it's reading until that's done. After that, a read takes a fraction of a second.
+
+## Copy Text can miss small text
+
+In testing on a very busy Mac, about one first read in twelve went wrong: macOS's text reader came back with only the biggest text on the page, and kept doing that. It looks like it's in how macOS stores the models it prepared, not in Dynotch, and what sets it off isn't known. If Copy Text only finds a page's title, quit Dynotch, delete its `com.apple.e5rt.e5bundlecache` folder from `~/Library/Caches`, and open Dynotch again.
+
+## A cut-out is in sRGB
+
+Vision hands back a cut-out's subject in sRGB, whatever the photo was in. Colors that sRGB can't hold, which a phone's photos can have, come out a little less vivid.
+
+## Recordings have no sound
+
+A [recording](/capture/#recording) has no sound of any kind, neither the Mac's nor the microphone's. Recording the microphone would need its entitlement, which Dynotch doesn't have, and that's a separate choice.
+
 ## Not notarized
 
 Dynotch isn't notarized by Apple, so the first launch needs [one extra step](/install/#get-past-the-first-launch).

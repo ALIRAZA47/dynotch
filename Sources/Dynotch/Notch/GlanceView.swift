@@ -8,6 +8,7 @@ enum GlanceContent: Equatable {
     case countdown(Countdown)
     case stopwatch
     case download
+    case recording
     case notice(LiveNotice)
     case event(CalendarService.Event)
     case today
@@ -36,6 +37,9 @@ enum GlanceContent: Equatable {
         case .download:
             self = .download
             return
+        case .recording:
+            self = .recording
+            return
         case .notice(let notice):
             // A volume or brightness meter is nothing to glance at.
             if case .info = notice.kind {
@@ -59,7 +63,7 @@ enum GlanceContent: Equatable {
     var extraHeight: CGFloat {
         switch self {
         case .music: 70
-        case .pomodoro, .countdown, .stopwatch, .event: 54
+        case .pomodoro, .countdown, .stopwatch, .event, .recording: 54
         case .download, .notice: 50
         case .today: 52
         case .recent(let rows): CGFloat(rows) * Self.recentRowHeight + 10
@@ -93,6 +97,7 @@ struct GlanceView: View {
             case .countdown(let countdown): CountdownGlance(countdown: countdown, band: band)
             case .stopwatch: StopwatchGlance(band: band)
             case .download: DownloadGlance(band: band)
+            case .recording: RecordingGlance(viewModel: viewModel, band: band)
             case .notice(let notice): NoticeGlance(notice: notice, viewModel: viewModel, band: band)
             case .event(let event): EventGlance(event: event, band: band)
             case .today: TodayGlance(viewModel: viewModel, band: band)
@@ -125,7 +130,7 @@ private let glancePicture: CGFloat = 46
 /// The glance's places around the camera, as on an iPhone's Dynamic Island: a picture on the left
 /// that reaches down from the top edge, controls in the right ear, two lines under the camera, and
 /// sometimes a row along the bottom.
-private struct GlanceLayout<Leading: View, Trailing: View, Center: View, Bottom: View>: View {
+struct GlanceLayout<Leading: View, Trailing: View, Center: View, Bottom: View>: View {
     let band: CGFloat
     let leading: Leading
     let trailing: Trailing
@@ -239,7 +244,7 @@ private struct GlanceLines: View {
 }
 
 /// Two lines under the camera: a quiet one, then the main one, large.
-private struct GlanceFigure: View {
+struct GlanceFigure: View {
     let caption: String
     let figure: String
     let tint: Color

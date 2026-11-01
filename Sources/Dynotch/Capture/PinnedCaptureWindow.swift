@@ -8,9 +8,10 @@ final class PinnedCaptureWindow: NSPanel {
     private static var pinned: [PinnedCaptureWindow] = []
 
     /// Shows a capture where it was taken, or on the main display, at its point size. One larger than a
-    /// quarter of the display is scaled down to fit that.
+    /// quarter of the display is scaled down to fit that. A test's stays off screen, `isParked`, and
+    /// leaves the keyboard alone.
     @discardableResult
-    static func pin(_ output: CaptureOutput, near rect: CGRect?) -> PinnedCaptureWindow {
+    static func pin(_ output: CaptureOutput, near rect: CGRect?, isParked: Bool = false) -> PinnedCaptureWindow {
         let screen = rect.flatMap { rect in NSScreen.screens.first { $0.frame.intersects(rect) } } ?? NSScreen.main ?? NSScreen.screens[0]
         let visible = screen.visibleFrame
         let limit = CGSize(width: visible.width / 2, height: visible.height / 2)
@@ -21,9 +22,14 @@ final class PinnedCaptureWindow: NSPanel {
         var origin = CGPoint(x: (center.x - size.width / 2).rounded(), y: (center.y - size.height / 2).rounded())
         origin.x = min(max(visible.minX, origin.x), max(visible.minX, visible.maxX - size.width))
         origin.y = min(max(visible.minY, origin.y), max(visible.minY, visible.maxY - size.height))
+        if isParked { origin = CGPoint(x: -30_000, y: -70_000) }
         let window = PinnedCaptureWindow(output: output, frame: CGRect(origin: origin, size: size))
         pinned.append(window)
-        window.makeKeyAndOrderFront(nil)
+        if isParked {
+            window.orderFrontRegardless()
+        } else {
+            window.makeKeyAndOrderFront(nil)
+        }
         return window
     }
 

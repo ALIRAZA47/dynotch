@@ -1,6 +1,6 @@
 ---
 title: Capture
-description: Freeze the screen, select a region, mark it up, then copy, save or pin it.
+description: Freeze the screen, select a region, mark it up, then copy, save or pin it, or record it.
 open:
   label: Capture the Screen
   href: dynotch://capture
@@ -12,7 +12,11 @@ Press <Keys k="⌃⌥S" />, choose **Capture Screen** in the menu bar menu, clic
 
 ## Selecting a region
 
-Drag out a region, or click for the whole display. Drag inside it to move it, or drag one of its eight handles to resize it. Its size shows beside it.
+Move the pointer over a window and it lights up, with the app's name and its size beside it. Click to select that window. To select the whole display, hold <Keys k="⌥" /> and click, or click the bare desktop. Or drag out a region of your own, even one that starts on a window.
+
+Drag inside the selection to move it, or drag one of its eight handles to resize it. Its size shows beside it.
+
+The screen is frozen, so a selected window is still part of that picture. Whatever covers part of the window stays in the capture.
 
 <Shot name="capture-1-selection" alt="A region selected over a frozen screen, with its size shown above it and the toolbar under it." />
 
@@ -40,19 +44,67 @@ There are eight colors and a width from 1 to 16 points, which the text's size fo
 | Action | Key | What it does |
 |---|---|---|
 | Copy | <Keys k="⌘C" /> | Puts a PNG on the clipboard |
+| Copy Text | <Keys k="O" /> | Puts the text in the selection on the clipboard |
 | Save | <Keys k="⌘S" /> | Writes a PNG into the folder the Screenshot app saves to, named as macOS names its own, so it lands in the Tray too |
 | Add to Tray | | Does that and opens the Tray |
 | Pin | | Floats the capture above every window |
+| Record | <Keys k="V" /> | [Records the region](#recording) as a video or a GIF |
 | | <Keys k="Return" /> | Copies, saves or both, as <Path to="Settings → Tray" /> says under **After capture** |
 | | <Keys k="Esc" /> | Cancels |
 
 The result is drawn at the display's scale, pixel for pixel what was on screen.
+
+## Copying text
+
+<Keys k="O" /> closes the capture and reads the selection, and the notch says how many lines it copied. It reads the capture as you marked it up, so what a Blur mark hides stays out of the text too. If it finds no text, the notch says so and the clipboard stays as it was.
+
+### QR codes
+
+Copy Text reads QR, Micro QR, Aztec and Data Matrix codes as well, and copies what they hold.
+
+A web link also gets a notice saying where it goes, with an **Open** button in the [glance](/glance/). It stays in the glance's [Recent](/glance/#recent) list if you don't get to it in time. Dynotch never opens a code by itself, as anyone can stick one over another. Only a plain `http` or `https` link gets the button, and one with a name or password in it doesn't, as `https://paypal.com@evil.example/` shows one domain and goes to another. Everything else is only ever text.
 
 ## Pinned captures
 
 A pinned capture stays above every window until you press <Keys k="Esc" /> or <Keys k="⌘W" />, or click its close glyph.
 
 <Shot name="capture-4-pinned-dark" alt="A pinned capture floating as its own window, with its markup in place." />
+
+## Recording
+
+Press <Keys k="V" />, or click the red **Record** button, and the region records instead. The overlay goes, a thin red line shows what's being recorded, and the closed notch shows a red dot and the time. Dynotch's own windows, the notch and that line included, stay out of the recording. The pointer stays in it. Marks aren't recorded, and neither is sound.
+
+Choose **MP4** or **GIF** at the right of the toolbar's second row, or in <Path to="Settings → Tray" />.
+
+### Stopping
+
+A click on the notch never stops a recording. It brings up the [glance](/glance/), which belongs to the recording while it runs, whatever the closed notch is showing. **Stop** is there, and it ignores clicks for its first moment, so a click meant for the notch can't land on it.
+
+Any of these stops it too:
+
+- <Keys k="⌃⌥S" />, **Stop Recording** in the menu bar menu, the Control tab's **Capture** tile, or `dynotch capture`: everything that opens Capture stops a recording instead
+- `stop` or `stop recording` in the [command field](/command-field/)
+- macOS's own stop control
+
+### Where it goes
+
+The file lands in the folder the Screenshot app saves to, as `Screen Recording 2026-10-31 at 18.02.06.mp4`, and in the Tray. It's numbered if that name is taken, and it never replaces a file. If that folder can't be written, the file stays in the Tray's own folder. A notice names it, with **Open** and **Show**.
+
+An MP4 runs at up to 60 frames a second. A GIF is recorded at 15, and made once you stop, up to 960 pixels on its long side, while the notch says **Saving**. A picture stays up until the next different one, so a still screen comes out small. A minute of scrolling text took about 6 seconds and 70 MB. If a GIF can't be made, the MP4 lands instead, and the notice says so.
+
+### If something ends it
+
+Whatever ends a recording, what was recorded is finished and kept, and the notice says why:
+
+| What happens | What you get |
+|---|---|
+| Its display goes away | The file, and **Display gone** |
+| The Mac goes to sleep, or the lid closes | The file, and **Mac sleeping** |
+| macOS stops it | The file, and **Stopped by macOS** |
+| Dynotch quits, or updates itself | The file. A GIF lands as its MP4, as there's no time to make one |
+| The disk fills up | What can be played, which may stop a couple of seconds short, and a notice saying what happened |
+
+If it stops before the first frame, there's no file, and the notice says so.
 
 ## Settings
 
@@ -63,5 +115,6 @@ All in <Path to="Settings → Tray → Screenshots" />.
 | Capture with <Keys k="⌃⌥S" /> | The keyboard shortcut. The menu bar menu still works without it | On |
 | Shutter sound | The Screenshot app's click when a capture is taken | On |
 | After capture | What Return does: **Copy**, **Save** or **Copy and save** | Copy |
+| Record as | What <Keys k="V" /> makes: **MP4** or **GIF** | MP4 |
 
-<Note>Capture needs Screen Recording. macOS asks the first time you capture. After a refusal, <Path to="Settings → Permissions" /> opens its pane in System Settings.</Note>
+<Note>Capture and recording both need Screen Recording. macOS asks the first time you capture. After a refusal, <Path to="Settings → Permissions" /> opens its pane in System Settings.</Note>

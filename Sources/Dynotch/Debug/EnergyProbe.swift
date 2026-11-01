@@ -63,6 +63,7 @@ enum EnergyProbe {
             Situation(name: "Idle: Focus, events, weather, Bluetooth, screenshot folder", entries: idle),
             Situation(name: "Idle, with an old partial download in ~/Downloads",
                       entries: idle + [Entry(cadence: .downloadDormant, before: Cadence.downloadStalled.every)]),
+            Situation(name: "Idle, with clipboard history on", entries: idle + [Entry(cadence: .clipboard)]),
             Situation(name: "Busy: Control tab open, a download moving, a 25-minute Pomodoro",
                       entries: idle + [Entry(cadence: .systemStats), Entry(cadence: .downloadMoving),
                                        Entry(cadence: .countdown, endsAt: 25 * 60)]),

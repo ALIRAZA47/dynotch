@@ -25,7 +25,8 @@ struct CommandResult: Identifiable {
 
 /// Turns what's typed into the command field into things to do: timers, notes, reminders, toggles,
 /// the music, volume and brightness, outputs and Bluetooth devices, the next meeting, profiles, tabs,
-/// Settings pages, shortcuts, sums and conversions, and the notes and Tray files that match.
+/// Settings pages, shortcuts, sums and conversions, and the notes and Tray files that match. Copied
+/// text only ever shows on a line that starts with `clip`.
 @MainActor
 enum CommandEngine {
     static let maximumResults = 6
@@ -72,6 +73,10 @@ enum CommandEngine {
         }
         results += found
         saidWhat = saidWhat || !found.isEmpty
+        if let words = remainder(of: text, after: ["clipboard", "clips", "clip"]) {
+            results.append(contentsOf: clips(matching: words, in: .shared))
+            saidWhat = true
+        }
         if let spec = remainder(of: text, after: ["timer", "start timer"]) {
             results.append(timer(spec.isEmpty ? nil : spec))
             saidWhat = true
@@ -88,6 +93,7 @@ enum CommandEngine {
         }
 
         // Then anything whose name starts that way.
+        results.append(contentsOf: stopRecording(matching: lower))
         results.append(contentsOf: toggles(matching: lower))
         results.append(contentsOf: tabs(matching: lower))
         if !saidWhat {
@@ -257,6 +263,16 @@ enum CommandEngine {
         }
     }
 
+    /// Stop, for as long as there's a recording to stop.
+    static func stopRecording(matching text: String, recorder: ScreenRecorder? = nil) -> [CommandResult] {
+        let recorder = recorder ?? .shared
+        guard recorder.isRunning, matches(text, ["stop", "stop recording"]) else { return [] }
+        return [CommandResult(id: "stop-recording", symbol: "stop.fill", tint: .red, title: "Stop recording") { _ in
+            recorder.stop()
+            return .close
+        }]
+    }
+
     /// The meeting on now, or the next one today with a link to join.
     private static func nextMeeting() -> CalendarService.Event? {
         let now = Date.now
@@ -403,6 +419,30 @@ enum CommandEngine {
             }
     }
 
+    /// The clips with these words in them, pinned first. It never turns the history on: with that off
+    /// and nothing pinned, the row goes to the setting.
+    static func clips(matching words: String, in store: ClipboardStore) -> [CommandResult] {
+        let symbol = "doc.on.clipboard.fill"
+        let found = store.clips(matching: words)
+        guard found.isEmpty else {
+            return found.prefix(maximumResults).map { clip in
+                CommandResult(id: "clip-\(clip.id)", symbol: symbol, tint: .teal, title: clip.title,
+                              hint: clip.isPinned ? "pinned" : "clip") { _ in
+                    store.copy(clip)
+                    return .close
+                }
+            }
+        }
+        if !AppSettings.shared.clipboardHistory, store.clips.isEmpty {
+            return [CommandResult(id: "clip-off", symbol: symbol, tint: .teal, title: "Turn on clipboard history in Settings") { _ in
+                SettingsWindowController.shared.show(page: .tray)
+                return .close
+            }]
+        }
+        return [CommandResult(id: "clip-none", symbol: symbol, tint: .gray,
+                              title: words.isEmpty ? "Nothing copied yet" : "No clips with “\(words)”")]
+    }
+
     private static func notes(matching text: String) -> [CommandResult] {
         NotesStore.shared.notes
             .filter { !$0.isBlank && $0.text.lowercased().contains(text) }
@@ -435,8 +475,8 @@ enum CommandEngine {
     /// A sum's or a conversion's answer, copied on Return.
     private static func copyable(id: String, symbol: String, value: String, title: String) -> CommandResult {
         CommandResult(id: id, symbol: symbol, tint: .gray, title: title, hint: "copy") { _ in
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(value, forType: .string)
+            NSPasteboard.dynotch.clearContents()
+            NSPasteboard.dynotch.setString(value, forType: .string)
             announce(symbol: "doc.on.clipboard.fill", tint: .white, text: value, detail: "Copied to the clipboard")
             return .close
         }

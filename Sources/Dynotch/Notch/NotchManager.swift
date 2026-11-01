@@ -11,6 +11,9 @@ final class NotchManager {
     private var monitors: [Any] = []
     /// The drag pasteboard's change count at the last click; a new drag bumps it.
     private var dragChangeCount = NSPasteboard(name: .drag).changeCount
+    private var dragImages = DragImageCheck()
+    /// The drag `isDraggingFiles` last found holds an image, so the tray offers what it can do with one.
+    private(set) var isDraggingImages = false
     /// Set while the capture overlay covers the screen, so the notch neither grows nor opens under it.
     var isPointerSuspended = false
     /// Esc, held while a notch is open. The keyboard stays with the app in front, so a key monitor
@@ -167,6 +170,7 @@ final class NotchManager {
     private func route(_ event: NSEvent) {
         guard !isPointerSuspended else { return }
         EnergyCoordinator.shared.sawInput()
+        ClipboardStore.shared.sawInput()
         let point = NSEvent.mouseLocation
         switch event.type {
         case .mouseMoved:
@@ -197,6 +201,8 @@ final class NotchManager {
         let pasteboard = NSPasteboard(name: .drag)
         guard pasteboard.changeCount != dragChangeCount else { return false }
         let types = pasteboard.types ?? []
-        return types.contains(.fileURL) || types.contains(.png) || types.contains(.tiff)
+        guard types.contains(.fileURL) || types.contains(.png) || types.contains(.tiff) else { return false }
+        isDraggingImages = dragImages.holdsImages(on: pasteboard)
+        return true
     }
 }

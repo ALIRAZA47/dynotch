@@ -30,6 +30,7 @@ enum SnapshotRenderer {
         ]
         for (key, value) in samples { defaults.set(value, forKey: key) }
         UserDefaults.dynotch = defaults
+        NSPasteboard.dynotch = NSPasteboard(name: NSPasteboard.Name("app.dynotch.scratch.\(ProcessInfo.processInfo.processIdentifier)"))
     }
 
     static func discardScratchDefaults() {
@@ -37,6 +38,7 @@ enum SnapshotRenderer {
         // An emptied domain still leaves its file behind, and every run has its own.
         UserDefaults.dynotch.synchronize()
         try? FileManager.default.removeItem(atPath: scratchDomain + ".plist")
+        NSPasteboard.dynotch.releaseGlobally()
     }
 
     private struct Scene {
@@ -45,7 +47,13 @@ enum SnapshotRenderer {
         var activity: ClosedActivity = .idle
         var secondary: CompactActivity?
         var tab: NotchTab = .home
+        /// Which side of the Tray shows.
+        var traySide = NotchViewModel.TraySide.files
+        /// Typed into the Clipboard side's search field.
+        var clipSearch = ""
         var draggingFiles = false
+        /// An image is among them, so the Tray offers Copy Text and Cut Out too.
+        var draggingImages = false
         /// One drop target has the files over it. See `snapshotDrop`.
         var targetsDrop = false
         var hasTrack = true
@@ -147,6 +155,23 @@ enum SnapshotRenderer {
         let scriptButton = LiveNotice(key: "command", symbol: "checkmark.circle.fill", tint: .green, text: "Deployed",
                                       detail: "api · 2m 14s", fromScript: true,
                                       actions: [NoticeAction(title: "Open", kind: .openURL(URL(string: "https://example.com")!))])
+        // The real notices, from the code that makes them, kept rather than shown.
+        var read: [LiveNotice] = []
+        let scratchBoard = NSPasteboard(name: .init("app.dynotch.snapshot"))
+        ImageActions.deliver(ImageReader.Reading(lines: ["Quarterly notes", "Ship it on Friday"]), to: scratchBoard) { notice, _ in read.append(notice) }
+        ImageActions.deliver(ImageReader.Reading(), to: scratchBoard) { notice, _ in read.append(notice) }
+        ImageActions.deliver(ImageReader.Reading(codes: ["https://github.com/ALIRAZA47/dynotch/releases/tag/v1.5.0"]), to: scratchBoard) { notice, _ in read.append(notice) }
+        ImageActions.deliver(ImageReader.Reading(codes: ["https://paypal.com.accounts.verify.signin.evil.example/account/login"]), to: scratchBoard) { notice, _ in read.append(notice) }
+        scratchBoard.releaseGlobally()
+        let (copiedText, noText, qrCode, qrCodeLongHost) = (read[0], read[1], read[2], read[3])
+        let recording = folder.appendingPathComponent("tray-samples/Screen Recording 2026-10-31 at 18.02.06.mp4")
+        let recordingLanded = ScreenRecorder.landed(recording, ending: .asked, gifFailed: false)
+        let recordingDisplayGone = ScreenRecorder.landed(recording, ending: .displayGone, gifFailed: false)
+        let cutOut = LiveNotice(key: "cutout", symbol: "scissors", tint: .white, text: "Cut out", detail: "Keynote draft (cut out).png",
+                                actions: [NoticeAction(title: "Open", kind: .openFile(keynote)), NoticeAction(title: "Show", kind: .reveal(keynote))],
+                                recall: .whole)
+        // As narrow as a virtual notch can be set, which is the least room a glance ever has.
+        let narrowNotch = NotchGeometry(screenFrame: virtualNotch.screenFrame, closedSize: CGSize(width: 140, height: 24), hasHardwareNotch: false)
         let digest = NotificationPeek.digest(of: ["Slack": 8, "Mail": 3, "Messages": 1], during: "Work")
         let held = NoticeQueue.summary(of: [peek, downloaded, code, scriptNotice])
         let doNotDisturb = FocusMode(id: "dnd", name: "Do Not Disturb", symbol: "moon.fill", tint: .indigo)
@@ -169,6 +194,7 @@ enum SnapshotRenderer {
             Scene(name: "11-open-nook-empty", phase: .open, tab: .home, hasTrack: false),
             Scene(name: "12-open-tray", phase: .open, tab: .tray),
             Scene(name: "13-open-tray-dropping", phase: .open, tab: .tray, draggingFiles: true),
+            Scene(name: "13-open-tray-dropping-image", phase: .open, tab: .tray, draggingFiles: true, draggingImages: true),
             Scene(name: "14-open-focus", phase: .open, tab: .focus),
             Scene(name: "14-open-focus-notes", phase: .open, tab: .focus, focusShowsNotes: true),
             Scene(name: "15-open-control", phase: .open, tab: .stats),
@@ -292,6 +318,41 @@ enum SnapshotRenderer {
             Scene(name: "glance-13-update", phase: .glance, activity: .notice(update)),
             Scene(name: "glance-14-join", phase: .glance, activity: .notice(meeting)),
             Scene(name: "glance-15-script-button", phase: .glance, activity: .notice(scriptButton)),
+            // Reading an image and cutting one out. A long host keeps the end that says whose it is.
+            Scene(name: "glance-19-qr-code", phase: .glance, activity: .notice(qrCode)),
+            Scene(name: "glance-20-qr-code-long-host", phase: .glance, activity: .notice(qrCodeLongHost)),
+            Scene(name: "glance-21-cut-out", phase: .glance, activity: .notice(cutOut)),
+            Scene(name: "glance-22-recent-qr-code", phase: .glance, showingRecent: true, setUp: {
+                LiveActivityCenter.shared.loadSample(recents: [], unseen: 0)
+                LiveActivityCenter.shared.remember(qrCodeLongHost)
+                LiveActivityCenter.shared.remember(qrCode)
+                LiveActivityCenter.shared.remember(cutOut)
+            }),
+            Scene(name: "glance-23-recent-qr-code-narrow", phase: .glance, geometry: narrowNotch, showingRecent: true, setUp: {
+                LiveActivityCenter.shared.loadSample(recents: [], unseen: 0)
+                LiveActivityCenter.shared.remember(qrCodeLongHost)
+            }),
+            // Recording a region: the dot and the time, beside a notice, saving, and Stop in the glance.
+            Scene(name: "recording-1-closed", phase: .closed, activity: .recording, setUp: { loadRecording() }),
+            Scene(name: "recording-2-closed-virtual", phase: .closed, activity: .recording, geometry: virtualNotch, setUp: { loadRecording() }),
+            Scene(name: "recording-3-closed-long", phase: .closed, activity: .recording, setUp: { loadRecording(seconds: 3765) }),
+            Scene(name: "recording-4-closed-and-music", phase: .closed, activity: .recording, secondary: .music, setUp: { loadRecording() }),
+            Scene(name: "recording-5-beside-a-notice", phase: .closed, activity: .notice(lateMessage), secondary: .recording,
+                  setUp: { loadRecording() }),
+            Scene(name: "recording-6-saving", phase: .closed, activity: .recording, setUp: { loadRecording(saving: true) }),
+            Scene(name: "recording-7-landed", phase: .closed, activity: .notice(recordingLanded)),
+            Scene(name: "recording-8-display-gone", phase: .closed, activity: .notice(recordingDisplayGone)),
+            Scene(name: "glance-24-recording", phase: .glance, activity: .recording, setUp: { loadRecording() }),
+            Scene(name: "glance-25-recording-long", phase: .glance, activity: .recording, setUp: { loadRecording(seconds: 3765) }),
+            Scene(name: "glance-26-recording-narrow", phase: .glance, activity: .recording, geometry: narrowNotch, setUp: { loadRecording() }),
+            // The recording's, with a notice in the closed notch.
+            Scene(name: "glance-27-recording-beside-a-notice", phase: .glance, activity: .notice(meeting), secondary: .recording,
+                  setUp: { loadRecording() }),
+            Scene(name: "glance-28-recording-saving", phase: .glance, activity: .recording, setUp: { loadRecording(saving: true) }),
+            Scene(name: "glance-29-recording-landed", phase: .glance, activity: .notice(recordingLanded)),
+            Scene(name: "85-closed-copied-text", phase: .closed, activity: .notice(copiedText)),
+            Scene(name: "86-closed-no-text", phase: .closed, activity: .notice(noText)),
+            Scene(name: "87-closed-qr-code", phase: .closed, activity: .notice(qrCodeLongHost)),
             // The recent list, and the two ways in.
             Scene(name: "glance-16-recent", phase: .glance, showingRecent: true, setUp: { loadRecents() }),
             Scene(name: "glance-17-today-recent-awake", phase: .glance, hasTrack: false, setUp: {
@@ -329,7 +390,7 @@ enum SnapshotRenderer {
                 CalendarService.shared.loadSample(events: [], reminders: [])
                 NotesStore.shared.loadSample([""])
             }),
-        ] + sizeScenes() + edgeScenes(virtualNotch: virtualNotch)
+        ] + clipboardScenes() + sizeScenes() + edgeScenes(virtualNotch: virtualNotch)
 
         let settings = AppSettings.shared
         let savedTheme = settings.theme
@@ -351,7 +412,8 @@ enum SnapshotRenderer {
             let sceneGeometry = scene.geometry ?? geometry
             let viewModel = NotchViewModel(geometry: sceneGeometry)
             viewModel.stage(phase: scene.phase, activity: scene.activity, secondary: scene.secondary, tab: scene.tab,
-                            draggingFiles: scene.draggingFiles, command: scene.command, showingRecent: scene.showingRecent)
+                            traySide: scene.traySide, clipSearch: scene.clipSearch, draggingFiles: scene.draggingFiles,
+                            draggingImages: scene.draggingImages, command: scene.command, showingRecent: scene.showingRecent)
             // The command field can make the notch taller than the setting.
             let height = max(size.height, viewModel.metrics.height + 40)
             let content = ZStack(alignment: .top) {
@@ -376,6 +438,7 @@ enum SnapshotRenderer {
         print("Wrote \(written) snapshots to \(folder.path)")
         loadSampleProfiles()
         renderSettings(into: folder)
+        renderClipboardSettings(into: folder)
         renderThemes(into: folder)
         renderProfiles(into: folder)
         renderWelcome(into: folder)
@@ -386,7 +449,8 @@ enum SnapshotRenderer {
     // MARK: Capture
 
     /// The capture editor over a made-up display: a bare selection, the toolbar with marks of every
-    /// kind, a text mark being typed, and a pinned capture.
+    /// kind, a text mark being typed, a pinned capture, and before any of that, the hint alone and
+    /// what's highlighted as the pointer goes over the windows.
     private static func renderCapture(into folder: URL) {
         // One editor makes all four, each from the one before.
         guard wanted("capture") || only.contains(where: { $0.hasPrefix("capture") }),
@@ -431,7 +495,6 @@ enum SnapshotRenderer {
         editor.tool = .text
         editor.color = .yellow
         editor.width = 6
-        window.makeKey()
         editor.mouseDown(at: CGPoint(x: 640, y: 236), on: display.id)
         editor.mouseUp(at: CGPoint(x: 640, y: 236), on: display.id)
         RunLoop.main.run(until: .now + 0.5)
@@ -454,7 +517,36 @@ enum SnapshotRenderer {
                 pin.close()
             }
         }
+        count += renderCaptureHover(into: folder)
         print("Wrote \(count) capture snapshots to \(folder.path)")
+    }
+
+    /// The overlay with nothing selected: the hint, a window under the pointer, ⌥ held, and windows
+    /// at the display's corner and edge, where the label has to stay on the display.
+    private static func renderCaptureHover(into folder: URL) -> Int {
+        guard var display = CaptureController.syntheticDisplay(id: 1, frame: CGRect(x: 0, y: 0, width: 1280, height: 800), scale: 2, withWindows: true),
+              let document = display.windows.first else { return 0 }
+        let corner = CaptureWindow(id: 3, appName: "A Long Application Name", frame: CGRect(x: 1180, y: 0, width: 100, height: 300))
+        let edge = CaptureWindow(id: 4, appName: "A Long Application Name", frame: CGRect(x: 1230, y: 400, width: 50, height: 300))
+        display.windows += [corner, edge]
+        var count = 0
+        let editor = CaptureEditor(displays: [display], accent: AppSettings.shared.theme.accent)
+        let window = CaptureOverlayWindow(display: display, editor: editor, isSnapshot: true)
+        window.setFrameOrigin(NSPoint(x: -22_000, y: -62_000))
+        window.orderFrontRegardless()
+        RunLoop.main.run(until: .now + 1.2)
+        if save(window, to: folder.appendingPathComponent("capture-5-hint.png")) { count += 1 }
+        for (name, target) in [("window-hover", document), ("window-hover-corner", corner), ("window-hover-edge", edge)] {
+            editor.mouseMoved(to: CGPoint(x: target.frame.midX, y: target.frame.midY), on: display.id)
+            RunLoop.main.run(until: .now + 0.8)
+            if save(window, to: folder.appendingPathComponent("capture-5-\(name).png")) { count += 1 }
+        }
+        editor.mouseMoved(to: CGPoint(x: document.frame.midX, y: document.frame.midY), on: display.id, wholeDisplay: true)
+        RunLoop.main.run(until: .now + 0.8)
+        if save(window, to: folder.appendingPathComponent("capture-5-whole-display.png")) { count += 1 }
+        window.orderOut(nil)
+        window.close()
+        return count
     }
 
     /// Puts a theme in the settings, where the notch reads it. Only writes what differs.
@@ -592,6 +684,38 @@ enum SnapshotRenderer {
         }
         print("Wrote \(count) settings snapshots to \(folder.path)")
         renderSpotlights(into: folder)
+    }
+
+    /// The end of the Tray page, where the Clipboard section is: the history on, and macOS in the way.
+    private static func renderClipboardSettings(into folder: URL) {
+        let samples: [(name: String, access: ClipboardStore.Access, appearance: NSAppearance.Name)] = [
+            ("on-dark", .allowed, .darkAqua), ("on-light", .allowed, .aqua),
+            ("asks-dark", .asks, .darkAqua), ("denied-light", .denied, .aqua),
+        ]
+        var count = 0
+        for (index, sample) in samples.enumerated() where wanted("settings-5-tray-clipboard-\(sample.name)") {
+            loadClips(sampleClips, access: sample.access)
+            let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
+                                         styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
+            let navigation = SettingsNavigation()
+            navigation.page = .tray
+            SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
+            window.appearance = NSAppearance(named: sample.appearance)
+            window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -70_000))
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: .now + 1.2)
+            if let scrollView = window.contentView.flatMap(overflowingScrollView), let document = scrollView.documentView {
+                let viewport = scrollView.contentView.bounds.height
+                scrollView.contentView.scroll(to: NSPoint(x: 0, y: document.isFlipped ? document.frame.height - viewport : 0))
+                scrollView.reflectScrolledClipView(scrollView.contentView)
+                RunLoop.main.run(until: .now + 0.8)
+            }
+            if save(window, to: folder.appendingPathComponent("settings-5-tray-clipboard-\(sample.name).png")) { count += 1 }
+            window.orderOut(nil)
+            window.close()
+        }
+        loadClips([], isOn: false)
+        print("Wrote \(count) clipboard settings snapshots to \(folder.path)")
     }
 
     /// The Live Activities page with its preview held on each activity, as when pointing at its tile.
@@ -744,7 +868,39 @@ enum SnapshotRenderer {
         LiveActivityCenter.shared.loadSample(recents: [], unseen: 0)
         QuickToggles.shared.loadSample(awakeUntil: nil)
         TrayStore.shared.loadSample(pinned: nil)
+        ScreenRecorder.shared.loadSample(.idle)
+        loadClips([], isOn: false)
     }
+
+    /// A recording this long running, or its file being saved. It holds nothing.
+    private static func loadRecording(seconds: TimeInterval = 83, saving: Bool = false) {
+        let plan = RecordingPlan(region: CGRect(x: 0, y: 0, width: 640, height: 360), scale: 2, frameRate: 60)
+        ScreenRecorder.shared.loadSample(saving ? .saving : .recording(since: sampleTime), plan: plan,
+                                         now: sampleTime.addingTimeInterval(seconds))
+    }
+
+    /// Made-up clips, never what's really on the clipboard, which a snapshot run doesn't look at.
+    private static func loadClips(_ clips: [ClipboardStore.Clip], isOn: Bool = true, access: ClipboardStore.Access = .allowed) {
+        AppSettings.shared.clipboardHistory = isOn
+        ClipboardStore.shared.loadSample(clips, access: access)
+    }
+
+    /// One of each kind of card, and enough behind them to fill the history.
+    private static let sampleClips: [ClipboardStore.Clip] = {
+        func clip(_ text: String, minutes: Double, isPinned: Bool = false) -> ClipboardStore.Clip {
+            ClipboardStore.Clip(text: text, copiedAt: sampleTime.addingTimeInterval(-minutes * 60), isPinned: isPinned)
+        }
+        let cards = [
+            clip("git rebase -i HEAD~3", minutes: 50, isPinned: true),
+            clip("#A894FF", minutes: 1),
+            clip("https://example.com/launch/checklist?from=notch", minutes: 3),
+            clip("We're moving the launch to Tuesday, so the docs have time to catch up with the release.", minutes: 6),
+            clip("func greeting(for name: String) -> String {\n    \"Hello, \\(name)\"\n}", minutes: 9),
+            clip("Kitchen Speaker, the one on the shelf by the window", minutes: 12),
+            clip("npm run build --workspace docs", minutes: 15),
+        ]
+        return cards + (0..<43).map { clip("Sample clip \($0 + 1)", minutes: 20 + Double($0)) }
+    }()
 
     private static func loadRecents() {
         func recent(_ symbol: String, _ tint: Color, _ title: String, detail: String? = nil, minutes: Double, count: Int = 1,
@@ -871,6 +1027,35 @@ enum SnapshotRenderer {
         }
     }
 
+    /// The Tray's Clipboard side, at the usual size and the smallest and largest, with `clip` in the
+    /// command field after them.
+    private static func clipboardScenes() -> [Scene] {
+        let pins = Array(sampleClips.prefix(1))
+        let sizes: [(suffix: String, size: CGSize?)] = [("", nil), ("-small", CGSize(width: 600, height: 196)),
+                                                        ("-large", CGSize(width: 840, height: 260))]
+        func scene(_ name: String, search: String = "", _ setUp: @escaping @MainActor () -> Void) -> [Scene] {
+            sizes.map { suffix, size in
+                Scene(name: "clipboard-\(name)\(suffix)", phase: .open, tab: .tray, traySide: .clipboard, clipSearch: search,
+                      openSize: size, setUp: setUp)
+            }
+        }
+        return scene("1-full") { loadClips(sampleClips) }
+            + scene("2-searching", search: "git") { loadClips(sampleClips) }
+            + scene("3-off") { loadClips([], isOn: false) }
+            + scene("4-off-pins") { loadClips(pins, isOn: false) }
+            + scene("5-refused") { loadClips(sampleClips, access: .asks) }
+            + scene("6-refused-empty") { loadClips([], access: .denied) }
+            + scene("7-empty") { loadClips([]) }
+            + scene("8-no-match", search: "lunch") { loadClips(sampleClips) } + [
+                Scene(name: "clipboard-9-dropping", phase: .open, tab: .tray, traySide: .clipboard, draggingFiles: true),
+                Scene(name: "clipboard-10-glass", phase: .open, tab: .tray, traySide: .clipboard,
+                      theme: NotchTheme(material: .glass, accent: .yellow), setUp: { loadClips(sampleClips) }),
+                Scene(name: "command-12-clip", phase: .open, command: "clip", setUp: { loadClips(sampleClips) }),
+                Scene(name: "command-13-clip-search", phase: .open, command: "clip build", setUp: { loadClips(sampleClips) }),
+                Scene(name: "command-14-clip-off", phase: .open, command: "clip", setUp: { loadClips([], isOn: false) }),
+            ]
+    }
+
     /// Each tab at the smallest and the largest open size the settings allow, with more in every
     /// list than fits, so content that runs over or leaves a gap shows.
     private static func sizeScenes() -> [Scene] {
@@ -883,6 +1068,8 @@ enum SnapshotRenderer {
                 }),
                 Scene(name: "size-\(label)-3-tray", phase: .open, tab: .tray, openSize: size),
                 Scene(name: "size-\(label)-4-tray-dropping", phase: .open, tab: .tray, draggingFiles: true, openSize: size),
+                Scene(name: "size-\(label)-4-tray-dropping-image", phase: .open, tab: .tray, draggingFiles: true,
+                      draggingImages: true, openSize: size),
                 Scene(name: "size-\(label)-5-focus", phase: .open, tab: .focus, openSize: size),
                 Scene(name: "size-\(label)-6-focus-notes", phase: .open, tab: .focus, focusShowsNotes: true, openSize: size),
                 Scene(name: "size-\(label)-7-control", phase: .open, tab: .stats, openSize: size),

@@ -4,19 +4,33 @@ import SwiftUI
 /// `Dynotch --capture-self-test <folder>` drives the capture editor with synthesized events over a
 /// made-up display parked off screen: selects, moves and resizes a region, draws with every tool,
 /// types a text mark, undoes and redoes from the keyboard and the toolbar, then copies to a
-/// pasteboard of its own, saves into the folder and pins. It prints a line per check and leaves
-/// the finished capture in the folder.
+/// pasteboard of its own, saves into the folder, pins and reads the text. On a display that lists
+/// its windows it hovers them and clicks them. Then it records from V and from the Record button, on
+/// made-up frames, never the real screen. It prints a line per check and leaves the finished capture
+/// in the folder.
 @MainActor
 enum CaptureSelfTest {
     private static var failures: [String] = []
+    /// What the recorder said, for the Record checks. Notices that are collected don't reach the notch.
+    private static var recordingNotices: [LiveNotice] = []
 
-    static func run(into folder: URL) -> Bool {
+    /// Async so it can wait for Copy Text's reading, rather than guess how long Vision takes.
+    static func run(into folder: URL) async -> Bool {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         failures = []
+        // A test shouldn't click at whoever is sitting at the Mac.
+        AppSettings.shared.shutterSound = false
         let controller = CaptureController.shared
         controller.placesOverlaysOffScreen = true
         controller.pasteboard = NSPasteboard(name: NSPasteboard.Name("app.dynotch.capture-self-test"))
         controller.saveFolderOverride = folder
+        // Before anything else, so that nothing here can reach the real recorder.
+        let source = SyntheticRecordingSource()
+        let recordings = folder.appendingPathComponent("Recordings", isDirectory: true)
+        try? FileManager.default.createDirectory(at: recordings, withIntermediateDirectories: true)
+        controller.recorder = ScreenRecorder(makeSource: { source }, tray: TrayStore(support: recordings), saveFolder: recordings) { notice, _ in
+            recordingNotices.append(notice)
+        }
         guard let display = CaptureController.syntheticDisplay(id: 7, frame: CGRect(x: 0, y: 0, width: 1280, height: 800), scale: 2) else {
             print("FAIL no synthetic display")
             return false
@@ -162,7 +176,6 @@ enum CaptureSelfTest {
         drag(thirdWindow, from: CGPoint(x: 100, y: 100), to: CGPoint(x: 400, y: 300))
         press("Pin", third, thirdWindow)
         let pins = PinnedCaptureWindow.all
-        pins.forEach { $0.setFrameOrigin(NSPoint(x: -30_000, y: -70_000)) }
         settle(0.3)
         check(!controller.isActive && pins.count == 1, "Pin opens a pinned window and closes the editor")
         check(pins.first?.frame.size == CGSize(width: 300, height: 200), "the pinned window is the capture's point size")
@@ -173,10 +186,238 @@ enum CaptureSelfTest {
         settle(0.3)
         key("\u{1b}", controller.editor!, keyCode: 53)
         check(!controller.isActive, "Esc cancels the capture")
+        checkWindows(controller)
+        await checkCopyText(on: display)
+        await checkRecord(on: display, source: source, in: recordings)
         return finish()
     }
 
+    /// Record, from V and from the button, with the fake source: no real capture starts. The toolbar's
+    /// last button has to fit too, now that it has one more.
+    private static func checkRecord(on display: CaptureDisplay, source: SyntheticRecordingSource, in folder: URL) async {
+        let controller = CaptureController.shared
+        let recorder = controller.recorder
+        let region = (from: CGPoint(x: 200, y: 150), to: CGPoint(x: 520, y: 390))
+
+        guard let editor = openEditor(on: display, selecting: region) else { return }
+        if let record = editor.controlFrames["Record"], let close = editor.controlFrames["Close"], let toolbar = editor.toolbarFrame(on: display.id) {
+            check(record.width == 30, "the Record button is a toolbar button (\(record.width) wide)")
+            check(close.maxX <= toolbar.maxX - 8, "the toolbar fits the Record button (Close ends at \(close.maxX), the toolbar at \(toolbar.maxX))")
+        } else {
+            check(false, "the toolbar reported its Record button")
+        }
+        if let gif = editor.controlFrames["GIF"], let toolbar = editor.toolbarFrame(on: display.id) {
+            check(gif.maxX <= toolbar.maxX - 8, "the format control fits in the second row (GIF ends at \(gif.maxX), the toolbar at \(toolbar.maxX))")
+        } else {
+            check(false, "the toolbar reported its format control")
+        }
+        key("v", editor)
+        check(!controller.isActive, "V closes the editor")
+        check(recorder.state == .starting, "and starts recording")
+        check(recorder.isRunning, "with the fake source")
+        await recorder.starting?.value
+        check(recorder.plan?.width == 640 && recorder.plan?.height == 480, "the recording is the selection at 2x (\(recorder.plan?.sizeText ?? "nothing"))")
+        await sendFrames(source, count: 30)
+        check(recorder.outline?.canBecomeKey == false, "the outline can't take the keyboard")
+        check(recorder.outline.map { outline in !NSScreen.screens.contains { $0.frame.intersects(outline.frame) } } == true, "and stays off screen here")
+
+        // Every way into Capture stops a recording rather than opening Capture over it. Only with one
+        // running: with none, `begin` would go on to the real screen.
+        guard recorder.isRunning else {
+            check(false, "the recording is running")
+            return
+        }
+        controller.begin()
+        check(!controller.isActive && recorder.state == .saving, "another way into Capture stops the recording")
+        await recorder.saving?.value
+        let recorded = (try? FileManager.default.contentsOfDirectory(atPath: folder.path))?.filter { $0.hasPrefix("Screen Recording ") } ?? []
+        check(recorded.count == 1 && recorded.first?.hasSuffix(".mp4") == true, "the MP4 lands in the save folder (\(recorded))")
+        check(recordingNotices.last?.text == "Saved" && recordingNotices.last?.actions.count == 2, "and a notice names it, with Open and Show")
+
+        guard let second = openEditor(on: display, selecting: region) else { return }
+        press("GIF", second, controller.overlays[0])
+        check(AppSettings.shared.recordFormat == .gif, "the format control picks GIF")
+        press("MP4", second, controller.overlays[0])
+        check(AppSettings.shared.recordFormat == .mp4, "and back to MP4")
+        press("Record", second, controller.overlays[0])
+        check(!controller.isActive && recorder.isRunning, "the Record button closes the editor and starts recording")
+        await recorder.starting?.value
+        await sendFrames(source, count: 30)
+        recorder.stop()
+        await recorder.saving?.value
+        let both = (try? FileManager.default.contentsOfDirectory(atPath: folder.path))?.filter { $0.hasPrefix("Screen Recording ") } ?? []
+        check(both.count == 2, "that recording lands too (\(both.count) in all)")
+        check(recorder.state == .idle, "and the recorder is idle again")
+    }
+
+    private static func sendFrames(_ source: SyntheticRecordingSource, count: Int) async {
+        for _ in 0..<count {
+            source.send(1)
+            try? await Task.sleep(for: .milliseconds(4))
+        }
+    }
+
+    /// Hovering and clicking on a display that lists its windows, through the overlay's events.
+    private static func checkWindows(_ controller: CaptureController) {
+        let frame = CGRect(x: 0, y: 0, width: 1280, height: 800)
+        guard let display = CaptureController.syntheticDisplay(id: 8, frame: frame, scale: 2, withWindows: true),
+              let document = display.windows.first else {
+            check(false, "the display lists its windows")
+            return
+        }
+        controller.beginTest(displays: [display])
+        guard let editor = controller.editor, let window = controller.overlays.first else {
+            check(false, "the editor opens with windows")
+            return
+        }
+        settle(0.5)
+        let onWindow = CGPoint(x: document.frame.midX, y: document.frame.midY)
+        let onDesktop = CGPoint(x: 60, y: 700)
+        let selected = document.frame.integral
+
+        send(.mouseMoved, at: onWindow, in: window)
+        check(editor.hoveredWindow == document && editor.hoveredDisplay == display.id, "hovering finds the window")
+        check(editor.highlight(on: display.id)?.frame == selected, "the highlight is what a click would select")
+        check(editor.highlight(on: display.id)?.label == "TextEdit · 641 × 480", "and says so (\(editor.highlight(on: display.id)?.label ?? "nothing"))")
+        send(.mouseMoved, at: onDesktop, in: window)
+        check(editor.hover == nil, "the bare desktop highlights nothing")
+        send(.mouseMoved, at: onWindow, in: window)
+        flags(.option, in: window)
+        check(editor.hoveredDisplay == display.id && editor.hoveredWindow == nil, "pressing ⌥ highlights the whole display")
+        check(editor.highlight(on: display.id)?.frame == frame, "all of it")
+        flags([], in: window)
+        check(editor.hoveredWindow == document, "letting go goes back to the window")
+        send(.mouseMoved, at: onWindow, in: window, flags: .option)
+        check(editor.hoveredWindow == nil, "a move with ⌥ held agrees")
+        send(.mouseMoved, at: onWindow, in: window)
+
+        click(window, at: onWindow)
+        check(editor.selection == selected, "a click selects the window")
+        check(editor.hover == nil, "and the highlight makes way for the selection")
+        check(editor.render()?.image.width == Int(selected.width) * 2, "its picture is the window at 2x")
+        drag(window, from: onWindow, to: CGPoint(x: onWindow.x + 20, y: onWindow.y + 10))
+        check(editor.selection == selected.offsetBy(dx: 20, dy: 10), "dragging inside moves it like any selection")
+        click(window, at: onDesktop)
+        check(editor.selection == frame, "a click on the bare desktop selects the display")
+        click(window, at: onWindow)
+        check(editor.selection == selected, "a click inside a selection of the whole display picks the window")
+        click(window, at: onDesktop, flags: .option)
+        check(editor.selection == frame, "⌥-click on the desktop selects the display")
+        editor.cancel()
+
+        controller.beginTest(displays: [display])
+        guard let second = controller.editor, let secondWindow = controller.overlays.first else {
+            check(false, "the editor opens with windows again")
+            return
+        }
+        settle(0.3)
+        click(secondWindow, at: onWindow, flags: .option)
+        check(second.selection == frame, "⌥-click on a window selects the display")
+        second.cancel()
+
+        controller.beginTest(displays: [display])
+        guard let third = controller.editor, let thirdWindow = controller.overlays.first else {
+            check(false, "the editor opens with windows a third time")
+            return
+        }
+        settle(0.3)
+        drag(thirdWindow, from: onWindow, to: CGPoint(x: onWindow.x + 120, y: onWindow.y + 90))
+        check(third.selection == CGRect(x: onWindow.x, y: onWindow.y, width: 120, height: 90).integral, "a drag that starts on a window draws a region")
+        third.cancel()
+
+        checkStack(controller, frame: frame)
+    }
+
+    /// The Window Server's real stack, which windows are sorted by, through two overlays of the
+    /// test's own. Their order is known, and every other window in the stack is thrown away unread.
+    private static func checkStack(_ controller: CaptureController, frame: CGRect) {
+        guard let first = CaptureController.syntheticDisplay(id: 9, frame: frame, scale: 1),
+              let second = CaptureController.syntheticDisplay(id: 10, frame: frame, scale: 1) else {
+            check(false, "two displays for the stack")
+            return
+        }
+        controller.beginTest(displays: [first, second])
+        guard controller.overlays.count == 2 else {
+            check(false, "two overlays for the stack")
+            return
+        }
+        settle(0.3)
+        let (back, front) = (controller.overlays[0], controller.overlays[1])
+        let ours = [CGWindowID(back.windowNumber), CGWindowID(front.windowNumber)]
+        func stacked() -> [CGWindowID] { CaptureWindowList.currentStack().map(\.id).filter(ours.contains) }
+
+        back.orderFrontRegardless()
+        front.orderFrontRegardless()
+        settle(0.2)
+        check(stacked() == [ours[1], ours[0]], "the stack lists the frontmost first")
+        back.orderFrontRegardless()
+        settle(0.2)
+        check(stacked() == [ours[0], ours[1]], "and follows a window to the front")
+        controller.cancel()
+    }
+
+    /// Copy Text, from O and from the button, over the made-up page of text. What's read goes on the
+    /// test's pasteboard, and a Blur mark keeps what's under it out of the text too.
+    private static func checkCopyText(on display: CaptureDisplay) async {
+        let controller = CaptureController.shared
+        let page = (from: CGPoint(x: 170, y: 225), to: CGPoint(x: 740, y: 405))
+        controller.pasteboard.clearContents()
+
+        guard let editor = openEditor(on: display, selecting: page) else { return }
+        if let close = editor.controlFrames["Close"], let toolbar = editor.toolbarFrame(on: display.id) {
+            check(close.maxX <= toolbar.maxX - 8, "the toolbar fits its buttons (Close ends at \(close.maxX), the toolbar at \(toolbar.maxX))")
+        } else {
+            check(false, "the toolbar reported where its last button is")
+        }
+        key("b", editor)
+        drag(controller.overlays[0], from: CGPoint(x: 180, y: 314), to: CGPoint(x: 730, y: 340))
+        key("s", editor)
+        key("o", editor)
+        check(!controller.isActive, "O closes the editor at once, before anything's read")
+        await controller.reading?.value
+        var copied = controller.pasteboard.string(forType: .string) ?? ""
+        check(copied.contains("quick brown fox") && copied.contains("Sphinx"), "O copies the text in the selection (\"\(copied)\")")
+        check(!copied.contains("liquor"), "what a Blur mark hides stays out of the text")
+        check(controller.pasteboard.data(forType: .png) == nil, "and only text goes on the pasteboard")
+        check(noticeSays("Copied", detail: "\(copied.split(separator: "\n").count) lines"), "a notice says how many lines")
+
+        guard let second = openEditor(on: display, selecting: page) else { return }
+        press("Copy Text", second, controller.overlays[0])
+        check(!controller.isActive, "the Copy Text button closes the editor")
+        await controller.reading?.value
+        copied = controller.pasteboard.string(forType: .string) ?? ""
+        check(copied.contains("liquor"), "the Copy Text button reads the whole selection (\"\(copied)\")")
+
+        // Nothing but sky.
+        let before = controller.pasteboard.changeCount
+        guard let third = openEditor(on: display, selecting: (CGPoint(x: 900, y: 60), CGPoint(x: 1200, y: 160))) else { return }
+        key("o", third)
+        await controller.reading?.value
+        check(controller.pasteboard.changeCount == before, "with no text found, the pasteboard stays as it was")
+        check(noticeSays("No text found"), "and a notice says so")
+    }
+
+    /// The editor over `display`, with a region dragged out.
+    private static func openEditor(on display: CaptureDisplay, selecting region: (from: CGPoint, to: CGPoint)) -> CaptureEditor? {
+        let controller = CaptureController.shared
+        controller.beginTest(displays: [display])
+        guard let editor = controller.editor, let window = controller.overlays.first else {
+            check(false, "the editor opens")
+            return nil
+        }
+        settle(0.5)
+        drag(window, from: region.from, to: region.to)
+        settle(0.2)
+        return editor
+    }
+
+    private static func noticeSays(_ text: String, detail: String? = nil) -> Bool {
+        guard case .notice(let notice) = LiveActivityCenter.shared.activity else { return false }
+        return notice.text == text && notice.detail == detail
+    }
+
     private static func finish() -> Bool {
+        check(NSApp.keyWindow == nil, "the keyboard stayed with whoever is at the Mac")
         if failures.isEmpty {
             print("Capture self-test passed")
         } else {
@@ -197,22 +438,32 @@ enum CaptureSelfTest {
     // MARK: Events
 
     /// A mouse event at a point in the display's top-left points.
-    private static func mouseEvent(_ type: NSEvent.EventType, at point: CGPoint, in window: NSWindow) -> NSEvent? {
-        NSEvent.mouseEvent(with: type, location: NSPoint(x: point.x, y: window.frame.height - point.y), modifierFlags: [],
+    private static func mouseEvent(_ type: NSEvent.EventType, at point: CGPoint, in window: NSWindow, flags: NSEvent.ModifierFlags = []) -> NSEvent? {
+        NSEvent.mouseEvent(with: type, location: NSPoint(x: point.x, y: window.frame.height - point.y), modifierFlags: flags,
                            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
                            eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1)
     }
 
-    private static func send(_ type: NSEvent.EventType, at point: CGPoint, in window: NSWindow) {
-        guard let event = mouseEvent(type, at: point, in: window) else { return }
+    private static func send(_ type: NSEvent.EventType, at point: CGPoint, in window: NSWindow, flags: NSEvent.ModifierFlags = []) {
+        guard let event = mouseEvent(type, at: point, in: window, flags: flags) else { return }
         window.sendEvent(event)
         settle(0.03)
     }
 
-    private static func click(_ window: NSWindow, at point: CGPoint) {
-        send(.mouseMoved, at: point, in: window)
-        send(.leftMouseDown, at: point, in: window)
-        send(.leftMouseUp, at: point, in: window)
+    private static func click(_ window: NSWindow, at point: CGPoint, flags: NSEvent.ModifierFlags = []) {
+        send(.mouseMoved, at: point, in: window, flags: flags)
+        send(.leftMouseDown, at: point, in: window, flags: flags)
+        send(.leftMouseUp, at: point, in: window, flags: flags)
+    }
+
+    /// A modifier going down or up, with no move.
+    private static func flags(_ flags: NSEvent.ModifierFlags, in window: NSWindow) {
+        guard let event = NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: flags,
+                                           timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                           context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false,
+                                           keyCode: 58) else { return }
+        window.sendEvent(event)
+        settle(0.03)
     }
 
     private static func drag(_ window: NSWindow, from: CGPoint, to: CGPoint, steps: Int = 4) {

@@ -78,6 +78,8 @@ enum ClosedActivity: Equatable {
     case stopwatch
     /// Files arriving in ~/Downloads.
     case download
+    /// A region of the screen being recorded, or the file being saved.
+    case recording
 }
 
 /// A second activity, drawn as a small glyph at the end of the right ear while the main
@@ -96,11 +98,14 @@ enum CompactActivity: Equatable {
     case held(Int)
     /// Keep Awake is on.
     case keepAwake
+    /// The red dot, beside a notice that's taken the notch from a recording.
+    case recording
 
     /// The main activity already shows this one.
     func isShown(by activity: ClosedActivity) -> Bool {
         switch (self, activity) {
-        case (.timer, .timer), (.music, .music), (.music, .trackPeek), (.stopwatch, .stopwatch), (.download, .download): true
+        case (.timer, .timer), (.music, .music), (.music, .trackPeek), (.stopwatch, .stopwatch), (.download, .download),
+             (.recording, .recording): true
         case (.micMuted, .notice(let notice)): notice.key == "mic"
         case (.focus, .notice(let notice)): notice.key == "focus"
         case (.countdown(let compact), .countdown(let main)): compact.id == main.id
@@ -111,7 +116,7 @@ enum CompactActivity: Equatable {
     /// A state rather than something going on, so it may show on its own while "Two at once" is off.
     var isStatus: Bool {
         switch self {
-        case .micMuted, .focus, .held, .keepAwake: true
+        case .micMuted, .focus, .held, .keepAwake, .recording: true
         default: false
         }
     }
@@ -124,10 +129,10 @@ struct ClosedContent: Equatable {
 }
 
 /// Decides what the closed notch shows. The main activity goes by priority: notices, which take
-/// turns (see `NoticeQueue`), a new track, a running timer (the focus timer or a named one, whichever
-/// ends soonest, then the stopwatch), a download, then music that's playing. The most important of
-/// the others that has a compact form shows beside it: the mute badge, what's being held back,
-/// timers, a download, Keep Awake, the Focus, music.
+/// turns (see `NoticeQueue`), a recording, a new track, a running timer (the focus timer or a named
+/// one, whichever ends soonest, then the stopwatch), a download, then music that's playing. The most
+/// important of the others that has a compact form shows beside it: a recording, the mute badge,
+/// what's being held back, timers, a download, Keep Awake, the Focus, music.
 @MainActor
 final class LiveActivityCenter: ObservableObject {
     static let shared = LiveActivityCenter()
@@ -164,6 +169,7 @@ final class LiveActivityCenter: ObservableObject {
             TimerStore.shared.$countdowns.map { _ in () }.eraseToAnyPublisher(),
             TimerStore.shared.$stopwatch.map { _ in () }.eraseToAnyPublisher(),
             DownloadMonitor.shared.$downloads.map(\.isEmpty).removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
+            ScreenRecorder.shared.$state.map { $0 == .idle }.removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
             FocusMonitor.shared.$mode.map { _ in () }.eraseToAnyPublisher(),
             QuickToggles.shared.$isKeepingAwake.map { _ in () }.eraseToAnyPublisher(),
             AppSettings.shared.objectWillChange.map { _ in () }.eraseToAnyPublisher()
@@ -285,6 +291,7 @@ final class LiveActivityCenter: ObservableObject {
         let store = TimerStore.shared
         let musicPlaying = settings.liveMusic && media.isPlaying && media.track != nil
         let downloading = settings.liveDownloads && !DownloadMonitor.shared.downloads.isEmpty
+        let recording = ScreenRecorder.shared.isActive
 
         // Running timers, the one that ends soonest first, then the stopwatch.
         var timers: [(end: Date, activity: ClosedActivity, compact: CompactActivity)] = []
@@ -302,6 +309,8 @@ final class LiveActivityCenter: ObservableObject {
         let activity: ClosedActivity
         if let notice = queue.visible {
             activity = .notice(notice)
+        } else if recording {
+            activity = .recording
         } else if trackPeekActive, settings.liveMusic, media.track != nil {
             activity = .trackPeek
         } else if let timer = timers.first {
@@ -316,6 +325,7 @@ final class LiveActivityCenter: ObservableObject {
 
         // The ones with a compact form, most important first.
         var compact: [CompactActivity] = []
+        if recording { compact.append(.recording) }
         if settings.liveMicMuted, MicMonitor.shared.isMuted { compact.append(.micMuted) }
         if !queue.held.isEmpty { compact.append(.held(queue.held.count)) }
         compact += timers.map(\.compact)
@@ -325,7 +335,8 @@ final class LiveActivityCenter: ObservableObject {
         if musicPlaying { compact.append(.music) }
         var secondary = compact.first { !$0.isShown(by: activity) }
         // Without "Two at once", only a status like the mute badge shows, and only when nothing else does.
-        if !settings.liveSecondary, activity != .idle || secondary?.isStatus != true { secondary = nil }
+        // A recording's dot stays beside a notice all the same, so nothing's recorded unseen.
+        if !settings.liveSecondary, secondary != .recording, activity != .idle || secondary?.isStatus != true { secondary = nil }
 
         let next = ClosedContent(activity: activity, secondary: secondary)
         guard next != content else { return }

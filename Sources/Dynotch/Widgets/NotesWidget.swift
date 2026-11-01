@@ -89,8 +89,8 @@ struct NotesActions: View {
         items.append(.separator)
         items.append(.item("New Note") { store.newNote() })
         items.append(.item("Copy Note", isEnabled: !(current?.isBlank ?? true)) {
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(current?.text ?? "", forType: .string)
+            NSPasteboard.dynotch.clearContents()
+            NSPasteboard.dynotch.setString(current?.text ?? "", forType: .string)
         })
         items.append(.item("Show in Finder") {
             if let current, current.isOnDisk {

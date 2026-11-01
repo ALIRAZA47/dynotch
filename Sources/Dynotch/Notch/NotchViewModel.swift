@@ -83,6 +83,10 @@ struct ClosedLayout: Equatable {
             // Room for a size like "482.3 MB" on the right.
             earWidth = 78
             rowHeight = 0
+        case .recording:
+            // Room for "1:02:45" on the right, as for the stopwatch.
+            earWidth = 72
+            rowHeight = 0
         case .notice(let notice):
             switch notice.kind {
             case .meter:
@@ -107,12 +111,25 @@ final class NotchViewModel: ObservableObject {
     @Published private(set) var phase: Phase = .closed {
         didSet {
             guard (oldValue == .glance) != (phase == .glance) else { return }
+            if phase == .glance { glanceAppeared = .now }
             LiveActivityCenter.shared.glanceChanged(isGlancing: phase == .glance)
         }
     }
+    /// The Tray's two sides: its files, and what's been copied.
+    enum TraySide: Hashable {
+        case files, clipboard
+    }
+
     @Published var tab: NotchTab = .home
+    @Published var traySide = TraySide.files
+    /// What's typed in the Clipboard side's search field.
+    @Published var clipSearch = ""
     /// Files are being dragged toward the notch; the tray shows its drop zones.
-    @Published var isDraggingFiles = false
+    @Published var isDraggingFiles = false {
+        didSet { if !isDraggingFiles { isDraggingImages = false } }
+    }
+    /// An image is among them, so the tray offers what can be done with one. It ends with the drag.
+    @Published var isDraggingImages = false
     @Published private(set) var activity: ClosedActivity
     /// A second activity, shown as a glyph at the end of the right ear.
     @Published private(set) var secondary: CompactActivity?
@@ -129,6 +146,7 @@ final class NotchViewModel: ObservableObject {
     /// The glance has turned to the recent list.
     @Published private(set) var isShowingRecent = false
     private var clickedForGlance = Date.distantPast
+    private var glanceAppeared = Date.distantPast
 
     /// Something was dragged out of the tray and the drag hasn't ended yet.
     @Published var isDraggingOut = false
@@ -175,6 +193,8 @@ final class NotchViewModel: ObservableObject {
     /// What the glance shows, from what's live right now.
     var glanceContent: GlanceContent {
         if isShowingRecent { return .recent(rows: LiveActivityCenter.shared.recents.count) }
+        // The recording's for as long as it runs, whatever the closed notch shows, so Stop stays put.
+        if isRecording { return .recording }
         return GlanceContent(activity: activity)
     }
 
@@ -188,6 +208,20 @@ final class NotchViewModel: ObservableObject {
     var noticeHasActions: Bool {
         if case .notice(let notice) = activity { return !notice.actions.isEmpty }
         return false
+    }
+
+    /// A recording is going, in the notch itself or as the dot beside a notice.
+    var isRecording: Bool { activity == .recording || secondary == .recording }
+
+    /// How long Stop stays dead once the glance has come up.
+    static let stopGate: TimeInterval = 0.4
+
+    /// Stop refuses clicks for a moment after the glance appears, however it appeared. A click meant
+    /// for the notch can land on a Stop that has just arrived under it, whether the pointer resting
+    /// there or a click raised the glance, and it would end the recording. `acceptsNoticeButtons`
+    /// only knows of clicks.
+    var acceptsStop: Bool {
+        Date.now.timeIntervalSince(glanceAppeared) >= Self.stopGate
     }
 
     /// The open notch with the command field up: tall enough for its rows, at least as tall as the tabs.
@@ -244,6 +278,8 @@ final class NotchViewModel: ObservableObject {
 
     func open(tab: NotchTab? = nil) {
         if let tab { self.tab = tab }
+        // Whatever opens the Tray by name means its files, like a screenshot's Show.
+        if tab == .tray { traySide = .files }
         guard phase != .open else { return }
         withAnimation(.notchOpen) {
             phase = .open
@@ -253,9 +289,10 @@ final class NotchViewModel: ObservableObject {
         NowPlayingService.shared.refresh()
     }
 
-    /// A click on the closed notch: the glance, for a notice's buttons, and otherwise the whole notch.
+    /// A click on the closed notch: the glance, for a notice's buttons or a recording's Stop, and
+    /// otherwise the whole notch. It never stops a recording.
     func activate() {
-        if noticeHasActions {
+        if noticeHasActions || isRecording {
             clickedForGlance = .now
             glance()
         } else {
@@ -285,6 +322,7 @@ final class NotchViewModel: ObservableObject {
             isShowingRecent = false
         }
         commandQuery = ""
+        clipSearch = ""
     }
 
     func setHovering(_ hovering: Bool) {
@@ -344,13 +382,17 @@ final class NotchViewModel: ObservableObject {
     // MARK: Snapshots
 
     func stage(phase: Phase, activity: ClosedActivity, secondary: CompactActivity? = nil, tab: NotchTab = .home,
-               draggingFiles: Bool = false, command: String? = nil, showingRecent: Bool = false) {
+               traySide: TraySide = .files, clipSearch: String = "",
+               draggingFiles: Bool = false, draggingImages: Bool = false, command: String? = nil, showingRecent: Bool = false) {
         self.phase = phase
         isShowingRecent = showingRecent
         self.activity = activity
         self.secondary = secondary
         self.tab = tab
+        self.traySide = traySide
+        self.clipSearch = clipSearch
         isDraggingFiles = draggingFiles
+        isDraggingImages = draggingImages
         isCommandMode = command != nil
         commandQuery = command ?? ""
     }
