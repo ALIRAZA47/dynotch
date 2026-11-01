@@ -70,6 +70,7 @@ Peeks stay hidden while a Focus is on and while a display is mirrored. Dynotch c
 - Downloaded updates are checked against the certificate of the copy you have.
 - `dynotch://` links can only do what you could see and undo. See [What links can't do](/links/#what-links-cant-do).
 - The socket behind [`dynotch progress`](/dynotch-command/#how-it-talks-to-the-app) and the Claude Code hooks is a Unix domain socket in a folder only your user can open, never a network port, and Dynotch checks who's on the other end of each connection. Nothing sent to it can run anything.
+- The `dynotch` command runs in a small binary of its own, signed apart from the app, and the app never starts it. What the command starts, like a [status line of yours](/claude-usage/#if-you-already-have-a-status-line), can't use any permission you've given Dynotch.
 - A button back to a terminal can only bring forward an app on Dynotch's own list. Nothing from a link or a hook ever becomes script source.
 - `gh` comes from a fixed list of folders, never from a request, and only if nobody else can write to it. It runs on its own account, so it can't use any permission you've given Dynotch.
 

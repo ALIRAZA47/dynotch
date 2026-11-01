@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import Testing
 @testable import Dynotch
+import DynotchShared
 
 /// A socket in a scratch folder of its own, never the real one.
 private final class ScratchSocket {
@@ -106,9 +107,9 @@ struct LocalSocketTests {
     }
 
     @Test func onlyThisUserGetsIn() {
-        #expect(LocalSocketServer.accepts(peer: geteuid()))
-        #expect(!LocalSocketServer.accepts(peer: geteuid() + 1))
-        #expect(!LocalSocketServer.accepts(peer: 0, owner: 501))
+        #expect(SocketLocation.accepts(peer: geteuid()))
+        #expect(!SocketLocation.accepts(peer: geteuid() + 1))
+        #expect(!SocketLocation.accepts(peer: 0, owner: 501))
     }
 
     @Test func aPathThatCantFitIsRefused() {
@@ -119,8 +120,8 @@ struct LocalSocketTests {
     }
 
     @Test func theEnvironmentCanMoveTheSocket() {
-        #expect(SocketLocation.current(environment: ["DYNOTCH_SOCKET": "/tmp/x.sock"]) == "/tmp/x.sock")
-        #expect(SocketLocation.current(environment: [:]).hasSuffix("/Dynotch/run/dynotch.sock"))
+        #expect(SocketLocation.forCommand(environment: ["DYNOTCH_SOCKET": "/tmp/x.sock"]) == "/tmp/x.sock")
+        #expect(SocketLocation.forCommand(environment: [:]).hasSuffix("/Dynotch/run/dynotch.sock"))
     }
 
     @Test func oneLeftByACrashIsReplaced() throws {
@@ -191,7 +192,7 @@ struct LocalSocketTests {
         defer { close(raw) }
         let chunk = [UInt8](repeating: 0x61, count: 1 << 20)
         var written = 0
-        while written <= LocalSocketServer.longestRequest + chunk.count {
+        while written <= SocketLocation.longestRequest + chunk.count {
             let count = write(raw, chunk, chunk.count)
             if count <= 0 { break }
             written += count

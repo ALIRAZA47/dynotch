@@ -3,6 +3,8 @@ import Foundation
 import SwiftUI
 import Testing
 @testable import Dynotch
+@testable import DynotchCommand
+import DynotchShared
 
 /// A terminal that keeps what's written to it.
 private final class Terminal {
@@ -353,7 +355,7 @@ struct UsageStatusLineTests {
 /// The real `scripts/dynotch` and the real binary, against a server in this test.
 struct UsageScriptTests {
     private static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    private static let binary = root.appendingPathComponent(".build/debug/Dynotch").path
+    private static let binary = root.appendingPathComponent(".build/debug/DynotchCommand").path
     private static var hasBinary: Bool { FileManager.default.isExecutableFile(atPath: binary) }
 
     private func statusline(_ arguments: [String] = [], input: String, socket: String) throws -> (code: Int32, output: String) {
@@ -405,7 +407,7 @@ struct UsageScriptTests {
         // Run through the shell, since it's the one that can start a process with its input closed.
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/sh")
-        process.arguments = ["-c", #""$0" --cli statusline <&-"#, Self.binary]
+        process.arguments = ["-c", #""$0" statusline <&-"#, Self.binary]
         process.environment = ["DYNOTCH_SOCKET": Scratch().path]
         let output = Pipe()
         process.standardOutput = output

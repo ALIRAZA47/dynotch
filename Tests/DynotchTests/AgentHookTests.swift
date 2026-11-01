@@ -2,6 +2,8 @@ import Darwin
 import Foundation
 import Testing
 @testable import Dynotch
+@testable import DynotchCommand
+import DynotchShared
 
 /// A terminal for one `dynotch hook`.
 private final class HookTerminal {

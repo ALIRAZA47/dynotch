@@ -1,4 +1,5 @@
 import AppKit
+import DynotchShared
 import SwiftUI
 
 enum Haptics {
@@ -31,9 +32,7 @@ enum Format {
 
     /// "now", "5m ago", "2h ago"
     static func ago(_ date: Date, from now: Date = .now) -> String {
-        let minutes = Int(now.timeIntervalSince(date) / 60)
-        if minutes < 1 { return "now" }
-        return minutes < 60 ? "\(minutes)m ago" : "\(minutes / 60)h ago"
+        timeAgo(date, from: now)
     }
 
     static func bytes(_ count: Int64) -> String {

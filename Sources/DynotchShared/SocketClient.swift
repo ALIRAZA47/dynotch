@@ -1,11 +1,11 @@
 import Darwin
 import Foundation
 
-/// The command's end of the socket: one request, one answer. It blocks, since `Dynotch --cli` has
+/// The command's end of the socket: one request, one answer. It blocks, since the command has
 /// nothing else to do, and a process that's stopped takes its connection with it at once, which is
-/// how the notch learns a hook was stopped.
-struct SocketClient {
-    enum Failure: Error, Equatable {
+/// how the notch learns a hook was stopped. The app only uses it to see if another copy is listening.
+package struct SocketClient {
+    package enum Failure: Error, Equatable {
         /// Nothing is listening: Dynotch isn't running.
         case notRunning
         /// Something answers that isn't this user's, which Dynotch never is.
@@ -14,10 +14,14 @@ struct SocketClient {
         case noAnswer
     }
 
-    let path: String
+    package let path: String
+
+    package init(path: String) {
+        self.path = path
+    }
 
     /// Sends `request`, and waits `timeout` seconds for the answer, or for as long as it takes when nil.
-    func send(_ request: [String: Any], timeout: TimeInterval? = 5) throws -> [String: Any] {
+    package func send(_ request: [String: Any], timeout: TimeInterval? = 5) throws -> [String: Any] {
         let descriptor = try connected()
         defer { close(descriptor) }
         guard JSONSerialization.isValidJSONObject(request) else { throw Failure.noAnswer }
@@ -32,7 +36,7 @@ struct SocketClient {
     }
 
     /// Something is listening. A socket file left behind by a crash refuses the connection.
-    var isAnswering: Bool {
+    package var isAnswering: Bool {
         guard let descriptor = try? connected() else { return false }
         close(descriptor)
         return true
@@ -52,7 +56,7 @@ struct SocketClient {
             throw Failure.notRunning
         }
         var user = uid_t(), group = gid_t()
-        guard getpeereid(descriptor, &user, &group) == 0, LocalSocketServer.accepts(peer: user) else {
+        guard getpeereid(descriptor, &user, &group) == 0, SocketLocation.accepts(peer: user) else {
             close(descriptor)
             throw Failure.wrongOwner
         }
@@ -77,7 +81,7 @@ struct SocketClient {
     private func answer(from descriptor: Int32) throws -> [String: Any] {
         var received = Data()
         var chunk = [UInt8](repeating: 0, count: 16 * 1024)
-        while received.count < LocalSocketServer.longestRequest {
+        while received.count < SocketLocation.longestRequest {
             let count = read(descriptor, &chunk, chunk.count)
             if count < 0, errno == EINTR { continue }
             guard count > 0 else { throw Failure.noAnswer }

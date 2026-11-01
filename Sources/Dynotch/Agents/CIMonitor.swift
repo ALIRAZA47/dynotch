@@ -1,4 +1,5 @@
 import Combine
+import DynotchShared
 import SwiftUI
 
 /// A GitHub Actions run being watched.
@@ -67,7 +68,6 @@ final class CIMonitor: ObservableObject {
 
     static let mostWatches = 4
     nonisolated static let longestBranch = 255
-    nonisolated static let longestRepository = 140
     /// A run takes a few seconds to appear after a push. Past this, nothing is coming.
     static let grace: TimeInterval = 120
     /// A run can sit queued for as long as there's no runner. GitHub ends a job after six hours.
@@ -163,7 +163,7 @@ final class CIMonitor: ObservableObject {
             return ["ok": true, "stopped": stopWatching(repository: request.string("repo"), branch: request.string("branch"))]
         }
         guard AppSettings.shared.liveCI else { return Self.refusal("CI runs are switched off in Settings") }
-        guard let repository = request.string("repo"), Self.isRepository(repository) else {
+        guard let repository = request.string("repo"), GitHubName.isRepository(repository) else {
             return Self.refusal("That isn't a repository: it should look like OWNER/NAME")
         }
         guard let branch = request.string("branch"), Self.isBranch(branch) else { return Self.refusal("That isn't a branch") }
@@ -201,16 +201,6 @@ final class CIMonitor: ObservableObject {
 
     // MARK: Checks
 
-    /// `OWNER/NAME`, in the characters GitHub allows. Stricter than a pattern: neither part can pass
-    /// for an option, or for a step up a path in the address `gh` builds from it.
-    nonisolated static func isRepository(_ text: String) -> Bool {
-        let parts = text.split(separator: "/", omittingEmptySubsequences: false)
-        return text.utf8.count <= longestRepository && parts.count == 2 && parts.allSatisfy { part in
-            !part.isEmpty && !part.hasPrefix("-") && part != "." && part != ".."
-                && part.utf8.allSatisfy { isLetterOrDigit($0) || "_.-".utf8.contains($0) }
-        }
-    }
-
     /// A name git would take for a branch, with nothing that could pass for an option.
     static func isBranch(_ text: String) -> Bool {
         guard !text.isEmpty, text.utf8.count <= longestBranch, !text.hasPrefix("-"), !text.hasPrefix("/"), !text.hasSuffix("/"),
@@ -226,10 +216,6 @@ final class CIMonitor: ObservableObject {
         (7...64).contains(text.utf8.count) && text.utf8.allSatisfy { byte in
             (48...57).contains(byte) || (65...70).contains(byte) || (97...102).contains(byte)
         }
-    }
-
-    nonisolated private static func isLetterOrDigit(_ byte: UInt8) -> Bool {
-        (48...57).contains(byte) || (65...90).contains(byte) || (97...122).contains(byte)
     }
 
     /// Only an https page on github.com itself gets a button, whatever came back from `gh`.

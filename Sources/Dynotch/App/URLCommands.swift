@@ -1,4 +1,5 @@
 import AppKit
+import DynotchShared
 import SwiftUI
 
 /// Handles `dynotch://` links, so scripts and other apps can drive the notch.

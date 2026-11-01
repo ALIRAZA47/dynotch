@@ -3,6 +3,8 @@ import Foundation
 import SwiftUI
 import Testing
 @testable import Dynotch
+@testable import DynotchCommand
+import DynotchShared
 
 /// A socket path of its own, never the real one.
 private struct Scratch {
@@ -31,7 +33,7 @@ private func waitUntil(_ condition: @MainActor () -> Bool) async {
 /// The real `scripts/dynotch hook` and the real binary, with a hook's JSON on its stdin.
 private final class HookProcess {
     static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    static let binary = root.appendingPathComponent(".build/debug/Dynotch").path
+    static let binary = root.appendingPathComponent(".build/debug/DynotchCommand").path
     static var hasBinary: Bool { FileManager.default.isExecutableFile(atPath: binary) }
 
     private let process = Process()
@@ -720,21 +722,23 @@ struct AgentDeckTests {
         #expect(router.ops == ["hook"])
     }
 
-    /// Across the whole app: one place makes the decision, one turns it into what Claude Code reads,
-    /// and one button calls the first.
+    /// Across the app and the command: one place makes the decision, one turns it into what Claude
+    /// Code reads, and one button calls the first.
     @Test func onlyOneMethodSendsAllow() throws {
-        let sources = HookProcess.root.appendingPathComponent("Sources/Dynotch")
-        let files = try #require(FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil))
         var decisions: [String: Int] = [:]
         var behaviors: [String: Int] = [:]
         var callers: [String: Int] = [:]
-        for case let file as URL in files where file.pathExtension == "swift" {
-            let text = try String(contentsOf: file, encoding: .utf8)
-            func count(_ word: String) -> Int { text.components(separatedBy: word).count - 1 }
-            if count("\"decision\": \"allow\"") > 0 { decisions[file.lastPathComponent] = count("\"decision\": \"allow\"") }
-            if count("\"behavior\": \"allow\"") > 0 { behaviors[file.lastPathComponent] = count("\"behavior\": \"allow\"") }
-            if count("deck.allow(") > 0 { callers[file.lastPathComponent] = count("deck.allow(") }
-            #expect(count("AgentDeck.shared.allow(") == 0)
+        for folder in ["Sources/Dynotch", "Sources/DynotchCommand", "Sources/DynotchShared"] {
+            let sources = HookProcess.root.appendingPathComponent(folder)
+            let files = try #require(FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil))
+            for case let file as URL in files where file.pathExtension == "swift" {
+                let text = try String(contentsOf: file, encoding: .utf8)
+                func count(_ word: String) -> Int { text.components(separatedBy: word).count - 1 }
+                if count("\"decision\": \"allow\"") > 0 { decisions[file.lastPathComponent] = count("\"decision\": \"allow\"") }
+                if count("\"behavior\": \"allow\"") > 0 { behaviors[file.lastPathComponent] = count("\"behavior\": \"allow\"") }
+                if count("deck.allow(") > 0 { callers[file.lastPathComponent] = count("deck.allow(") }
+                #expect(count("AgentDeck.shared.allow(") == 0)
+            }
         }
         #expect(decisions == ["AgentDeck.swift": 1])
         #expect(behaviors == ["AgentHook.swift": 1])

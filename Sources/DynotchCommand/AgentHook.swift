@@ -1,26 +1,15 @@
 import Darwin
+import DynotchShared
 import Foundation
 
 /// `dynotch hook`: what Claude Code's hooks run. It passes on what the notch needs and leaves the
 /// rest behind. It only ever speaks up with a decision, and it never stops Claude Code: with no
 /// answer, or no Dynotch, Claude Code's own prompt stays in charge.
-enum AgentHook {
-    /// The hook events Dynotch listens for, as the setup card writes them to `settings.json`, which
-    /// merges them beside whatever is there. Only a permission request waits for an answer.
-    static let events: [(name: String, waits: Bool)] = [
-        ("SessionStart", false), ("SessionEnd", false), ("UserPromptSubmit", false), ("PreToolUse", false),
-        ("PostToolUse", false), ("PostToolUseFailure", false), ("Notification", false), ("Stop", false),
-        ("PermissionRequest", true),
-    ]
-
+extension AgentHook {
     /// All that goes to the notch beside the tool's input. Anything else in a hook's JSON stays here:
     /// the prompt, Claude's reply, what the tool printed and where the transcript is.
     private static let fields = ["hook_event_name", "session_id", "cwd", "tool_name", "notification_type", "message",
                                  "reason", "source", "agent_id", "tool_use_id"]
-
-    /// What names a tool's target, the only part of its input that goes along unless it's asking
-    /// for permission.
-    private static let targetKeys = ["command", "file_path", "notebook_path", "path", "pattern", "query", "url"]
 
     /// SessionEnd hooks share 1.5 seconds, so nothing here waits as long as that.
     private static let patience: TimeInterval = 1
@@ -58,13 +47,6 @@ enum AgentHook {
         if origin.tty == nil { origin.tty = terminal }
         request["origin"] = origin.fields
         return request
-    }
-
-    /// What names a tool's target, which is how a finished call is matched to the approval it answers.
-    static func target(of input: [String: Any]) -> [String: String] {
-        input.reduce(into: [:]) { target, entry in
-            if targetKeys.contains(entry.key), let value = entry.value as? String { target[entry.key] = value }
-        }
     }
 
     /// What the approval shows: all of it, except a Bash call's description, which is Claude's own

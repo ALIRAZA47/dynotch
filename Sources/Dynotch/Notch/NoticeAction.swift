@@ -1,4 +1,5 @@
 import AppKit
+import DynotchShared
 
 /// A button on a notice. Buttons only show in the glance, so a stray click on the notch can't join a
 /// meeting or start an update.

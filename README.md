@@ -176,7 +176,9 @@ ln -s /Applications/Dynotch.app/Contents/Resources/dynotch ~/.local/bin/dynotch
 `progress` and `status` go over a Unix domain socket, since a link can't answer back. It sits in a
 folder only your user can open, never on a network port, and Dynotch checks who's on the other end
 of each connection. The socket can tell the notch something or ask what it's showing. It can't run
-anything. If Dynotch isn't running, these two say so and exit with 1.
+anything. If Dynotch isn't running, these two say so and exit with 1. They run in
+`Contents/Helpers/DynotchCommand`, a small binary signed apart from the app, so nothing the command
+starts can use the permissions you've given Dynotch.
 
 Other apps can open the same links, for example
 `dynotch://notify?text=Hello&tint=orange`, `dynotch://timer/start`, `dynotch://profile?name=Work` or
@@ -349,12 +351,14 @@ Sources/Dynotch/
   HUD/        volume (CoreAudio) and brightness monitors, media-key tap
   Notifications/  notification peeks: Notification Center reader, settings
   Activities/ microphone and camera, downloads, Focus
-  Socket/     the local socket, the dynotch command's side of it, and what scripts report
+  Socket/     the local socket and what scripts report
   Agents/     Claude Code's sessions and usage, CI, and going back to a terminal
   Profiles/   saved setups and the rules that switch them
   Settings/   settings window and permissions page
   Welcome/    the first-run welcome tour
   Debug/      snapshot renderer, energy probe, capture self-test
+Sources/DynotchCommand/  the dynotch command's own binary, which the app never links
+Sources/DynotchShared/   what the app and the command both need, with nothing that runs a command
 Tests/        the tests, run with scripts/test.sh
 Support/      Info.plist, entitlements, app icon
 scripts/      build and signing scripts, icon generator, the dynotch command and the zsh hook

@@ -34,6 +34,10 @@ Dynotch runs on your own Mac with no backend. What matters most here:
 
 - The `dynotch://` URL scheme and the `dynotch` CLI — anything that lets another app or
   script make Dynotch do something it shouldn't.
+- The line between the app and that CLI. The CLI runs in `Contents/Helpers/DynotchCommand`, signed
+  apart from the app, so it holds none of the app's permissions, and the app never starts it.
+  Anything that gets a shell, or a read of protected data, through what the app has been allowed
+  is a vulnerability.
 - Handling of files dropped into the Tray.
 - The code-signing setup in `scripts/`.
 - Reading of system databases (Focus, notifications) behind Full Disk Access.
