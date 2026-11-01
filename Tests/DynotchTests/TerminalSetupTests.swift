@@ -809,7 +809,7 @@ struct TerminalSetupInstalledTests {
     }
 
     private nonisolated func sent(_ input: String, to command: String, environment: [String: String]) async throws -> (code: Int32, output: String) {
-        try await Task.detached {
+        try await offThePool {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
             process.arguments = ["-c", command]
@@ -824,7 +824,7 @@ struct TerminalSetupInstalledTests {
             let data = output.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
             return (process.terminationStatus, String(decoding: data, as: UTF8.self))
-        }.value
+        }
     }
 
     private func installedHandler(_ scratch: ScratchHome, event: String) throws -> [String: Any] {

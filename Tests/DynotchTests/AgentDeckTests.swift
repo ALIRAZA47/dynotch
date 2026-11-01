@@ -1163,16 +1163,18 @@ struct AgentDeckTests {
         let scripts = ScriptActivityStore(post: { _, _ in })
         scripts.start(on: router)
         let path = scratch.path
-        let waiting = Task.detached { () -> String? in
-            let answer = try? SocketClient(path: path).send(["op": "hook", "hook_event_name": "PermissionRequest", "session_id": "s",
-                                                             "tool_name": "Bash", "tool_input": ["command": "ls"]], timeout: nil)
+        let waiting = Task {
+            let answer = try? await offThePool {
+                try SocketClient(path: path).send(["op": "hook", "hook_event_name": "PermissionRequest", "session_id": "s",
+                                                   "tool_name": "Bash", "tool_input": ["command": "ls"]], timeout: nil)
+            }
             return answer?["decision"] as? String
         }
         await waitUntil { !deck.approvals.isEmpty }
         for op in router.ops + ["status", "allow", "deny", "approve", "answer", "decision"] {
-            _ = try await Task.detached {
+            _ = try await offThePool {
                 try SocketClient(path: path).send(["op": op, "decision": "allow", "key": "x", "state": "allow"])
-            }.value
+            }
         }
         #expect(deck.approvals.count == 1)
         // Now retire it, which is how the wait ends without an answer.

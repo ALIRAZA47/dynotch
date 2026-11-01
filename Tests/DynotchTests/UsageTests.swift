@@ -773,12 +773,12 @@ struct UsageStoreTests {
         defer { router.stop() }
         let path = scratch.path
         let resets = Date.now.timeIntervalSince1970 + 3600
-        let answer = try await Task.detached {
+        let answer = try await offThePool {
             try SocketClient(path: path).send(["op": "usage", "fiveHour": ["used": 62.4, "resetsAt": resets]], timeout: 2)
-        }.value
+        }
         #expect(answer["ok"] as? Bool == true)
         #expect(store.numbers?.fiveHour?.percent == 62)
-        let status = try await Task.detached { try SocketClient(path: path).send(["op": "status"], timeout: 2) }.value
+        let status = try await offThePool { try SocketClient(path: path).send(["op": "status"], timeout: 2) }
         #expect(((status["usage"] as? [String: Any])?["fiveHour"] as? [String: Any])?["percent"] as? Int == 62)
     }
 }

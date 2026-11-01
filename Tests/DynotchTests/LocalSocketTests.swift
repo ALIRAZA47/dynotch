@@ -221,7 +221,7 @@ struct LocalSocketTests {
         let server = try scratch.server(requestTimeout: 0.1) { _, connection in waiting.put(connection) }
         defer { server.stop() }
         let path = scratch.path
-        let answer = Task.detached { try SocketClient(path: path).send(["op": "hold"], timeout: nil) }
+        let answer = Task { try await offThePool { try SocketClient(path: path).send(["op": "hold"], timeout: nil) } }
         await waitUntil { waiting.value != nil }
         // Well past the time a client has to send its line: that clock stops once the request is in.
         try await Task.sleep(for: .milliseconds(300))
@@ -315,7 +315,7 @@ struct SocketRouterTests {
         router.start(path: scratch.path)
         defer { router.stop() }
         let path = scratch.path
-        let answer = try await Task.detached { try SocketClient(path: path).send(["op": "nonsense"]) }.value
+        let answer = try await offThePool { try SocketClient(path: path).send(["op": "nonsense"]) }
         #expect(answer["ok"] as? Bool == false)
         #expect(answer["error"] as? String == "Dynotch doesn't know \"nonsense\"")
     }
@@ -329,7 +329,7 @@ struct SocketRouterTests {
         router.start(path: scratch.path)
         defer { router.stop() }
         let path = scratch.path
-        let answer = try await Task.detached { try SocketClient(path: path).send(["op": "hello", "name": "Dynotch"]) }.value
+        let answer = try await offThePool { try SocketClient(path: path).send(["op": "hello", "name": "Dynotch"]) }
         #expect(answer["name"] as? String == "Dynotch")
     }
 
@@ -341,7 +341,7 @@ struct SocketRouterTests {
         router.start(path: scratch.path)
         defer { router.stop() }
         let path = scratch.path
-        let answer = try await Task.detached { try SocketClient(path: path).send(["op": "status"]) }.value
+        let answer = try await offThePool { try SocketClient(path: path).send(["op": "status"]) }
         #expect(answer["ok"] as? Bool == true)
         #expect(answer["version"] != nil)
         #expect((answer["first"] as? [String: Int])?["a"] == 1)
