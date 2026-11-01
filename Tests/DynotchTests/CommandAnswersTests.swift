@@ -262,6 +262,8 @@ struct DataSizeTests {
         #expect(UnitConversion.convert("8 b to B")?.value == "1")
         #expect(UnitConversion.convert("1 B to b")?.value == "8")
         #expect(UnitConversion.convert("1000 b to kb")?.value == "1")
+        #expect(UnitConversion.convert("1000 b to Kb")?.value == "1")
+        #expect(UnitConversion.convert("1 Mb to b")?.value == "1000000")
     }
 
     @Test func aSizeIsntAWeight() {

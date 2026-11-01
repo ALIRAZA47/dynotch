@@ -313,6 +313,8 @@ enum CommandEngine {
         case .needsAMOrPM: return unread("Add am or pm to the time", "3:30pm")
         case .noStart: return unread("Say when it starts", "3pm to 5pm")
         case .severalTimes: return unread("That reads as more than one time", "one at a time")
+        case .dayApart: return unread("Put the day beside the time", "dentist fri 3pm")
+        case .titleLast: return unread("Put the name first", "dentist fri 3pm")
         case .unclearDay: return unread("Can't read the day in that", "fri 3pm")
         case .unclearZone: return unread("Can't read the time zone in that", "fri 3pm est")
         case .unclearLength: return unread("Can't read how long that is", "for 45 min")
@@ -904,12 +906,16 @@ enum UnitConversion {
         return ("\(Calculator.format(amount)) \(from.unit.symbol) = \(value) \(to.unit.symbol)", value)
     }
 
-    /// Case only matters between bits and bytes, as "Gb" against "GB", or "b" beside "B". All in
+    /// Case only matters between bits and bytes, as "Gb" against "GB", or "b" beside "B" or "Gb". All in
     /// lowercase means bytes.
     private static func unit(named name: Substring, beside other: Substring) -> (unit: Dimension, kind: Kind)? {
-        if name == "b", other == "B" { return units["bit"] }
-        if name.count == 2, name.last == "b", let first = name.first, "KMGTP".contains(first) { return units["\(first.lowercased())bit"] }
+        if name == "b", other == "B" || isBits(other) { return units["bit"] }
+        if isBits(name), let first = name.first { return units["\(first.lowercased())bit"] }
         return units[name.lowercased()]
+    }
+
+    private static func isBits(_ name: Substring) -> Bool {
+        name.count == 2 && name.last == "b" && name.first.map { "KMGTP".contains($0) } == true
     }
 
     /// To nine figures, however large or small.

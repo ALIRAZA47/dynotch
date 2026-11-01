@@ -4,13 +4,13 @@ import Foundation
 /// takes "24/7" for July, and answers differently by the hour it's asked. These are the forms, and
 /// anything else stays text, for whatever's reading to say so:
 ///
-/// `today`, `tonight`, `tomorrow`, `tmrw`, `yesterday`, `fri`, `friday night`, `next fri`, `this fri`,
-/// `last fri`, `25 dec`, `dec 25`, `25th of december`, `dec 25 2026`, `2026-12-25`, and a weekday in
-/// front of a date, as in `fri dec 25` or `fri 13th`, which has to agree with it. Numbers with slashes
-/// aren't read unless the year's first, as `5/11` is two different days depending on who wrote it.
+/// `today`, `tonight`, `this evening`, `tomorrow`, `tmrw`, `yesterday`, `fri`, `friday night`, `next fri`,
+/// `this fri`, `last fri`, `25 dec`, `dec 25`, `25th of december`, `dec 25 2026`, `2026-12-25`, and a
+/// weekday in front of a date, as in `fri dec 25` or `fri 13th`, which has to agree with it. Numbers with
+/// slashes aren't read unless the year's first, as `5/11` is two different days depending on who wrote it.
 enum DayText {
     enum Kind: Equatable {
-        case today, tonight, tomorrow, yesterday
+        case today, tomorrow, yesterday
         /// 1 for Sunday, as `Calendar` counts.
         case weekday(Int, Which)
         /// `month` is nil for "fri 13th", which is the coming 13th. A `weekday` has to fall on the date.
@@ -20,61 +20,81 @@ enum DayText {
     /// Which one a weekday means: "fri", "next fri" or "last fri".
     enum Which { case coming, next, last }
 
+    /// The part of a day named with it: "friday night", "tonight".
+    enum Part {
+        case morning, afternoon, evening, night
+
+        /// The minutes it covers, up to midnight at the end of the day.
+        var minutes: ClosedRange<Int> {
+            switch self {
+            case .morning: (4 * 60)...(12 * 60 - 1)
+            case .afternoon: (12 * 60)...(18 * 60 - 1)
+            case .evening: (16 * 60)...(24 * 60)
+            case .night: (17 * 60)...(24 * 60)
+            }
+        }
+    }
+
     struct Found: Equatable {
         let kind: Kind
+        let part: Part?
         let range: Range<String.Index>
     }
 
+    /// Past this it's a paste rather than a day, and the search takes a noticeable time.
+    private static let longestText = 500
     private static let weekdays = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"]
     private static let months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
     private static let weekdayName = #"(mon(?:day)?|tue(?:s|sday)?|wed(?:s|nesday)?|thu(?:r|rs|rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?)"#
     private static let monthName = #"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"#
     private static let ordinal = #"(?:st|nd|rd|th)"#
-    private static let partOfDay = #"(?:\s+(?:morning|afternoon|evening|night))?"#
+    private static let partName = #"(?:\s+(morning|afternoon|evening|night)\b)?"#
     /// A weekday in front of a date.
     private static let beside = #"(?:"# + weekdayName + #"(?:['’]s)?,?\s+)?(?:the\s+)?"#
     /// A year after a date, which can't run into a time.
-    private static let year = #"(?:,?\s+(\d{4})(?![\w:.-]))?"#
+    private static let year = #"(?:,?\s+([0-9]{4})(?![\w:.-]))?"#
 
     /// The days in `text`, in order, and none overlapping another.
     static func find(in text: String) -> [Found] {
+        guard text.utf16.count <= longestText else { return [] }
         var found: [Found] = []
-        func read(_ pattern: String, as kind: ([String?]) -> Kind?) {
+        func read(_ pattern: String, as day: ([String?]) -> (kind: Kind, part: Part?)?) {
             guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return }
             for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
                 guard let range = Range(match.range, in: text), !found.contains(where: { $0.range.overlaps(range) }) else { continue }
                 let groups = (1..<match.numberOfRanges).map { index in Range(match.range(at: index), in: text).map { String(text[$0]) } }
-                if let kind = kind(groups) { found.append(Found(kind: kind, range: range)) }
+                if let day = day(groups) { found.append(Found(kind: day.kind, part: day.part, range: range)) }
             }
         }
-        read(#"(?<![\w/.:-])"# + beside + #"(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?![\w/.:-])"#) { groups in
+        read(#"(?<![\w/.:-])"# + beside + #"([0-9]{4})[-/]([0-9]{1,2})[-/]([0-9]{1,2})(?![\w/.:-])"#) { groups in
             date(weekday: groups[0], year: groups[1], month: groups[2].flatMap { Int($0) }, day: groups[3])
         }
-        read(#"(?<![\w:./-])"# + beside + #"(\d{1,2})"# + ordinal + #"?\s+(?:of\s+)?"# + monthName + #"\b\.?"# + year) { groups in
+        read(#"(?<![\w:./-])"# + beside + #"([0-9]{1,2})"# + ordinal + #"?\s+(?:of\s+)?"# + monthName + #"\b\.?"# + year) { groups in
             date(weekday: groups[0], year: groups[3], month: month(named: groups[2]), day: groups[1])
         }
-        read(#"(?<![\w:./-])"# + beside + monthName + #"\b\.?\s+(?:the\s+)?(\d{1,2})"# + ordinal + #"?(?![\w:./-])(?!\s*[ap]\.?m\b)"# + year) { groups in
+        read(#"(?<![\w:./-])"# + beside + monthName + #"\b\.?\s+(?:the\s+)?([0-9]{1,2})"# + ordinal + #"?(?![\w:./-])(?!\s*[ap]\.?m\b)"# + year) { groups in
             date(weekday: groups[0], year: groups[3], month: month(named: groups[1]), day: groups[2])
         }
-        read(#"(?<![\w-])"# + weekdayName + #"(?:['’]s)?\s+(?:the\s+)?(\d{1,2})"# + ordinal + #"\b"#) { groups in
+        read(#"(?<![\w-])"# + weekdayName + #"(?:['’]s)?\s+(?:the\s+)?([0-9]{1,2})"# + ordinal + #"\b"#) { groups in
             date(weekday: groups[0], year: nil, month: nil, day: groups[1])
         }
-        read(#"\b(today|tonight|tomorrow|tmrw|tmr|tmw|yesterday)(?:['’]s)?\b"# + partOfDay) { groups in
+        read(#"\b(today|tonight|tomorrow|tmrw|tmr|tmw|yesterday)(?:['’]s)?\b"# + partName) { groups in
             switch groups[0]?.lowercased() {
-            case "today": .today
-            case "tonight": .tonight
-            case "yesterday": .yesterday
-            default: .tomorrow
+            case "today": (.today, part(named: groups[1]))
+            case "tonight": (.today, .night)
+            case "yesterday": (.yesterday, part(named: groups[1]))
+            default: (.tomorrow, part(named: groups[1]))
             }
         }
+        read(#"\bthis\s+(morning|afternoon|evening)\b"#) { groups in (.today, part(named: groups[0])) }
         // Not "mon-fri", which is a run of days rather than a day.
-        read(#"(?<![\w-])(?:(next|this|last)\s+)?"# + weekdayName + #"(?:['’]s)?\b(?!-)"# + partOfDay) { groups in
+        read(#"(?<![\w-])(?:(next|this|last)\s+)?(?:coming\s+)?"# + weekdayName + #"(?:['’]s)?\b(?!-)"# + partName) { groups in
             let which: Which = switch groups[0]?.lowercased() {
             case "next": .next
             case "last": .last
             default: .coming
             }
-            return weekday(named: groups[1]).map { .weekday($0, which) }
+            return weekday(named: groups[1]).map { (.weekday($0, which), part(named: groups[2])) }
         }
         return found.sorted { $0.range.lowerBound < $1.range.lowerBound }
     }
@@ -89,9 +109,19 @@ enum DayText {
         return months.firstIndex { name.hasPrefix($0) }.map { $0 + 1 }
     }
 
-    private static func date(weekday name: String?, year: String?, month: Int?, day: String?) -> Kind? {
+    private static func part(named name: String?) -> Part? {
+        switch name?.lowercased() {
+        case "morning": .morning
+        case "afternoon": .afternoon
+        case "evening": .evening
+        case "night": .night
+        default: nil
+        }
+    }
+
+    private static func date(weekday name: String?, year: String?, month: Int?, day: String?) -> (kind: Kind, part: Part?)? {
         guard let day = day.flatMap({ Int($0) }) else { return nil }
-        return .date(year: year.flatMap { Int($0) }, month: month, day: day, weekday: weekday(named: name))
+        return (.date(year: year.flatMap { Int($0) }, month: month, day: day, weekday: weekday(named: name)), nil)
     }
 
     /// The day `kind` means, seen from `now`: the coming one, or the last one when `looksBack`. Nil when
@@ -104,7 +134,7 @@ enum DayText {
         }
         let step = looksBack ? -1 : 1
         switch kind {
-        case .today, .tonight:
+        case .today:
             return today
         case .tomorrow:
             return away(1)
