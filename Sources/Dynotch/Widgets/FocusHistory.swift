@@ -147,7 +147,7 @@ struct FocusStrip: View {
             if summary.sessionsThisWeek > 0 {
                 // The notes' buttons share the row, and the smallest notch has less of it.
                 ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 6) {
                         numbers(summary)
                         bars(summary)
                     }
@@ -164,7 +164,7 @@ struct FocusStrip: View {
     }
 
     private func numbers(_ summary: FocusHistory.Summary) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 5, verticalSpacing: 0) {
+        Grid(alignment: .leading, horizontalSpacing: 4, verticalSpacing: 0) {
             GridRow {
                 Text("Today").foregroundStyle(theme.tertiary)
                 Text("\(summary.sessionsToday) · \(Self.time(summary.minutesToday))")
@@ -174,7 +174,7 @@ struct FocusStrip: View {
                 Text("\(summary.sessionsThisWeek) · \(Self.time(summary.minutesThisWeek))")
             }
         }
-        .font(NotchFont.numeric(10, .medium))
+        .font(NotchFont.numeric(9.5, .medium))
         .foregroundStyle(theme.secondary)
         .lineLimit(1)
         .fixedSize()
@@ -182,12 +182,12 @@ struct FocusStrip: View {
 
     private func bars(_ summary: FocusHistory.Summary) -> some View {
         let highest = max(summary.days.max() ?? 0, 1)
-        return HStack(alignment: .bottom, spacing: 2) {
+        return HStack(alignment: .bottom, spacing: 1.5) {
             ForEach(summary.days.indices, id: \.self) { day in
                 let isToday = day == summary.today
                 RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                     .fill(isToday ? PomodoroTimer.Phase.focus.color : theme.primary.opacity(summary.days[day] > 0 ? 0.45 : 0.14))
-                    .frame(width: 4, height: max(3, 22 * CGFloat(summary.days[day]) / CGFloat(highest)))
+                    .frame(width: 3.5, height: max(3, 22 * CGFloat(summary.days[day]) / CGFloat(highest)))
             }
         }
         .frame(height: 22, alignment: .bottom)
