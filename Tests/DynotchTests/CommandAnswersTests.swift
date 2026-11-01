@@ -30,6 +30,7 @@ struct WorldTimeTests {
 
     @Test func aCityOnEachSide() {
         #expect(answer("3pm london to tokyo") == "3:00 PM in London = 12:00 AM Sun in Tokyo")
+        #expect(answer("3:30pm london to tokyo") == "3:30 PM in London = 12:30 AM Sun in Tokyo")
         #expect(answer("17:30 lahore in utc") == "5:30 PM in Lahore = 12:30 PM UTC")
     }
 
@@ -191,6 +192,7 @@ struct DateTextTests {
     @Test func lookingBackItsTheLastOne() {
         #expect(answer("days since 28 oct")?.value == "3")
         #expect(answer("days since 1 nov")?.value == "364")
+        #expect(answer("days since 1 jan 2020")?.value == "2495")
     }
 
     /// Saturday is today here.

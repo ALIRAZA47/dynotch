@@ -73,6 +73,7 @@ struct EventTextTests {
         ("dentist this coming fri 3pm", "2026-11-06 15:00"), ("party 25 dec 9pm", "2026-12-25 21:00"), ("party dec 25 9pm", "2026-12-25 21:00"),
         ("party 25th of december 9pm", "2026-12-25 21:00"), ("party dec 25th 9pm", "2026-12-25 21:00"), ("party dec. 25 9pm", "2026-12-25 21:00"),
         ("party the 25th of dec 9pm", "2026-12-25 21:00"), ("party 25 dec 2027 9pm", "2027-12-25 21:00"), ("party dec 25, 2027 9pm", "2027-12-25 21:00"),
+        ("party dec 25 2027 9pm", "2027-12-25 21:00"),
         ("party 2026-12-25 9pm", "2026-12-25 21:00"), ("party 2026/12/25 9pm", "2026-12-25 21:00"), ("party 2027-1-5 9pm", "2027-01-05 21:00"),
         ("party 1 jan 9pm", "2027-01-01 21:00"), ("party 4 nov 9pm", "2026-11-04 21:00"), ("dentist oct 4 3pm", "2027-10-04 15:00"),
         ("drinks friday night 8pm", "2026-11-06 20:00"), ("dentist monday morning at 9", "2026-11-09 09:00"), ("call fri afternoon at 3", "2026-11-06 15:00"),
@@ -154,7 +155,7 @@ struct EventTextTests {
         ("call fri 3pm gmt time", "GMT"), ("call 3pm est fri", "America/New_York"), ("call 3pm est on fri", "America/New_York"),
         ("call fri 3pm (est)", "America/New_York"), ("call fri 3pm [est]", "America/New_York"), ("call fri 3pm e.s.t.", "America/New_York"),
         ("call fri 3pm sast", "Africa/Johannesburg"), ("call fri 3pm npt", "Asia/Kathmandu"), ("call fri 3pm wita", "Asia/Makassar"),
-        ("call fri 3pm azt", "Asia/Baku"), ("call fri 3pm nzt", "Pacific/Auckland"),
+        ("call fri 3pm azt", "Asia/Baku"), ("call fri 3pm nzt", "Pacific/Auckland"), ("call fri 3pm london time", "Europe/London"),
     ])
     func aZoneGivesTheTimeThere(text: String, zone: String) {
         #expect(event(text)?.title == "call")
@@ -222,6 +223,7 @@ struct EventTextTests {
         ("standup mon 9am 30m", 1800), ("standup mon 9am 30 min", 1800), ("standup mon 9am for 15 min", 900), ("workshop fri 9am for 2 hours", 7200),
         ("workshop fri 9am 2h", 7200), ("offsite fri 9am 1h30", 5400), ("offsite fri 9am 1.5 hours", 5400), ("offsite fri 9am 1,5 hours", 5400),
         ("for 45 minutes review fri 2pm", 2700), ("offsite fri 9am 90m", 5400), ("offsite fri 9am 120 minutes", 7200), ("workshop for 1 hour 9 am fri", 3600),
+        ("review fri 2pm for 45 min", 2700),
     ] as [(String, TimeInterval)])
     func aTypedLength(text: String, seconds: TimeInterval) {
         #expect(length(text) == seconds)

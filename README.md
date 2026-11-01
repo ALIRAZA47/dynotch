@@ -344,7 +344,10 @@ Sources/Dynotch/
   App/        entry point, settings model, hot key, energy coordinator, helpers
   Notch/      panel, geometry, shape, pointer handling, live activities, open/closed views
   Media/      Now Playing service (distributed notifications + AppleScript), player UI
-  Calendar/   EventKit service, calendar and reminders widgets
+  Lyrics/     timed lyrics from LRCLIB and the line being sung
+  Calendar/   EventKit service, calendar and reminders widgets, events as typed
+  Command/    the command field and what it understands
+  OnDevice/   translating and summarizing on the Mac
   Tray/       tray store, file actions, tray UI and drop zones, screenshot watcher, Quick Look, clipboard history
   Capture/    the screenshot tool: freezing the displays, the overlay and editor, Core Graphics rendering, pinned captures, recording a region
   Widgets/    mirror, focus timer, notes, system stats, batteries, quick toggles, shortcuts, weather

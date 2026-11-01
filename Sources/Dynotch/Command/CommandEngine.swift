@@ -25,10 +25,10 @@ struct CommandResult: Identifiable {
     var isLearned = false
 }
 
-/// Turns what's typed into the command field into things to do: timers, notes, reminders, toggles,
-/// the music, volume and brightness, outputs and Bluetooth devices, the next meeting, profiles, tabs,
-/// Settings pages, shortcuts, sums and conversions, and the notes and Tray files that match. Copied
-/// text only ever shows on a line that starts with `clip`.
+/// Turns what's typed into the command field into things to do: timers, notes, reminders, events,
+/// translations, toggles, the music, volume and brightness, outputs and Bluetooth devices, the next
+/// meeting, profiles, tabs, Settings pages, shortcuts, sums, conversions, times, dates and colors, and
+/// the notes and Tray files that match. Copied text only ever shows on a line that starts with `clip`.
 @MainActor
 enum CommandEngine {
     static let maximumResults = 6
