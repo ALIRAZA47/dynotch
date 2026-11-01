@@ -82,10 +82,10 @@ A wrong event is worse than no event, so anything it can't be sure of, the row s
 |---|---|
 | No time in that yet | A day on its own, like `cal dentist fri`, or `tonight` and `tomorrow morning` with no clock time. A number with a dot, like `15.50`, is taken for an amount |
 | No day in that yet | A time with no day it can read, which is where `tomorow`, `next week` or `5th` end up. `today` is enough |
-| Add am or pm to the time | `3:30` or `at 5`, which could be either, or `9-2am`, which could run past midnight from either end. `09:30`, `15:30`, `noon` and `tonight at 8` are fine |
+| Add am or pm to the time | `3:30` or `at 5`, which could be either, `9-2am`, which could run past midnight from either end, or `9-12pm`, which could be morning or evening. `09:30`, `15:30`, `noon` and `tonight at 8` are fine |
 | Put the day beside the time | `fri dentist 3pm`, or `fri with sam 3pm`. Without this, `SAT prep 3pm` would be on Saturday |
 | Put the name first | Words after the time, like `fri 3pm with sam` |
-| Can't read the day in that | A day that a word beside it changes, like `black friday`, `2nd fri` or `every friday`, or a time that doesn't fit it, like `tonight 3pm` |
+| Can't read the day in that | A day that the words beside it change, like `black friday`, `2nd fri`, `every friday` or `a week on fri`, or a time that doesn't fit it, like `tonight 3pm` |
 | That reads as more than one time | Two times or two days in one line, or `3 or 4pm` |
 | There's no such date | `nov 31`, a weekday the date doesn't fall on, or a time the clocks skip that night |
 | Say when it starts | `until 5pm` on its own |

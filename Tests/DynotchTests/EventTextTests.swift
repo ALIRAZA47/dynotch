@@ -133,7 +133,7 @@ struct EventTextTests {
         "appointment with dr today 3pm", "call ash fri 3pm", "wear black sat 3pm", "fashion week fri 3pm", "electrician coming tue 9-11am",
         "high noon fri 8pm", "midnight mass dec 24 11pm", "story time fri 3pm", "weekly sync fri 3pm", "swim 400m fri 7am",
         "flowers for mom fri 3pm", "lunch with jan fri 1pm", "call dec fri 3pm", "lunch with may fri 1pm", "lunch in mayfair fri 1pm", "meeting in maryland mon 9am", "dinner in marrakech sat 8pm",
-        "dentist SATURDAY 3pm", "christmas party fri 8pm",
+        "dentist SATURDAY 3pm", "christmas party fri 8pm", "christmas dinner fri 6pm",
     ])
     func aTitleStaysAsTyped(text: String) throws {
         let title = try #require(event(text)?.title)
@@ -351,7 +351,8 @@ struct EventTextTests {
         "dentist end of month fri 3pm", "dentist quarterly fri 3pm", "dentist first week of dec mon 9am", "dentist 2nd week of december mon 9am",
         "dentist beginning of december mon 9am", "dentist mid-december mon 9am", "dentist two weeks time fri 3pm", "dentist a week's time fri 3pm", "dentist after christmas mon 9am",
         "dentist after eid mon 9am", "dentist in the new year mon 9am", "dentist next term mon 9am", "dentist next quarter mon 9am", "dentist in 2027 fri 3pm",
-        "dentist in summer fri 3pm", "dentist annually fri 3pm", "dentist yearly fri 3pm", "dentist alternate weeks fri 3pm", "call rev. sun 3pm", "coffee w/ sun 3pm", "coffee w sun 3pm",
+        "dentist in summer fri 3pm", "christmas day fri 1pm", "christmas eve thu 7pm", "new years day fri 11am", "new years eve thu 9pm", "new year's eve thu 9pm",
+        "boxing day sat 11am", "dentist annually fri 3pm", "dentist yearly fri 3pm", "dentist alternate weeks fri 3pm", "call rev. sun 3pm", "coffee w/ sun 3pm", "coffee w sun 3pm",
         "drinks fri night 9am", "meeting tomorrow morning 5pm", "call tonight 12pm", "dentist tonight 3pm",
     ])
     func aDayItCantTakeAtItsWordIsSaid(text: String) {
