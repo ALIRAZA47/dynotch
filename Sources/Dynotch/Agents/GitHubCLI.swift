@@ -195,11 +195,11 @@ enum GitHubCLI {
               posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0) == 0,
               posix_spawn_file_actions_adddup2(&actions, output.fileHandleForWriting.fileDescriptor, 1) == 0,
               posix_spawn_file_actions_adddup2(&actions, error.fileHandleForWriting.fileDescriptor, 2) == 0 else { return nil }
-        // Not in any header, though browsers and debuggers rely on it. Without it, `gh` would run as any child does.
-        if let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_spawnattrs_setdisclaim") {
-            typealias Disclaim = @convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32
-            _ = unsafeBitCast(symbol, to: Disclaim.self)(&attributes, 1)
-        }
+        // Not in any header, though browsers and debuggers rely on it. Without it, `gh` would have all
+        // that this app has been allowed, so no answer from it means `gh` doesn't start.
+        guard let symbol = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "responsibility_spawnattrs_setdisclaim") else { return nil }
+        typealias Disclaim = @convention(c) (UnsafeMutablePointer<posix_spawnattr_t?>, Int32) -> Int32
+        guard unsafeBitCast(symbol, to: Disclaim.self)(&attributes, 1) == 0 else { return nil }
         let argv = ([executable] + arguments).map { strdup($0) } + [nil]
         let envp = environment.map { strdup("\($0.key)=\($0.value)") } + [nil]
         defer {
