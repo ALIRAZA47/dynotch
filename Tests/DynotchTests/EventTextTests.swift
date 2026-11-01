@@ -132,7 +132,8 @@ struct EventTextTests {
         "catch up next fri 3pm", "year end fri 3pm", "west end fri 8pm", "race finish sat 3pm", "project end fri 5pm", "see dr tomorrow 3pm",
         "appointment with dr today 3pm", "call ash fri 3pm", "wear black sat 3pm", "fashion week fri 3pm", "electrician coming tue 9-11am",
         "high noon fri 8pm", "midnight mass dec 24 11pm", "story time fri 3pm", "weekly sync fri 3pm", "swim 400m fri 7am",
-        "flowers for mom fri 3pm", "lunch with jan fri 1pm", "call dec fri 3pm", "lunch with may fri 1pm",
+        "flowers for mom fri 3pm", "lunch with jan fri 1pm", "call dec fri 3pm", "lunch with may fri 1pm", "lunch in mayfair fri 1pm", "meeting in maryland mon 9am", "dinner in marrakech sat 8pm",
+        "dentist SATURDAY 3pm", "christmas party fri 8pm",
     ])
     func aTitleStaysAsTyped(text: String) throws {
         let title = try #require(event(text)?.title)
@@ -347,7 +348,10 @@ struct EventTextTests {
         "dentist in a few weeks fri 3pm", "dentist in ten days fri 3pm", "dentist in december fri 3pm", "trip in january mon 9am", "dentist late nov fri 3pm",
         "gym weekly mon 7am", "dentist fortnightly fri 3pm", "standup daily mon 9am", "review 6 months fri 3pm", "sprint 2 weeks fri 3pm", "tutor SAT 3pm",
         "take SAT dec 5 8am", "call dr. sun 3pm", "dentist fri 3pm the week after", "dentist in couple weeks fri 3pm", "dentist december fri 3pm",
-        "dentist end of month fri 3pm", "dentist quarterly fri 3pm",
+        "dentist end of month fri 3pm", "dentist quarterly fri 3pm", "dentist first week of dec mon 9am", "dentist 2nd week of december mon 9am",
+        "dentist beginning of december mon 9am", "dentist mid-december mon 9am", "dentist two weeks time fri 3pm", "dentist a week's time fri 3pm", "dentist after christmas mon 9am",
+        "dentist after eid mon 9am", "dentist in the new year mon 9am", "dentist next term mon 9am", "dentist next quarter mon 9am", "dentist in 2027 fri 3pm",
+        "dentist in summer fri 3pm", "dentist annually fri 3pm", "dentist yearly fri 3pm", "dentist alternate weeks fri 3pm", "call rev. sun 3pm", "coffee w/ sun 3pm", "coffee w sun 3pm",
         "drinks fri night 9am", "meeting tomorrow morning 5pm", "call tonight 12pm", "dentist tonight 3pm",
     ])
     func aDayItCantTakeAtItsWordIsSaid(text: String) {
@@ -384,7 +388,7 @@ struct EventTextTests {
 
     @Test(arguments: ["dentist tomorrow 3pm and gym fri 4pm", "review 10:30 fri 3pm", "meeting fri 3pm-2pm", "meeting fri 11pm-1pm", "fri 3pm to fri 5pm dentist",
                       "offsite sat 9am to sun 5pm", "leave mon to fri 9am", "standup mon to fri 9am", "conference mon to wed 9am", "sat exam fri 9am", "dentist fri or sat 3pm",
-                      "dentist fri 3pm tomorrow", "dentist between 3 and 5pm fri", "dentist 3 or 4pm fri", "dentist 3, 4pm fri", "5, 6 dec 3pm", "conference 5 to 7 dec 9am"])
+                      "dentist fri 3pm tomorrow", "dentist between 3 and 5pm fri", "dentist 3 or 4pm fri", "dentist 3, 4pm fri", "5, 6 dec 3pm", "conference 5 to 7 dec 9am", "conference 5th to 7th dec 9am"])
     func twoTimesCantBeOneEvent(text: String) {
         #expect(read(text) == .severalTimes)
     }

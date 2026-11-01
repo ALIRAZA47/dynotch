@@ -99,7 +99,7 @@ enum EventText {
         guard let day = days.first else { return .noDay }
         // "between 3 and 5pm fri", "3 or 4pm fri", "5 to 7 dec": the title's holding half of it.
         guard !["and", "or", "between", "&"].contains(words.last?.lowercased() ?? ""),
-              words.joined(separator: " ").range(of: #"[0-9](?:,| to| -| –| —)$"#, options: .regularExpression) == nil else { return .severalTimes }
+              words.joined(separator: " ").range(of: #"[0-9](?:st|nd|rd|th)?(?:,| to| -| –| —)$"#, options: .regularExpression) == nil else { return .severalTimes }
         let lead = words.last?.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".,")) ?? ""
         guard !namesAnotherDay, title.range(of: beforeTheDay, options: [.regularExpression, .caseInsensitive]) == nil,
               !isChanged(day, by: lead), !isAnExam(body[day.range], in: body),
@@ -215,7 +215,7 @@ enum EventText {
     /// Right before a weekday, these change which one it is, or show it's somebody: "first monday",
     /// "the following friday", "easter monday", "lunch with sun".
     private static let wordsBeforeAWeekday: Set<String> = [
-        "every", "each", "first", "second", "third", "fourth", "fifth", "following", "the", "what's", "whats", "with", "mr", "mrs", "ms", "dr", "prof",
+        "every", "each", "first", "second", "third", "fourth", "fifth", "following", "the", "what's", "whats", "with", "w", "w/", "mr", "mrs", "ms", "dr", "prof", "rev",
         "easter", "holy", "whit",
     ]
     /// Holidays, with the weekday they're named for. "wear black sat 3pm" is fine.
@@ -225,11 +225,11 @@ enum EventText {
     private static let otherDays = #"\b(?:every|fortnight|from now|next (?:week|month|year)|in (?:a|an|one|two|three|four|five|six|[0-9]+) (?:days?|weeks?|wks?|months?|mos?|years?)|(?:days?|weeks?|wks?|months?) (?:from|after|before|later|ago|on))\b"#
     /// Last in the name, right before the day, these move it or repeat it: "a week fri", "december fri",
     /// "gym weekly mon". On its own, a month that's also a name isn't one: "lunch with june fri".
-    private static let beforeTheDay = #"\b(?:(?:a|an|one|two|three|four|five|six|seven|eight|nine|ten|few|couple(?: of)?|next|this|following|[0-9]+) (?:days?|weeks?|wks?|months?|mos?|weekend)|(?:in|late|early|mid|next|this|end of|start of) (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*|january|february|march|july|september|october|november|december|end of (?:the )?(?:month|week|year)|weekly|fortnightly|biweekly|daily|monthly|quarterly)$"#
+    private static let beforeTheDay = #"\b(?:(?:a|an|one|two|three|four|five|six|seven|eight|nine|ten|few|couple(?: of)?|next|this|following|[0-9]+) (?:days?|weeks?|wks?|months?|mos?|weekend)|(?:in|late|early|mid|mid-|next|this|end of|start of|beginning of|week of) ?(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)|january|february|march|july|september|october|november|december|(?:after|before|in|during|next|this) (?:the )?(?:new year|christmas|xmas|eid|ramadan|diwali|easter|summer|winter|spring|autumn|fall|term|semester|quarter|[0-9]{4})|(?:days?|weeks?|week's|weeks'|months?) time|end of (?:the )?(?:month|week|year)|alternate (?:days|weeks|months)|weekly|fortnightly|biweekly|bimonthly|daily|monthly|quarterly|yearly|annually)$"#
 
     /// "tutor SAT 3pm": in a line that's otherwise in lowercase, these are more likely something else.
     private static func isAnExam(_ day: Substring, in line: String) -> Bool {
-        ["SAT", "SUN", "MON"].contains(where: day.hasPrefix) && line != line.uppercased()
+        ["SAT", "SUN", "MON"].contains(String(day.prefix { !$0.isWhitespace })) && line != line.uppercased()
     }
 
     private static func isChanged(_ day: DayText.Found, by word: String) -> Bool {
