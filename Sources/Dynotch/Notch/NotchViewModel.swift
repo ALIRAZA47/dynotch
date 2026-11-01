@@ -89,6 +89,10 @@ struct ClosedLayout: Equatable {
             // Room for a size like "482.3 MB" on the right.
             earWidth = 78
             rowHeight = 0
+        case .recording:
+            // Room for "1:02:45" on the right, as for the stopwatch.
+            earWidth = 72
+            rowHeight = 0
         case .script(let script):
             // The symbol and up to ten letters of the name on the left, "100%" on the right.
             let name = CGFloat(min(script.key.count, 10)) * 7
@@ -123,12 +127,25 @@ final class NotchViewModel: ObservableObject {
     @Published private(set) var phase: Phase = .closed {
         didSet {
             guard (oldValue == .glance) != (phase == .glance) else { return }
+            if phase == .glance { glanceAppeared = .now }
             LiveActivityCenter.shared.glanceChanged(isGlancing: phase == .glance)
         }
     }
+    /// The Tray's two sides: its files, and what's been copied.
+    enum TraySide: Hashable {
+        case files, clipboard
+    }
+
     @Published var tab: NotchTab = .home
+    @Published var traySide = TraySide.files
+    /// What's typed in the Clipboard side's search field.
+    @Published var clipSearch = ""
     /// Files are being dragged toward the notch; the tray shows its drop zones.
-    @Published var isDraggingFiles = false
+    @Published var isDraggingFiles = false {
+        didSet { if !isDraggingFiles { isDraggingImages = false } }
+    }
+    /// An image is among them, so the tray offers what can be done with one. It ends with the drag.
+    @Published var isDraggingImages = false
     @Published private(set) var activity: ClosedActivity
     /// A second activity, shown as a glyph at the end of the right ear.
     @Published private(set) var secondary: CompactActivity?
@@ -146,9 +163,12 @@ final class NotchViewModel: ObservableObject {
     @Published private(set) var isShowingRecent = false
     /// The glance has turned to Claude's usage.
     @Published private(set) var isShowingUsage = false
+    /// Review has turned the glance to the tool calls waiting, which takes it from a recording's Stop.
+    @Published private(set) var isReviewing = false
     /// When the latest press on the notch began. Allow goes by this rather than by when it's let go.
     var lastPress = Date.distantPast
     private var clickedForGlance = Date.distantPast
+    private var glanceAppeared = Date.distantPast
 
     /// Something was dragged out of the tray and the drag hasn't ended yet.
     @Published var isDraggingOut = false
@@ -182,6 +202,11 @@ final class NotchViewModel: ObservableObject {
         AgentDeck.shared.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        // Review was for those waiting then. The next to come waits for a recording like any other.
+        AgentDeck.shared.$approvals
+            .filter(\.isEmpty)
+            .sink { [weak self] _ in self?.isReviewing = false }
+            .store(in: &cancellables)
     }
 
     var isOpen: Bool { phase == .open }
@@ -201,8 +226,14 @@ final class NotchViewModel: ObservableObject {
     /// What the glance shows, from what's live right now.
     var glanceContent: GlanceContent {
         if isShowingRecent { return .recent(rows: LiveActivityCenter.shared.recents.count) }
-        if AppSettings.shared.liveAgents, let approval = AgentDeck.shared.approvals.first { return .approval(approval) }
+        // A tool call can wait for a recording, since Claude Code's own prompt is still there. Review
+        // asks for it by name, so that brings it up all the same.
+        if !isRecording || isReviewing, AppSettings.shared.liveAgents, let approval = AgentDeck.shared.approvals.first {
+            return .approval(approval)
+        }
         if isShowingUsage, AppSettings.shared.liveUsage { return .usage }
+        // The recording's for as long as it runs, whatever the closed notch shows, so Stop stays put.
+        if isRecording { return .recording }
         return GlanceContent(activity: activity)
     }
 
@@ -218,6 +249,25 @@ final class NotchViewModel: ObservableObject {
         if AppSettings.shared.liveAgents, !AgentDeck.shared.approvals.isEmpty { return true }
         if case .notice(let notice) = activity { return !notice.actions.isEmpty }
         return false
+    }
+
+    /// A recording is going, in the notch itself or as the dot beside a notice.
+    var isRecording: Bool { activity == .recording || secondary == .recording }
+
+    /// How long Stop stays dead once the glance has come up.
+    static let stopGate: TimeInterval = 0.4
+
+    /// Stop refuses clicks for a moment after the glance appears, however it appeared. A click meant
+    /// for the notch can land on a Stop that has just arrived under it, whether the pointer resting
+    /// there or a click raised the glance, and it would end the recording. `acceptsNoticeButtons`
+    /// only knows of clicks.
+    var acceptsStop: Bool {
+        Date.now.timeIntervalSince(glanceAppeared) >= Self.stopGate
+    }
+
+    /// Stop has come up in a glance that was already there, when a tool call it was showing went.
+    func stopAppeared() {
+        glanceAppeared = .now
     }
 
     /// The open notch with the command field up: tall enough for its rows, at least as tall as the tabs.
@@ -277,19 +327,23 @@ final class NotchViewModel: ObservableObject {
 
     func open(tab: NotchTab? = nil) {
         if let tab { self.tab = tab }
+        // Whatever opens the Tray by name means its files, like a screenshot's Show.
+        if tab == .tray { traySide = .files }
         guard phase != .open else { return }
         withAnimation(.notchOpen) {
             phase = .open
             isShowingRecent = false
             isShowingUsage = false
+            isReviewing = false
         }
         onOpen?()
         NowPlayingService.shared.refresh()
     }
 
-    /// A click on the closed notch: the glance, for a notice's buttons, and otherwise the whole notch.
+    /// A click on the closed notch: the glance, for a notice's buttons or a recording's Stop, and
+    /// otherwise the whole notch. It never stops a recording.
     func activate() {
-        if noticeHasActions {
+        if noticeHasActions || isRecording {
             clickedForGlance = .now
             glance()
         } else {
@@ -321,6 +375,7 @@ final class NotchViewModel: ObservableObject {
     /// Turns to the tool call waiting for an answer, which is only ever answered in the glance.
     func showApproval() {
         clickedForGlance = .now
+        isReviewing = true
         guard phase == .open else { return glance() }
         onTurnToGlance?()
         withAnimation(.notchGlance) { phase = .glance }
@@ -340,8 +395,10 @@ final class NotchViewModel: ObservableObject {
             isCommandMode = false
             isShowingRecent = false
             isShowingUsage = false
+            isReviewing = false
         }
         commandQuery = ""
+        clipSearch = ""
     }
 
     func setHovering(_ hovering: Bool) {
@@ -401,14 +458,20 @@ final class NotchViewModel: ObservableObject {
     // MARK: Snapshots
 
     func stage(phase: Phase, activity: ClosedActivity, secondary: CompactActivity? = nil, tab: NotchTab = .home,
-               draggingFiles: Bool = false, command: String? = nil, showingRecent: Bool = false, showingUsage: Bool = false) {
+               traySide: TraySide = .files, clipSearch: String = "",
+               draggingFiles: Bool = false, draggingImages: Bool = false, command: String? = nil, showingRecent: Bool = false,
+               showingUsage: Bool = false) {
         self.phase = phase
         isShowingRecent = showingRecent
         isShowingUsage = showingUsage
+        isReviewing = false
         self.activity = activity
         self.secondary = secondary
         self.tab = tab
+        self.traySide = traySide
+        self.clipSearch = clipSearch
         isDraggingFiles = draggingFiles
+        isDraggingImages = draggingImages
         isCommandMode = command != nil
         commandQuery = command ?? ""
     }

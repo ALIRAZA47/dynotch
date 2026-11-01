@@ -19,6 +19,7 @@ struct TrayTabView: View {
 private struct TrayContentView: View {
     @ObservedObject var viewModel: NotchViewModel
     @ObservedObject private var tray = TrayStore.shared
+    @ObservedObject private var clipboard = ClipboardStore.shared
     @ViewState private var isTargeted = false
     @ViewState private var isWorking = false
     @Environment(\.isSnapshot) private var isSnapshot
@@ -28,7 +29,10 @@ private struct TrayContentView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             toolbar
-            shelf
+            switch viewModel.traySide {
+            case .files: shelf
+            case .clipboard: ClipboardShelf(viewModel: viewModel)
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .contentShape(Rectangle())
@@ -36,9 +40,14 @@ private struct TrayContentView: View {
             Task { TrayStore.shared.add(await TrayDrop.urls(from: providers)) }
             return true
         }
+        // Whatever's dropped here becomes a file, so the files come forward to take it.
+        .onChange(of: isTargeted) {
+            if isTargeted { viewModel.traySide = .files }
+        }
         .animation(.notchToggle, value: isTargeted)
         .background {
-            if !isSnapshot { QuickLookAnchor(viewModel: viewModel) }
+            // Nothing to preview on the Clipboard side, where the keys belong to its search field.
+            if !isSnapshot, viewModel.traySide == .files { QuickLookAnchor(viewModel: viewModel) }
         }
     }
 
@@ -77,48 +86,54 @@ private struct TrayContentView: View {
         .frame(maxHeight: .infinity)
     }
 
-    /// What's in the tray, and AirDrop, Share and Clear for all of it.
+    /// The switch between the files and the clipboard, then what the side showing can do: AirDrop,
+    /// Share and Clear for all the files, or the clipboard's search.
     private var toolbar: some View {
         HStack(spacing: 2) {
-            HStack(spacing: 6) {
-                Text("Files")
-                    .font(NotchFont.bodyStrong)
-                    .foregroundStyle(theme.primary)
-                if !tray.items.isEmpty {
-                    // Secondary, like a count on a segment's thumb: in tertiary, on this glass over
-                    // Liquid Glass, it reads under 4.5:1.
-                    Text("\(tray.items.count)")
-                        .font(NotchFont.numeric(10.5))
-                        .foregroundStyle(theme.secondary)
-                }
-            }
-            .padding(.horizontal, 11)
-            .frame(height: 25)
-            .glass(.control, in: Capsule())
+            CardSegments(selection: $viewModel.traySide, segments: [
+                .init(value: .files, title: "Files", count: tray.items.isEmpty ? nil : tray.items.count),
+                .init(value: .clipboard, title: "Clipboard", count: clipboard.clips.isEmpty ? nil : clipboard.clips.count),
+            ])
             Spacer(minLength: 0)
-            if isWorking {
-                ProgressView().controlSize(.mini)
-                    .padding(.trailing, 6)
+            switch viewModel.traySide {
+            case .files: fileActions
+            case .clipboard: clipboardActions
             }
-            if !tray.items.isEmpty {
-                ToolbarButton(symbol: "dot.radiowaves.left.and.right", help: "AirDrop everything") {
-                    FileActions.airDrop(tray.urls)
+        }
+    }
+
+    @ViewBuilder
+    private var clipboardActions: some View {
+        ClipboardSearchField(viewModel: viewModel)
+        if clipboard.clips.contains(where: { !$0.isPinned }) {
+            ToolbarButton(symbol: "trash", help: "Clear the clipboard history, all but what's pinned") { clipboard.clear() }
+        }
+    }
+
+    @ViewBuilder
+    private var fileActions: some View {
+        if isWorking {
+            ProgressView().controlSize(.mini)
+                .padding(.trailing, 6)
+        }
+        if !tray.items.isEmpty {
+            ToolbarButton(symbol: "dot.radiowaves.left.and.right", help: "AirDrop everything") {
+                FileActions.airDrop(tray.urls)
+            }
+            ShareLink(items: tray.urls) {
+                ToolbarButtonLabel(symbol: "square.and.arrow.up")
+            }
+            .buttonStyle(PressableButtonStyle())
+            .help("Share everything")
+            ToolbarButton(symbol: "doc.zipper", help: "Compress everything") {
+                isWorking = true
+                Task {
+                    if let archive = await FileActions.compress(tray.urls) { tray.add([archive]) }
+                    isWorking = false
                 }
-                ShareLink(items: tray.urls) {
-                    ToolbarButtonLabel(symbol: "square.and.arrow.up")
-                }
-                .buttonStyle(PressableButtonStyle())
-                .help("Share everything")
-                ToolbarButton(symbol: "doc.zipper", help: "Compress everything") {
-                    isWorking = true
-                    Task {
-                        if let archive = await FileActions.compress(tray.urls) { tray.add([archive]) }
-                        isWorking = false
-                    }
-                }
-                if tray.items.contains(where: { !$0.isPinned }) {
-                    ToolbarButton(symbol: "trash", help: "Clear the tray, all but what's pinned") { tray.clear() }
-                }
+            }
+            if tray.items.contains(where: { !$0.isPinned }) {
+                ToolbarButton(symbol: "trash", help: "Clear the tray, all but what's pinned") { tray.clear() }
             }
         }
     }
@@ -368,6 +383,12 @@ private struct TrayItemMenu: View {
             }
         }
         if FileActions.isImage(item.url) {
+            Button("Copy Text") {
+                Task { await ImageActions.copyText(from: [item.url]) }
+            }
+            Button("Cut Out") {
+                Task { await ImageActions.cutOut([item.url]) }
+            }
             Menu("Convert Image") {
                 ForEach(FileActions.ImageFormat.allCases) { format in
                     Button("To \(format.title)") {
@@ -407,8 +428,10 @@ private struct TrayDropZones: View {
     @ObservedObject var viewModel: NotchViewModel
 
     var body: some View {
-        HStack(spacing: 10) {
-            DropZone(title: "Keep in Tray", subtitle: "Stash them for later", symbol: "tray.and.arrow.down",
+        // Six zones still fit the smallest notch, with a little less between them and fewer words.
+        let hasImages = viewModel.isDraggingImages
+        HStack(spacing: hasImages ? 6 : 10) {
+            DropZone(title: "Keep in Tray", subtitle: hasImages ? "Stash for later" : "Stash them for later", symbol: "tray.and.arrow.down",
                      isWide: true, viewModel: viewModel) { urls in
                 TrayStore.shared.add(urls)
             }
@@ -421,6 +444,16 @@ private struct TrayDropZones: View {
             DropZone(title: "Copy to…", subtitle: "Pick a folder", symbol: "folder.badge.plus", viewModel: viewModel) { urls in
                 if let folder = FileActions.chooseFolder(prompt: "Copy Here") {
                     _ = FileActions.transfer(urls, to: folder, move: false)
+                }
+            }
+            if hasImages {
+                DropZone(title: "Copy Text", subtitle: "Read the image", symbol: "text.viewfinder", viewModel: viewModel) { urls in
+                    await ImageActions.copyText(from: urls)
+                    TrayStore.shared.removeLeftovers(of: urls)
+                }
+                DropZone(title: "Cut Out", subtitle: "Lift the subject", symbol: "scissors", viewModel: viewModel) { urls in
+                    await ImageActions.cutOut(urls)
+                    TrayStore.shared.removeLeftovers(of: urls)
                 }
             }
         }
@@ -455,18 +488,22 @@ private struct DropZone: View {
             DropKey(symbol: symbol, side: 38, glyph: .system(size: 17, weight: .semibold), isOnLens: isTargeted)
                 .symbolEffect(.bounce, value: isTargeted)
                 .padding(.bottom, 2)
+            // The narrowest zone holds these with a point or so to spare, and a font that runs a
+            // little wider on another macOS should shrink to fit rather than lose its last letters.
             Text(title)
                 .font(NotchFont.headline)
                 .foregroundStyle(isTargeted ? theme.onAccent : theme.primary)
                 .lineLimit(1)
+                .minimumScaleFactor(0.9)
             if let subtitle {
                 Text(subtitle)
                     .font(NotchFont.caption)
                     .foregroundStyle(isTargeted ? theme.onAccent.opacity(0.8) : theme.secondary)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.9)
             }
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 6)
         .frame(maxWidth: isWide ? .infinity : 124, maxHeight: .infinity)
         .background(DropWell(cornerRadius: theme.cardRadius, isTargeted: isTargeted))
         // One layer, so the notch's shadow falls behind the zone rather than from its ink onto its face.
@@ -481,6 +518,7 @@ private struct DropZone: View {
             Task { @MainActor in
                 let urls = await TrayDrop.urls(from: providers)
                 viewModel.tab = .tray
+                viewModel.traySide = .files
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { viewModel.isDraggingFiles = false }
                 if !urls.isEmpty { await perform(urls) }
             }

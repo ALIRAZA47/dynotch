@@ -113,7 +113,7 @@ With nothing after the name, it starts without a number, and the line stays empt
 
 A script that says nothing for two minutes is taken down with a **Went quiet** notice, since it may have died halfway. A word from it starts that clock again, and one that comes later brings the line back. Up to eight can run at once. The first one started has the notch, and the glance counts the rest.
 
-A script's progress comes before timers in the closed notch, and a timer keeps a small ring beside it.
+A script's progress comes before timers in the closed notch, and a timer keeps a small ring beside it. A [recording](/capture/#recording) comes before a script, which then keeps a small ring of its own, without the line.
 
 If Dynotch isn't running, `progress` says so and exits with 1, rather than starting it. In a script that shouldn't stop for that, add `|| true`.
 
@@ -150,7 +150,7 @@ dynotch status --json
 }
 ```
 
-`activity` is what the closed notch is showing: `idle`, `music`, `trackPeek`, `timer`, `notice`, `countdown`, `stopwatch`, `download`, `script` or `ci`. It's only ever the kind. What a notice says isn't in there.
+`activity` is what the closed notch is showing: `idle`, `music`, `trackPeek`, `timer`, `notice`, `countdown`, `stopwatch`, `download`, `recording`, `script` or `ci`. It's only ever the kind. What a notice says isn't in there.
 
 ## ci
 

@@ -6,6 +6,13 @@ extension UserDefaults {
     nonisolated(unsafe) static var dynotch: UserDefaults = .standard
 }
 
+/// The clipboard, or a pasteboard of its own while a snapshot, a self-test, the energy probe or a test
+/// runs. Everything in Dynotch goes through this rather than `.general`, so none of those can read
+/// what the user copied or overwrite it, whatever they click.
+extension NSPasteboard {
+    nonisolated(unsafe) static var dynotch: NSPasteboard = .general
+}
+
 enum DisplayMode: String, CaseIterable, Identifiable {
     case notched, main, all
 
@@ -144,6 +151,24 @@ enum TemperatureUnits: String, CaseIterable, Identifiable {
         case .system: "System"
         case .celsius: "Celsius"
         case .fahrenheit: "Fahrenheit"
+        }
+    }
+}
+
+/// What a recording of a region comes out as.
+enum RecordFormat: String, CaseIterable, Identifiable {
+    case mp4, gif
+
+    var id: String { rawValue }
+    var title: String { rawValue.uppercased() }
+
+    /// A GIF is made from a slower recording: it couldn't keep more frames than this anyway.
+    var frameRate: Int { self == .mp4 ? 60 : 15 }
+
+    var symbol: String {
+        switch self {
+        case .mp4: "film"
+        case .gif: "photo.stack"
         }
     }
 }
@@ -460,6 +485,11 @@ final class AppSettings: ObservableObject {
     @Published var trayKeeps: TrayRetention = AppSettings.value("trayKeeps", TrayRetention.week) {
         didSet { save("trayKeeps", trayKeeps.rawValue) }
     }
+    /// Keeps the last 50 copies for the Tray's Clipboard side. Off until asked for: until then nothing
+    /// looks at the clipboard at all.
+    @Published var clipboardHistory: Bool = AppSettings.value("clipboardHistory", false) {
+        didSet { save("clipboardHistory", clipboardHistory) }
+    }
 
     // MARK: Capture
 
@@ -474,6 +504,10 @@ final class AppSettings: ObservableObject {
     /// The Screenshot app's click when a capture is taken.
     @Published var shutterSound: Bool = AppSettings.value("shutterSound", true) {
         didSet { save("shutterSound", shutterSound) }
+    }
+    /// What Record makes.
+    @Published var recordFormat: RecordFormat = AppSettings.value("recordFormat", RecordFormat.mp4) {
+        didSet { save("recordFormat", recordFormat.rawValue) }
     }
 
     // MARK: Focus timer

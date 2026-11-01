@@ -194,6 +194,8 @@ final class NotchWindowController {
         if reach.contains(point) {
             cancelClose()
             setInteractive(true)
+            let images = NotchManager.shared.isDraggingImages
+            if viewModel.isDraggingImages != images { viewModel.isDraggingImages = images }
             if !viewModel.isDraggingFiles { viewModel.isDraggingFiles = true }
             if !viewModel.isOpen {
                 Haptics.tap()
@@ -339,9 +341,9 @@ final class NotchWindowController {
         hoverTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(delay))
             guard let self, !Task.isCancelled, self.isInside else { return }
-            // A glance first, if that's the setting, or for a notice's buttons, which are only there.
-            // A click or a swipe down opens the rest.
-            if AppSettings.shared.hoverShows == .glance || self.viewModel.noticeHasActions {
+            // A glance first, if that's the setting, or for a notice's buttons or a recording's Stop,
+            // which are only there. A click or a swipe down opens the rest.
+            if AppSettings.shared.hoverShows == .glance || self.viewModel.noticeHasActions || self.viewModel.isRecording {
                 self.viewModel.glance()
             } else {
                 self.viewModel.open()

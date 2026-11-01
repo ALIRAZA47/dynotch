@@ -405,6 +405,7 @@ struct CardSegments<Value: Hashable>: View {
 struct CardField: View {
     let placeholder: String
     @Binding var text: String
+    var symbol = "plus"
     var isInvalid = false
     let onSubmit: () -> Void
     @Environment(\.notchTheme) private var theme
@@ -415,13 +416,13 @@ struct CardField: View {
     var body: some View {
         let shape = Capsule()
         HStack(spacing: 6) {
-            Image(systemName: "plus")
+            Image(systemName: symbol)
                 .font(.system(size: 9.5, weight: .bold))
                 .foregroundStyle(isFocused ? theme.accent : theme.tertiary)
             if isSnapshot {
-                Text(placeholder)
+                Text(text.isEmpty ? placeholder : text)
                     .font(NotchFont.body)
-                    .foregroundStyle(theme.tertiary)
+                    .foregroundStyle(text.isEmpty ? theme.tertiary : theme.primary)
                     .lineLimit(1)
             } else {
                 TextField(placeholder, text: $text, prompt: Text(""))

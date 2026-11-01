@@ -8,6 +8,7 @@ enum GlanceContent: Equatable {
     case countdown(Countdown)
     case stopwatch
     case download
+    case recording
     case script(ScriptActivity)
     case ci(CIRun)
     /// A tool call waiting for an answer.
@@ -42,6 +43,9 @@ enum GlanceContent: Equatable {
         case .download:
             self = .download
             return
+        case .recording:
+            self = .recording
+            return
         case .script(let activity):
             self = .script(activity)
             return
@@ -71,7 +75,7 @@ enum GlanceContent: Equatable {
     var extraHeight: CGFloat {
         switch self {
         case .music: 70
-        case .pomodoro, .countdown, .stopwatch, .event, .script, .ci, .usage: 54
+        case .pomodoro, .countdown, .stopwatch, .event, .recording, .script, .ci, .usage: 54
         case .approval(let approval): ApprovalGlance.extraHeight(for: approval)
         case .download, .notice: 50
         case .today: 52
@@ -106,6 +110,7 @@ struct GlanceView: View {
             case .countdown(let countdown): CountdownGlance(countdown: countdown, band: band)
             case .stopwatch: StopwatchGlance(band: band)
             case .download: DownloadGlance(band: band)
+            case .recording: RecordingGlance(viewModel: viewModel, band: band)
             case .script(let activity): ScriptGlance(activity: activity, band: band)
             case .ci(let run): CIGlance(run: run, viewModel: viewModel, band: band)
             case .approval(let approval): ApprovalGlance(approval: approval, viewModel: viewModel, band: band)

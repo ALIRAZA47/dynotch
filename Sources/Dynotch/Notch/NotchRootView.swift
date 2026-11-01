@@ -203,6 +203,8 @@ struct ClosedNotchView: View {
                 .foregroundStyle(TimerStore.stopwatchTint)
         case .download:
             DownloadLabel()
+        case .recording:
+            RecordingDot()
         case .script(let activity):
             ScriptLabel(activity: activity)
         case .ci(let run):
@@ -236,6 +238,8 @@ struct ClosedNotchView: View {
             StopwatchTime()
         case .download:
             DownloadAmount()
+        case .recording:
+            RecordingClock()
         case .script(let activity):
             ScriptPercent(activity: activity)
         case .ci(let run):

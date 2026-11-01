@@ -17,6 +17,9 @@ final class CaptureOverlayWindow: NSPanel {
 
     /// Where the drag in progress began, so it stays with that until the mouse goes up.
     private var dragTarget: DragTarget?
+    /// Off screen for a test or a snapshot. It acts key, for what's drawn and what's typed through
+    /// `sendEvent`, and never takes the keyboard from whoever is at the Mac.
+    var isParked = false
 
     /// `isSnapshot` draws the chrome's glass as a plain dark stand-in, for `--snapshot`.
     init(display: CaptureDisplay, editor: CaptureEditor, isSnapshot: Bool = false) {
@@ -38,10 +41,12 @@ final class CaptureOverlayWindow: NSPanel {
             .environment(\.isSnapshot, isSnapshot))
         host.sizingOptions = []
         contentView = host
+        isParked = isSnapshot
     }
 
-    override var canBecomeKey: Bool { true }
+    override var canBecomeKey: Bool { !isParked }
     override var canBecomeMain: Bool { false }
+    override var isKeyWindow: Bool { isParked || super.isKeyWindow }
 
     /// The window covers the display, menu bar and all, or sits off screen for a snapshot.
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
@@ -56,7 +61,7 @@ final class CaptureOverlayWindow: NSPanel {
             } else {
                 dragTarget = .capture
                 if !isKeyWindow { makeKey() }
-                editor.mouseDown(at: point, on: display.id)
+                editor.mouseDown(at: point, on: display.id, wholeDisplay: event.modifierFlags.contains(.option))
                 editor.cursor(at: point, on: display.id).set()
             }
         case .leftMouseDragged:
@@ -78,7 +83,14 @@ final class CaptureOverlayWindow: NSPanel {
             // SwiftUI gets it too, for the toolbar's hover highlights.
             super.sendEvent(event)
             let point = localPoint(event)
+            // Where it is on the desktop, from the display's frame: the overlay's, or off screen in a test.
+            editor.mouseMoved(toDesktop: CGPoint(x: display.frame.minX + event.locationInWindow.x,
+                                                 y: display.frame.minY + event.locationInWindow.y),
+                              wholeDisplay: event.modifierFlags.contains(.option))
             (editor.isOverChrome(point, on: display.id) ? NSCursor.arrow : editor.cursor(at: point, on: display.id)).set()
+        case .flagsChanged:
+            super.sendEvent(event)
+            editor.wholeDisplayChanged(event.modifierFlags.contains(.option))
         case .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp:
             break
         default:
@@ -113,7 +125,8 @@ private final class CaptureHostingView<Content: View>: NSHostingView<Content> {
 }
 
 /// One display's part of the capture: its frozen image dimmed except for the selection, the marks,
-/// the selection's outline and handles, the toolbar and the text field.
+/// the selection's outline and handles, the toolbar and the text field. Until there's a selection,
+/// what a click would select shows the same way.
 struct CaptureOverlayView: View {
     let display: CaptureDisplay
     @ObservedObject var editor: CaptureEditor
@@ -121,18 +134,23 @@ struct CaptureOverlayView: View {
     var body: some View {
         let isActive = editor.activeDisplay == display.id
         let selection = isActive ? editor.selection : nil
-        let hole = selection ?? (isActive ? editor.rubberBand : nil)
+        let rubberBand = isActive ? editor.rubberBand : nil
+        let highlight = editor.highlight(on: display.id)
+        let hole = selection ?? rubberBand ?? highlight?.frame
         ZStack(alignment: .topLeading) {
             Image(decorative: display.image, scale: display.scale)
                 .resizable()
                 .frame(width: display.size.width, height: display.size.height)
             DimLayer(size: display.size, hole: hole)
-            if let hole, selection == nil {
+            if let rubberBand, selection == nil {
                 Rectangle()
                     .stroke(editor.accent, lineWidth: 1)
-                    .frame(width: hole.width, height: hole.height)
-                    .position(x: hole.midX, y: hole.midY)
+                    .frame(width: rubberBand.width, height: rubberBand.height)
+                    .position(x: rubberBand.midX, y: rubberBand.midY)
                     .allowsHitTesting(false)
+            }
+            if let highlight {
+                HoverChrome(frame: highlight.frame, label: highlight.label, accent: editor.accent, displaySize: display.size)
             }
             if isActive {
                 AnnotationLayer(editor: editor, document: editor.document, display: display)
@@ -148,7 +166,7 @@ struct CaptureOverlayView: View {
                 }
             }
             if editor.selection == nil, editor.rubberBand == nil {
-                SelectionHint()
+                SelectionHint(hasWindows: !display.windows.isEmpty, isOverCapture: highlight != nil)
                     .position(x: display.size.width / 2, y: display.size.height / 2)
             }
         }
@@ -158,7 +176,8 @@ struct CaptureOverlayView: View {
     }
 }
 
-/// Dims the display to about forty percent, leaving the selection, or the region being dragged out, as it was.
+/// Dims the display to about forty percent, leaving the selection, the region being dragged out or
+/// the window under the pointer as it was.
 private struct DimLayer: View {
     let size: CGSize
     let hole: CGRect?

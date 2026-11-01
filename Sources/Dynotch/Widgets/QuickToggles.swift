@@ -87,8 +87,8 @@ final class QuickToggles: ObservableObject {
             guard let color = color?.usingColorSpace(.sRGB) else { return }
             let hex = String(format: "#%02X%02X%02X", Int((color.redComponent * 255).rounded()),
                              Int((color.greenComponent * 255).rounded()), Int((color.blueComponent * 255).rounded()))
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(hex, forType: .string)
+            NSPasteboard.dynotch.clearContents()
+            NSPasteboard.dynotch.setString(hex, forType: .string)
             Task { @MainActor in
                 LiveActivityCenter.shared.post(LiveNotice(key: "color", symbol: "circle.fill", tint: Color(nsColor: color),
                                                           text: hex, detail: "Copied to the clipboard"), for: 3)

@@ -42,6 +42,11 @@ extension Cadence {
     static let ciReviews = Cadence(name: "Reviews waiting", every: 15 * 60, onBattery: 30 * 60, lowPower: 60 * 60)
     /// Accessibility is granted in System Settings, which doesn't tell the app.
     static let accessibilityCheck = Cadence(name: "Accessibility check", every: 2, onBattery: 2, lowPower: 4)
+    /// Nothing says when something's copied, so this compares a number, only while Clipboard history
+    /// is on. The pointer and app switches look too, so it can afford to be slow.
+    static let clipboard = Cadence(name: "Clipboard", every: 5, onBattery: 10, lowPower: 20)
+    /// The clock in the notch, only while a recording runs. It counts seconds, so it stays at one.
+    static let recording = Cadence(name: "Recording clock", every: 1, onBattery: 1, lowPower: 1)
 }
 
 /// Keeps Dynotch quiet when nobody's looking. Polls pause while the displays sleep, the screen is

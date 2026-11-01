@@ -381,6 +381,8 @@ private struct ClosedPreview: View {
         case .download:
             DownloadRing(fraction: 0.45, lineWidth: 2.6 * scale, arrowSize: 7 * scale)
                 .frame(width: 17 * scale, height: 17 * scale)
+        case .recording:
+            RecordingDot(size: 11 * scale)
         case .script(let activity):
             HStack(spacing: 6 * scale) {
                 Image(systemName: activity.symbol)
@@ -432,6 +434,10 @@ private struct ClosedPreview: View {
             Text("45%")
                 .font(NotchFont.numeric(12.5 * scale))
                 .foregroundStyle(DownloadMonitor.tint)
+        case .recording:
+            Text("12:34")
+                .font(NotchFont.numeric(12.5 * scale))
+                .foregroundStyle(.white)
         case .script(let activity):
             Text(activity.percentText ?? "")
                 .font(NotchFont.numeric(12.5 * scale))
@@ -475,6 +481,8 @@ private struct ClosedPreview: View {
         case .download:
             DownloadRing(fraction: 0.45, lineWidth: 2.4 * scale, arrowSize: 6 * scale)
                 .padding(1.5 * scale)
+        case .recording:
+            RecordingDot(size: 10 * scale)
         case .focus(let mode):
             FocusGlyph(mode: mode, size: ClosedLayout.glyphSize * scale)
         case .held(let count):

@@ -13,14 +13,14 @@ enum DynotchApp {
         MainActor.assumeIsolated {
             // Before anything reads a setting: a snapshot run works against scratch defaults with
             // sample values, never the real ones, and needs somewhere to put the images. The
-            // capture self-test runs the whole app, so it works against the scratch defaults too.
+            // capture self-test and the energy probe work against the scratch defaults too.
             if let index = CommandLine.arguments.firstIndex(of: "--snapshot") {
                 guard CommandLine.arguments.count > index + 1 else {
                     FileHandle.standardError.write(Data("Usage: Dynotch --snapshot <folder> [--only <prefix>,<prefix>…]\n".utf8))
                     exit(2)
                 }
                 SnapshotRenderer.useScratchDefaults()
-            } else if CommandLine.arguments.contains("--capture-self-test") {
+            } else if CommandLine.arguments.contains("--capture-self-test") || CommandLine.arguments.contains("--energy-probe") {
                 SnapshotRenderer.useScratchDefaults()
             }
             let app = NSApplication.shared
@@ -58,7 +58,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let index = arguments.firstIndex(of: "--energy-probe") {
             // `--energy-probe notch` measures only the closed notch: seconds rather than minutes.
             EnergyProbe.run(notchOnly: arguments.dropFirst(index + 1).first == "notch")
+            SnapshotRenderer.discardScratchDefaults()
             NSApp.terminate(nil)
+            return
+        }
+        // `--capture-self-test <folder>` drives the capture tools with synthesized events, writes what
+        // it made there, and quits. Like a snapshot it starts no services, so it never reads the real
+        // Tray or the notes.
+        if let index = arguments.firstIndex(of: "--capture-self-test") {
+            let folder = arguments.count > index + 1 ? arguments[index + 1] : FileManager.default.temporaryDirectory.path
+            Task { @MainActor in
+                let passed = await CaptureSelfTest.run(into: URL(fileURLWithPath: folder))
+                SnapshotRenderer.discardScratchDefaults()
+                exit(passed ? 0 : 1)
+            }
             return
         }
 
@@ -68,6 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // First, so a profile a rule picks is in place before the services read their settings.
         ProfileStore.shared.start()
         TrayStore.shared.load()
+        ClipboardStore.shared.start()
         NotesStore.shared.start()
         NowPlayingService.shared.start()
         PowerMonitor.shared.start()
@@ -141,19 +155,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // `--capture-test` opens the capture editor over a made-up picture of each display, so the
-        // tools can be tried without Screen Recording access. `--capture-self-test <folder>` drives
-        // them with synthesized events, writes what it made there, and quits.
+        // tools can be tried without Screen Recording access.
         if arguments.contains("--capture-test") {
             CaptureController.shared.beginTest()
-        } else if let index = arguments.firstIndex(of: "--capture-self-test") {
-            let folder = arguments.count > index + 1 ? arguments[index + 1] : FileManager.default.temporaryDirectory.path
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    let passed = CaptureSelfTest.run(into: URL(fileURLWithPath: folder))
-                    SnapshotRenderer.discardScratchDefaults()
-                    exit(passed ? 0 : 1)
-                }
-            }
         }
 
         // On the next turn, once the notch has settled: one opened before that would close again.
@@ -164,6 +168,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 links.forEach(URLCommands.handle)
             }
         }
+    }
+
+    /// A recording that's running is finished and landed before the app goes, however it was asked to
+    /// quit: an in-app update comes this way too.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let recorder = ScreenRecorder.shared
+        guard recorder.isBusy else { return .terminateNow }
+        recorder.finishBeforeQuitting { NSApp.reply(toApplicationShouldTerminate: true) }
+        return .terminateLater
     }
 
     /// Opening the app again from Finder or Spotlight shows its settings.
@@ -319,6 +332,8 @@ extension AppDelegate: NSMenuItemValidation {
     /// Check for Updates names the new version once a check has found one.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(captureScreen) {
+            // It stops a recording that's running, as ⌃⌥S does.
+            menuItem.title = ScreenRecorder.shared.isRunning ? "Stop Recording" : "Capture Screen"
             menuItem.keyEquivalent = AppSettings.shared.captureShortcut ? "s" : ""
             return !CaptureController.shared.isActive
         }

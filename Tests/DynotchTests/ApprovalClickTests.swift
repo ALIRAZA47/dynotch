@@ -193,4 +193,47 @@ struct ApprovalClickTests {
         harness.click()
         #expect(harness.replies == ["nine allow"])
     }
+
+    /// A tool call that waited behind a recording hasn't used up the wait: it has to be seen first.
+    @Test func oneThatTakesStopsPlaceSleepsFirst() throws {
+        let harness = harness()
+        ScreenRecorder.shared.loadSample(.recording(since: .now))
+        defer {
+            ScreenRecorder.shared.loadSample(.idle)
+            harness.close()
+        }
+        harness.model.stage(phase: .glance, activity: .recording)
+        try harness.hold("ten")
+        harness.wait(0.9)
+        ScreenRecorder.shared.loadSample(.idle)
+        harness.model.stage(phase: .glance, activity: .idle)
+        harness.wait(0.1)
+        harness.click()
+        #expect(harness.replies.isEmpty)
+        harness.wait(0.8)
+        harness.click()
+        #expect(harness.replies == ["ten allow"])
+    }
+
+    /// And the other way, Stop coming up where a tool call was answered elsewhere is dead for a moment too.
+    @Test func stopThatTakesAToolCallsPlaceSleepsFirst() throws {
+        let harness = harness()
+        ScreenRecorder.shared.loadSample(.recording(since: .now))
+        defer {
+            ScreenRecorder.shared.loadSample(.idle)
+            harness.close()
+        }
+        harness.model.stage(phase: .glance, activity: .recording)
+        try harness.hold("eleven")
+        harness.model.showApproval()
+        harness.wait(NotchViewModel.stopGate + 0.2)
+        #expect(harness.model.acceptsStop)
+        try harness.finish("eleven")
+        var went = false
+        for _ in 0..<40 where !went {
+            harness.wait(0.01)
+            went = !harness.model.acceptsStop
+        }
+        #expect(went)
+    }
 }

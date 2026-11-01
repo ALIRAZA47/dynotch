@@ -31,6 +31,23 @@ Dynotch has no account, no analytics and no server of its own. It runs on your M
 | Tray files | `~/Library/Application Support/Dynotch/Tray`, for copies with **Keep copies** on, and for files made from dropped images, links and text |
 | The last Claude usage numbers | The preferences domain, as percentages and reset times |
 | Copies from Terminal setup | `~/Library/Application Support/Dynotch/setup-backups`: the last five of `~/.zshrc` and `~/.claude/settings.json`, from before each change |
+| Recordings | The folder the Screenshot app saves to, or the Tray's folder if that can't be written. While one is being made, it's a hidden file in the Tray's folder |
+| Pinned clips | `~/Library/Application Support/Dynotch/clipboard.json`, which only your user can read |
+
+## Clipboard
+
+**Keep clipboard history** is off until you turn it on. While it's off, Dynotch doesn't look at the clipboard at all. With it on:
+
+- What you copy stays in memory, and it's gone when Dynotch quits or you turn this off. Only what you pin is saved.
+- Files, images, anything an app marks as a password or as temporary, copies made with a password manager in front, and what arrives through Universal Clipboard are left out, and that's decided without reading what was copied. [Here's the whole list](/tray/#whats-kept).
+- What you copied never goes in a log, a notice or the Recent list. Copying a clip back only says **Copied**, and clips only show in the command field on a line that starts with `clip`.
+- Nothing leaves your Mac.
+
+macOS may ask before Dynotch reads what another app copied. See [If macOS asks](/tray/#if-macos-asks).
+
+## Images
+
+**Copy Text** and **Cut Out** run on your Mac, with Apple's Vision framework, and no image or text is sent anywhere. **Open** on a QR code opens its link in your browser, and only when you click it.
 
 ## Notifications
 
@@ -41,6 +58,7 @@ Dynotch reads Notification Center's database, opened read-only. It shows a notif
 - **Mirror** turns the camera on only when you click it, and it stops when the widget leaves the screen.
 - **Live equalizer** listens to Music or Spotify only while it plays and some bars are on screen, and nothing is recorded.
 - The **on-air ring** shows when a camera or the mic is in use. It reads that state, not what they capture.
+- A [recording](/capture/#recording) of a region has no sound of any kind, and doesn't use the microphone.
 
 ## Sharing your screen
 
