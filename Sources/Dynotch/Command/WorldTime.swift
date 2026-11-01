@@ -122,7 +122,8 @@ enum WorldTime {
         table.merge([
             "et": "America/New_York", "ct": "America/Chicago", "mt": "America/Denver", "pt": "America/Los_Angeles",
             "aest": "Australia/Sydney", "aedt": "Australia/Sydney", "acst": "Australia/Adelaide", "acdt": "Australia/Adelaide",
-            "awst": "Australia/Perth", "wib": "Asia/Jakarta",
+            "awst": "Australia/Perth", "wib": "Asia/Jakarta", "wita": "Asia/Makassar", "nzt": "Pacific/Auckland",
+            "sast": "Africa/Johannesburg", "npt": "Asia/Kathmandu", "aft": "Asia/Kabul", "azt": "Asia/Baku",
         ]) { _, new in new }
         return table
     }()

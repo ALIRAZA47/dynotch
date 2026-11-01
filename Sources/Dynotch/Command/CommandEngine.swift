@@ -64,7 +64,7 @@ enum CommandEngine {
             saidWhat = true
         }
         // An event that can be read speaks for the line. One that can't still says so, last, so whatever
-        // else the line matches keeps its place and its Return.
+        // else the line matches keeps its place and its Return, though it doesn't turn into a timer.
         var unreadEvent: CommandResult?
         if let body = remainder(of: text, after: ["calendar", "cal"]) {
             let row = event(body)
@@ -101,19 +101,17 @@ enum CommandEngine {
             results.append(contentsOf: clips(matching: words, in: .shared))
             saidWhat = true
         }
+        // These go before the timers: "run Water 8" is that Shortcut if there is one, and "run 30m" a timer.
+        var named: [CommandResult] = []
+        if let name = remainder(of: text, after: ["run", "shortcut"]) { named += shortcuts(matching: name.lowercased(), all: true) }
+        if let name = remainder(of: text, after: ["profile"]) { named += profiles(matching: name.lowercased()) }
+        results += named
+        saidWhat = saidWhat || !named.isEmpty
         if let spec = remainder(of: text, after: ["timer", "start timer"]) {
             results.append(timer(spec.isEmpty ? nil : spec))
             saidWhat = true
-        } else if !saidWhat, TimerText.parse(text) != nil {
+        } else if !saidWhat, unreadEvent == nil, TimerText.parse(text) != nil {
             results.append(timer(text))
-        }
-        if let name = remainder(of: text, after: ["run", "shortcut"]) {
-            results.append(contentsOf: shortcuts(matching: name.lowercased(), all: true))
-            saidWhat = true
-        }
-        if let name = remainder(of: text, after: ["profile"]) {
-            results.append(contentsOf: profiles(matching: name.lowercased()))
-            saidWhat = true
         }
 
         // Then anything whose name starts that way.
@@ -311,11 +309,12 @@ enum CommandEngine {
         }
         switch EventText.read(body, now: now) {
         case .noTime: return unread("No time in that yet", "fri 3pm")
+        case .noDay: return unread("No day in that yet", "today 3pm")
         case .needsAMOrPM: return unread("Add am or pm to the time", "3:30pm")
         case .noStart: return unread("Say when it starts", "3pm to 5pm")
         case .severalTimes: return unread("That reads as more than one time", "one at a time")
         case .unclearDay: return unread("Can't read the day in that", "fri 3pm")
-        case .unclearZone: return unread("Put the time zone right after the time", "3pm est")
+        case .unclearZone: return unread("Can't read the time zone in that", "fri 3pm est")
         case .unclearLength: return unread("Can't read how long that is", "for 45 min")
         case .noSuchDate: return unread("There's no such date", nil)
         case .noTitle: return unread("An event needs a name", "dentist fri 3pm")
@@ -567,10 +566,14 @@ enum CommandEngine {
     }
 
     private static func profiles(matching text: String) -> [CommandResult] {
-        ProfileStore.shared.profiles
-            .filter { text.isEmpty || $0.name.lowercased().hasPrefix(text) }
+        exactFirst(ProfileStore.shared.profiles.filter { text.isEmpty || $0.name.lowercased().hasPrefix(text) }, name: text, of: \.name)
             .prefix(3)
             .map(row(for:))
+    }
+
+    /// The one with exactly this name goes first, since that's what Return runs.
+    private static func exactFirst<Item>(_ items: [Item], name: String, of itemName: (Item) -> String) -> [Item] {
+        items.filter { itemName($0).lowercased() == name } + items.filter { itemName($0).lowercased() != name }
     }
 
     private static func profileID(_ profile: Profile) -> String { "profile-\(profile.id)" }
@@ -587,8 +590,9 @@ enum CommandEngine {
     /// The user's shortcuts. `all` lists every one while nothing's typed after "run".
     private static func shortcuts(matching text: String, all: Bool) -> [CommandResult] {
         guard all || !text.isEmpty else { return [] }
-        return ShortcutsService.shared.all
+        let matches = ShortcutsService.shared.all
             .filter { text.isEmpty || $0.lowercased().hasPrefix(text) || (text.count >= 3 && $0.lowercased().contains(text)) }
+        return exactFirst(matches, name: text) { $0 }
             .prefix(3)
             .map(shortcut)
     }
@@ -890,8 +894,8 @@ enum UnitConversion {
               let fromRange = Range(match.range(at: 2), in: text),
               let toRange = Range(match.range(at: 3), in: text),
               let amount = Double(text[numberRange]),
-              let from = unit(named: text[fromRange]),
-              let to = unit(named: text[toRange]),
+              let from = unit(named: text[fromRange], beside: text[toRange]),
+              let to = unit(named: text[toRange], beside: text[fromRange]),
               from.kind == to.kind else { return nil }
         let base = from.unit.converter.baseUnitValue(fromValue: amount)
         let result = to.unit.converter.value(fromBaseUnitValue: base)
@@ -900,9 +904,11 @@ enum UnitConversion {
         return ("\(Calculator.format(amount)) \(from.unit.symbol) = \(value) \(to.unit.symbol)", value)
     }
 
-    /// Case only matters between bits and bytes, as "Gb" against "GB". All in lowercase means bytes.
-    private static func unit(named name: Substring) -> (unit: Dimension, kind: Kind)? {
-        if name.count == 2, name.last == "b", let first = name.first, "KMGT".contains(first) { return units["\(first.lowercased())bit"] }
+    /// Case only matters between bits and bytes, as "Gb" against "GB", or "b" beside "B". All in
+    /// lowercase means bytes.
+    private static func unit(named name: Substring, beside other: Substring) -> (unit: Dimension, kind: Kind)? {
+        if name == "b", other == "B" { return units["bit"] }
+        if name.count == 2, name.last == "b", let first = name.first, "KMGTP".contains(first) { return units["\(first.lowercased())bit"] }
         return units[name.lowercased()]
     }
 
@@ -964,6 +970,7 @@ enum UnitConversion {
         add(UnitInformationStorage.megabits, .information, "mbit", "megabit", "megabits")
         add(UnitInformationStorage.gigabits, .information, "gbit", "gigabit", "gigabits")
         add(UnitInformationStorage.terabits, .information, "tbit", "terabit", "terabits")
+        add(UnitInformationStorage.petabits, .information, "pbit", "petabit", "petabits")
         return table
     }()
 }

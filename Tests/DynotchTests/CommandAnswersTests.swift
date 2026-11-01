@@ -156,17 +156,16 @@ struct DateTextTests {
         #expect(DateText.answer(text) == nil)
     }
 
-    @Test func aWordThatStartsLikeADayIsntOne() throws {
-        let value = try #require(DateText.answer("days since wedding \(day(-30))")?.value)
-        #expect(value == "30")
+    @Test(arguments: ["days since wedding", "days since wedding 1 oct", "days until 11/31", "days until 2/30", "days until 31.11.2026", "days until 12/25",
+                      "days from 1 jan til 25 dec", "days from 1 jan through 25 dec", "days from 1 jan thru 25 dec", "days from 1 jan - 25 dec"])
+    func onlyADayOnItsOwnIsCounted(text: String) {
+        #expect(answer(text) == nil)
     }
 
-    /// The detector sets a day to noon, and this has to come out the same before noon as after.
     @Test func todayIsTodayAtAnyHour() {
-        let (calendar, today) = (Calendar.current, Calendar.current.startOfDay(for: .now))
         for hour in [1, 11, 13, 23] {
-            let moment = calendar.date(byAdding: .hour, value: hour, to: today)!
-            #expect(DateText.answer("days since \(day(0))", now: moment)?.value == "0")
+            let moment = calendar.date(bySettingHour: hour, minute: 0, second: 0, of: now)!
+            #expect(DateText.answer("days since 31 oct", now: moment, calendar: calendar, locale: english)?.value == "0")
         }
     }
 
@@ -182,34 +181,44 @@ struct DateTextTests {
         #expect(answer("days until 2026-10-01")?.text == "30 days since Thu, Oct 1, 2026")
     }
 
-    /// `NSDataDetector` reads these from the real clock, so they count from it too.
-    private let real = Calendar.current
-
-    private func day(_ offset: Int) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "d MMM"
-        return formatter.string(from: real.date(byAdding: .day, value: offset, to: .now)!)
-    }
-
     @Test func aDayWithNoYearIsTheComingOne() {
-        #expect(DateText.answer("days until \(day(10))")?.value == "10")
-        #expect(DateText.answer("DAYS UNTIL \(day(10))")?.value == "10")
-        let value = DateText.answer("days until \(day(-1))")?.value
-        #expect(value == "364" || value == "365")
+        #expect(answer("days until 10 nov")?.value == "10")
+        #expect(answer("DAYS UNTIL 10 nov")?.value == "10")
+        #expect(answer("how many days until 10 nov?")?.value == "10")
+        #expect(answer("days until 30 oct")?.value == "364")
     }
 
     @Test func lookingBackItsTheLastOne() {
-        #expect(DateText.answer("days since \(day(-3))")?.value == "3")
-        let value = DateText.answer("days since \(day(1))")?.value
-        #expect(value == "364" || value == "365")
+        #expect(answer("days since 28 oct")?.value == "3")
+        #expect(answer("days since 1 nov")?.value == "364")
     }
 
-    @Test func aWeekday() throws {
-        let until = try #require(DateText.answer("days until friday")?.value)
-        #expect((1...7).contains(try #require(Int(until))))
-        let since = try #require(DateText.answer("days since friday")?.value)
-        #expect((0...7).contains(try #require(Int(since))))
+    /// Saturday is today here.
+    @Test func aWeekday() {
+        #expect(answer("days until friday")?.value == "6")
+        #expect(answer("days to next fri")?.value == "6")
+        #expect(answer("days since friday")?.value == "1")
+        #expect(answer("days since saturday")?.value == "0")
+        #expect(answer("days since last sat")?.value == "7")
+    }
+
+    @Test func daysAroundToday() {
+        #expect(answer("days until tomorrow")?.value == "1")
+        #expect(answer("days since yesterday")?.value == "1")
+        #expect(answer("days until today")?.value == "0")
+    }
+
+    /// Only the year goes first without the zeros, as a sum on its own could read the same.
+    @Test func aDateWithoutItsZeros() {
+        #expect(answer("days until 2027-1-5")?.value == "66")
+        #expect(answer("days since 2026/1/5")?.value == "299")
+    }
+
+    @Test(arguments: [Calendar.Identifier.islamicCivil, .hebrew, .persian, .chinese, .buddhist])
+    func anotherCalendarCountsTheSame(identifier: Calendar.Identifier) {
+        var other = Calendar(identifier: identifier)
+        other.timeZone = calendar.timeZone
+        #expect(DateText.answer("days until 25 dec", now: now, calendar: other, locale: english)?.value == "55")
     }
 
     @Test(arguments: ["days", "days until", "days until the weekend", "days of thunder", "day one"])
@@ -246,6 +255,13 @@ struct DataSizeTests {
         #expect(UnitConversion.convert("1 Tb to TB")?.value == "0.125")
         #expect(UnitConversion.convert("100 mb to MB")?.value == "100")
         #expect(UnitConversion.convert("100 MB to GB")?.value == "0.1")
+        #expect(UnitConversion.convert("1 Pb to PB")?.value == "0.125")
+    }
+
+    @Test func aLoneBBesideACapitalIsABit() {
+        #expect(UnitConversion.convert("8 b to B")?.value == "1")
+        #expect(UnitConversion.convert("1 B to b")?.value == "8")
+        #expect(UnitConversion.convert("1000 b to kb")?.value == "1")
     }
 
     @Test func aSizeIsntAWeight() {

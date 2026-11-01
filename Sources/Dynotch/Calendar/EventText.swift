@@ -1,113 +1,285 @@
 import Foundation
 
-/// An event as typed: "dentist fri 3pm", "standup mon 9am 30m", "lunch fri 12-1pm", "call fri 3pm est".
-/// A misread title must never become an event, and `NSDataDetector` will answer most things: noon for
-/// "dentist fri", the 3rd of the month for "friday 3", July for "24/7", December for "nov 31", and
-/// today for "dentist tomorow 3pm", with the misspelled word left in the title. So nothing it says is
-/// taken at its word. A time has to be a clock time that can only be read one way, every date in the
-/// line has to be accounted for, and what's left for the title can't look like a date it missed.
-/// Anything else is said in the row rather than guessed at.
+/// An event as typed: "dentist fri 3pm", "standup mon 9am 30m", "lunch tomorrow 12-1pm", "call fri 3pm est".
+/// A misread title must never become an event, so this reads a short list of forms and says what's
+/// wrong with anything else. A line needs a day `DayText` can read and a time that can only be read one
+/// way, and the day has to stand beside the time or open the line. A time alone isn't taken to mean
+/// today, because then "dentist wensday 3pm" would be. `NSDataDetector` isn't used here: it answers
+/// almost anything, and differently by the hour it's asked.
 enum EventText {
     /// What came of reading the text.
     enum Reading: Equatable {
         case event(NewEvent)
         /// No clock time in it. A day alone isn't enough.
         case noTime
+        /// A time and no day that can be read, which is where a misspelled one ends up.
+        case noDay
         /// A time that could be morning or afternoon, like "3:30" or "at 5".
         case needsAMOrPM
         /// When it ends, with nothing to say when it starts: "until 5pm".
         case noStart
-        /// More than one time or date, and no telling which is meant.
+        /// More than one time or day, and no telling which is meant.
         case severalTimes
-        /// Something left in the title looks like a day that wasn't read.
+        /// A day apart from the time, or one a word beside it changes: "black friday".
         case unclearDay
-        /// A time zone that isn't right after the time.
+        /// Something that might be a time zone, but can't be read as one.
         case unclearZone
         /// A length that wasn't read: "for 3 days".
         case unclearLength
-        /// A day the month doesn't have.
+        /// A day the month doesn't have, a weekday the date doesn't fall on, or a time the clocks skip.
         case noSuchDate
         /// A time and nothing else.
         case noTitle
-        /// A day that's already gone, or a time on one.
+        /// A time that's already gone.
         case past(Date)
     }
 
     /// An hour, unless a length is typed.
     static let length: TimeInterval = 3600
-    /// The longest a range can run without naming a second day. "3pm-2pm" reads as 23 hours.
-    private static let longestRange: TimeInterval = 16 * 3600
+    /// The longest a range of times can run, in minutes. "3pm-2pm" would be 23 hours.
+    private static let longestRange = 16 * 60
+    private static let wholeDay = 24 * 60
 
-    private enum Clock {
-        /// A time that can only mean one thing.
-        case exact
-        /// A time with no am or pm that could be either.
-        case ambiguous
-        /// No time: the detector gave a day noon of its own accord.
-        case none
-    }
+    static func read(_ text: String, now: Date = .now, calendar: Calendar = .current) -> Reading {
+        let (body, typedLength) = pullLength(from: text.trimmingCharacters(in: .whitespacesAndNewlines))
+        var line = pieces(of: body)
+        let days = line.compactMap(\.day)
+        guard let place = line.firstIndex(where: { $0.clock != nil }), let clock = line[place].clock else { return .noTime }
+        guard line.filter({ $0.clock != nil }).count == 1, days.count <= 1 else { return .severalTimes }
+        // "until 5pm" can have the day between. "after tomorrow" is about the day, so that one can't.
+        guard !endWords.contains(line[..<place].last { $0.word != nil }?.word?.lowercased() ?? ""),
+              place == 0 || !["after", "before"].contains(line[place - 1].word?.lowercased() ?? "") else { return .noStart }
 
-    /// A date the detector found.
-    private struct Found {
-        let range: Range<String.Index>
-        let date: Date
-        let duration: TimeInterval
-        let isZoned: Bool
-        let clock: Clock
-    }
-
-    static func read(_ text: String, now: Date = .now) -> Reading {
-        let (body, typedLength) = pullLength(from: spellingOutSunday(in: text.trimmingCharacters(in: .whitespacesAndNewlines)))
-        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.date.rawValue) else { return .noTime }
-        let found = detector.matches(in: body, range: NSRange(body.startIndex..., in: body)).compactMap { match -> Found? in
-            guard let range = Range(match.range, in: body), let date = match.date else { return nil }
-            return Found(range: range, date: date, duration: match.duration, isZoned: match.timeZone != nil, clock: clock(in: body[range]))
+        let times: (start: Int, end: Int?)
+        switch clock {
+        case .invalid:
+            return .noTime
+        case .exact(let start, let end):
+            times = (start, end)
+        case .unsure(let minutes):
+            // "tonight at 8" is the one place that says which.
+            guard days.first == .tonight, let minutes, (5 * 60..<12 * 60).contains(minutes) else { return .needsAMOrPM }
+            times = (minutes + 12 * 60, nil)
         }
-        let days = found.filter { $0.clock == .none }
-        guard let time = found.first(where: { $0.clock != .none }) else { return .noTime }
-        guard found.count - days.count == 1, days.count <= 1 else { return .severalTimes }
-        guard time.clock == .exact else { return .needsAMOrPM }
-        let timeText = body[time.range]
-        guard timeText.range(of: #"\b(?:until|till|til)\b"#, options: [.regularExpression, .caseInsensitive]) == nil else { return .noStart }
 
-        var start = time.date
-        var isBare = isBareTime(timeText, hasZone: time.isZoned)
-        // "fri dentist 3pm" comes back as a day at noon and a time today.
-        if let day = days.first {
-            // A bare "24/7" or "11/12" is as likely to be part of the title.
-            guard isBare, !time.isZoned, body[day.range].contains(where: \.isLetter), let joined = date(day.date, at: time.date) else { return .severalTimes }
-            start = joined
-            isBare = false
-        }
-        let dateText = found.map { String(body[$0.range]) }.joined(separator: " ")
-        // "nov 31" comes back as the 1st of December.
-        if !time.isZoned, let typed = DateText.typedDay(in: dateText), typed != Calendar.current.component(.day, from: start) { return .noSuchDate }
-
-        var taken = found.map(\.range)
-        if !time.isZoned, let zone = zone(after: time.range, in: body) {
-            taken.append(zone.range)
-            start = date(start, in: zone.zone)
-        }
-        let title = title(of: body, without: taken)
+        let zone = pullZone(after: place, from: &line)
+        guard zone != .unclear else { return .unclearZone }
+        let title = title(of: line)
         guard !title.isEmpty else { return .noTitle }
-        guard title.range(of: leftoverLength, options: [.regularExpression, .caseInsensitive]) == nil else { return .unclearLength }
-        guard !looksLikeADate(title, hasDay: !isBare) else { return .unclearDay }
-        guard !endsInAZone(title) else { return .unclearZone }
+        let namesAnotherDay = title.range(of: otherDays, options: [.regularExpression, .caseInsensitive]) != nil
+        guard namesAnotherDay || title.range(of: leftoverLength, options: [.regularExpression, .caseInsensitive]) == nil else { return .unclearLength }
+        guard !hasAZoneBeforeTheTime(line) else { return .unclearZone }
+        guard let day = days.first else { return .noDay }
+        guard standsOnItsOwn(in: line), !namesAnotherDay else { return .unclearDay }
 
-        // "fri" typed on a Friday comes back as next week, however much of today is left.
-        if !isBare, let today = todaysOccurrence(of: start, named: dateText, now: now) { start = today }
-        if start < now {
-            // "5pm" typed at six means tomorrow's. "fri 5pm", or "today 5pm", can only mean what it says.
-            guard isBare, let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: start) else { return .past(start) }
-            start = tomorrow
-        }
         var length = typedLength ?? Self.length
-        if typedLength == nil, time.duration > 0 {
-            guard time.duration <= longestRange || namesTwoDays(timeText) else { return .severalTimes }
-            length = time.duration.rounded()
+        if typedLength == nil, let end = times.end {
+            let minutes = (end - times.start + wholeDay) % wholeDay
+            guard minutes > 0, minutes <= longestRange else { return .severalTimes }
+            length = TimeInterval(minutes * 60)
         }
+        // The day is the one on the calendar here, whatever the zone. The clock is the one there.
+        let local = DayText.gregorian(like: calendar)
+        var there = local
+        if case .zone(let zone) = zone { there.timeZone = zone }
+        guard let date = DayText.day(day, now: now, calendar: local),
+              let start = moment(on: date, at: times.start, local: local, there: there) else { return .noSuchDate }
+        guard start >= now else { return .past(start) }
         return .event(NewEvent(title: title, start: start, end: start.addingTimeInterval(length)))
     }
+
+    /// That clock time on that day, or nil when the clocks skip it. Midnight is the end of the day.
+    private static func moment(on day: Date, at minutes: Int, local: Calendar, there: Calendar) -> Date? {
+        guard let day = local.date(byAdding: .day, value: minutes / wholeDay, to: day) else { return nil }
+        var parts = local.dateComponents([.year, .month, .day], from: day)
+        parts.hour = minutes % wholeDay / 60
+        parts.minute = minutes % 60
+        guard let date = there.date(from: parts) else { return nil }
+        let read = there.dateComponents([.hour, .minute], from: date)
+        return read.hour == parts.hour && read.minute == parts.minute ? date : nil
+    }
+
+    // MARK: The line
+
+    /// The line in order: its words, with the day and the time picked out of them.
+    private enum Piece {
+        case word(String)
+        case day(DayText.Kind)
+        case clock(Clock)
+
+        var word: String? { if case .word(let word) = self { word } else { nil } }
+        var day: DayText.Kind? { if case .day(let day) = self { day } else { nil } }
+        var clock: Clock? { if case .clock(let clock) = self { clock } else { nil } }
+    }
+
+    private static func pieces(of text: String) -> [Piece] {
+        var pieces: [Piece] = []
+        func addWords(_ part: Substring) {
+            pieces += part.split(whereSeparator: \.isWhitespace).map { .word(String($0)) }
+        }
+        func addClocks(_ part: String) {
+            var position = part.startIndex
+            for clock in clocks(in: part) {
+                addWords(part[position..<clock.range.lowerBound])
+                pieces.append(.clock(clock.clock))
+                position = clock.range.upperBound
+            }
+            addWords(part[position...])
+        }
+        var position = text.startIndex
+        for day in DayText.find(in: text) {
+            addClocks(String(text[position..<day.range.lowerBound]))
+            pieces.append(.day(day.kind))
+            position = day.range.upperBound
+        }
+        addClocks(String(text[position...]))
+        return pieces
+    }
+
+    /// What can stand between a day and a time, or lead up to either: "fri at 3pm", "sun, 3pm".
+    private static let joiners: Set<String> = ["at", "@", "on", "from", ",", ".", ";", ":", "-", "–", "—"]
+
+    private static func isJoiner(_ piece: Piece) -> Bool {
+        piece.word.map { joiners.contains($0.lowercased()) } ?? false
+    }
+
+    /// What's left once the day, the time and the zone are out, without what only led up to them.
+    private static func title(of line: [Piece]) -> String {
+        let words = line.indices.compactMap { index -> String? in
+            guard let word = line[index].word else { return nil }
+            let leadsUp = index + 1 < line.count && line[index + 1].word == nil
+            return leadsUp && isJoiner(line[index]) ? nil : word
+        }
+        let edges = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ".,;:!?-–—"))
+        return words.joined(separator: " ").trimmingCharacters(in: edges)
+    }
+
+    // MARK: The day
+
+    /// Beside a day, these change which day it is, or show it's somebody: "black friday", "first
+    /// monday", "lunch with sun", "the friday after next", "tuesday week".
+    private static let wordsBefore: Set<String> = [
+        "every", "each", "black", "good", "cyber", "easter", "palm", "ash", "holy", "first", "second", "third", "fourth", "fifth",
+        "after", "before", "week", "weeks", "month", "following", "the", "with", "and", "or", "mr", "mrs", "ms", "dr",
+    ]
+    private static let wordsAfter: Set<String> = ["week", "fortnight", "after", "before", "next", "of"]
+
+    /// Still in the title with a day read, these would move it: "dentist fri 3pm next week".
+    private static let otherDays = #"\b(?:every|from now|next (?:week|month|year)|in (?:a|an|one|two|three|four|five|six|\d+) (?:days?|weeks?|wks?|months?|mos?|years?)|\d+ (?:days?|weeks?|months?) (?:from|after|before|later|ago))\b"#
+
+    /// The day has to open the line or stand beside the time, which is what tells it from a word in
+    /// the title, and nothing next to it can change it.
+    private static func standsOnItsOwn(in line: [Piece]) -> Bool {
+        guard let day = line.firstIndex(where: { $0.day != nil }), let clock = line.firstIndex(where: { $0.clock != nil }) else { return false }
+        let opensTheLine = line[..<day].allSatisfy(isJoiner)
+        let isBesideTheTime = line[(min(day, clock) + 1)..<max(day, clock)].allSatisfy(isJoiner)
+        guard opensTheLine || isBesideTheTime else { return false }
+        let before = line[..<day].last { !isJoiner($0) }?.word?.lowercased() ?? ""
+        let after = line[(day + 1)...].first { !isJoiner($0) }?.word?.lowercased() ?? ""
+        return !wordsBefore.contains(before) && !wordsAfter.contains(after)
+            && before.range(of: #"^\d+(?:st|nd|rd|th)$"#, options: .regularExpression) == nil
+    }
+
+    // MARK: Times
+
+    private enum Clock: Equatable {
+        /// Minutes from midnight, up to a whole day for midnight itself.
+        case exact(start: Int, end: Int?)
+        /// No am or pm, and it could be either. A single time has its minutes here.
+        case unsure(Int?)
+        /// Not a time, like 13pm.
+        case invalid
+    }
+
+    /// One end of a time.
+    private struct Side {
+        var hour = 0
+        var minute = 0
+        var hasMinutes = false
+        /// "4.15" is as likely a version, so it takes more to count.
+        var isDotted = false
+        var hasLeadingZero = false
+        var isPM: Bool?
+        /// Noon or midnight, in minutes.
+        var word: Int?
+
+        /// From the groups of `side`: the hour, what's between it and the minutes, the minutes, am or pm, and a word.
+        init?(_ groups: ArraySlice<String?>) {
+            let groups = Array(groups)
+            if let word = groups[4] {
+                self.word = word == "noon" ? 12 * 60 : EventText.wholeDay
+            } else if let digits = groups[0], let hour = Int(digits) {
+                self.hour = hour
+                minute = groups[2].flatMap { Int($0) } ?? 0
+                hasMinutes = groups[2] != nil
+                isDotted = groups[1] == "."
+                hasLeadingZero = digits.hasPrefix("0") && digits.count == 2
+                isPM = groups[3].map { $0 == "p" }
+            } else {
+                return nil
+            }
+        }
+
+        /// A number alone isn't a time, so "sprint 12" stays in the title.
+        var countsAlone: Bool { word != nil || isPM != nil || (hasMinutes && (!isDotted || hour >= 13)) }
+
+        var clock: Clock {
+            if let word { return .exact(start: word, end: nil) }
+            guard minute < 60 else { return .invalid }
+            if let isPM {
+                guard (1...12).contains(hour) else { return .invalid }
+                return .exact(start: (hour % 12 + (isPM ? 12 : 0)) * 60 + minute, end: nil)
+            }
+            guard hour <= 23, hour > 0 || hasMinutes || hasLeadingZero else { return .invalid }
+            let minutes = hour * 60 + minute
+            return hour >= 13 || hour == 0 || hasLeadingZero ? .exact(start: minutes, end: nil) : .unsure(minutes)
+        }
+    }
+
+    private static let side = #"(?:(\d{1,2})(?:([:.])(\d{2}))?(?:\s*([ap])\.?m\b\.?)?|(noon|midnight))"#
+    private static let upTo = #"\s*(?:-|–|—|\bto\b|\buntil\b|\btill\b|\btil\b)\s*"#
+
+    private static func clocks(in text: String) -> [(clock: Clock, range: Range<String.Index>)] {
+        let pattern = #"(?<![\w:./-])((?:at|@)\s*)?"# + side + #"(?:"# + upTo + side + #")?(?![\w:/-]|\.\d)"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return [] }
+        return regex.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
+            guard let range = Range(match.range, in: text) else { return nil }
+            let groups = (0..<match.numberOfRanges).map { index in Range(match.range(at: index), in: text).map { String(text[$0]).lowercased() } }
+            guard let first = Side(groups[2...6]) else { return nil }
+            let second = Side(groups[7...11])
+            guard groups[1] != nil || first.countsAlone || second?.countsAlone == true else { return nil }
+            return (clock(from: first, to: second), range)
+        }
+    }
+
+    private static func clock(from first: Side, to second: Side?) -> Clock {
+        guard let second else { return first.clock }
+        switch (first.clock, second.clock) {
+        case (.invalid, _), (_, .invalid):
+            return .invalid
+        case (.exact(let start, _), .exact(let end, _)):
+            return .exact(start: start, end: end)
+        case (.unsure, .exact(let end, _)):
+            return second.isPM.map { range(from: first, to: end, isPM: $0) } ?? .unsure(nil)
+        default:
+            return .unsure(nil)
+        }
+    }
+
+    /// "3-4pm": the end speaks for the start, or "11-1pm" goes across noon. What runs past midnight from
+    /// one end or the other, like "9-2am", is left to say which, and so is "12-1am".
+    private static func range(from first: Side, to end: Int, isPM: Bool) -> Clock {
+        guard first.hour != 12 || isPM else { return .unsure(nil) }
+        for isPM in [isPM, !isPM] {
+            var side = first
+            side.isPM = isPM
+            if case .exact(let start, _) = side.clock, start < end { return .exact(start: start, end: end) }
+        }
+        return .unsure(nil)
+    }
+
+    /// Ahead of the time, these make it an end rather than a start.
+    private static let endWords: Set<String> = ["until", "till", "til", "end", "ends", "ending", "finish", "finishes", "finishing"]
 
     // MARK: Lengths
 
@@ -124,7 +296,7 @@ enum EventText {
                   let whole = Range(match.range, in: text), let group = Range(match.range(at: 1), in: text),
                   let length = seconds(in: String(text[group])), length >= 60 else { continue }
             var rest = text
-            rest.removeSubrange(whole)
+            rest.replaceSubrange(whole, with: " ")
             return (rest.trimmingCharacters(in: .whitespaces), length)
         }
         return (text, nil)
@@ -134,172 +306,66 @@ enum EventText {
         switch amount.lowercased() {
         case "half an hour": 1800
         case "an hour": 3600
-        default: TimerText.parse(amount.replacingOccurrences(of: " and ", with: " "))?.duration
+        default: TimerText.parse(amount.replacingOccurrences(of: " and ", with: " ").replacingOccurrences(of: ",", with: "."))?.duration
         }
     }
 
     /// A length that's still in the title: too long, or in days.
-    private static let leftoverLength = #"\bfor\s+\d+(?:[.,]\d+)?\s*(?:h|hrs?|hours?|m|mins?|minutes?|days?|weeks?|months?)\b"#
-
-    // MARK: Times
-
-    /// What the detector found holds a time, as far as can be told from how it's written.
-    private static func clock(in text: Substring) -> Clock {
-        func has(_ pattern: String) -> Bool { text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil }
-        let marked = #"(?<![\d.:/])(\d{1,2})(?:[:.][0-5]\d)?\s*[ap]\.?(?:m\b\.?|\b)"#
-        if has(marked) {
-            // 13pm is no time, and the detector takes it for one.
-            let hours = (try? NSRegularExpression(pattern: marked, options: .caseInsensitive))?
-                .matches(in: String(text), range: NSRange(location: 0, length: (String(text) as NSString).length))
-                .compactMap { Int((String(text) as NSString).substring(with: $0.range(at: 1))) } ?? []
-            return hours.allSatisfy { (1...12).contains($0) } ? .exact : .none
-        }
-        if has(#"(?<![\d.:/-])(?:0\d|1[3-9]|2[0-3])[:.][0-5]\d(?![\d.:/-])"#) || has(#"\bat\s+(?:1[3-9]|2[0-3])\b(?![-/.:\d])"#)
-            || has(#"\b(?:noon|midnight)\b"#) || has(#"\btonight\s+at\s+\d{1,2}\b(?![-/.:\d])"#) { return .exact }
-        if has(#"(?<![\d.:/-])\d{1,2}[:.][0-5]\d(?![\d.:/-])"#) || has(#"\bat\s+\d{1,2}\b(?![-/.:\d])"#) { return .ambiguous }
-        return .none
-    }
-
-    /// Only a time, with no day: "3pm", "at 15:30", "12-1pm", "3pm pst".
-    private static func isBareTime(_ text: Substring, hasZone: Bool) -> Bool {
-        let time = #"(?:\d{1,2}(?:[:.]\d{2})?\s*(?:[ap]\.?(?:m\.?)?)?|noon|midnight)"#
-        let meal = #"(?:(?:breakfast|brunch|lunch|dinner|supper)\s+)?"#
-        let zone = hasZone ? #"(?:\s+[a-z]{2,5})?"# : ""
-        let pattern = #"^"# + meal + #"(?:(?:at|from)\s+)?"# + time + #"(?:\s*(?:-|–|to)\s*"# + time + #")?"# + zone + #"$"#
-        return text.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
-    }
-
-    /// `day`, at the clock time of `time`.
-    private static func date(_ day: Date, at time: Date) -> Date? {
-        let calendar = Calendar.current
-        let clock = calendar.dateComponents([.hour, .minute], from: time)
-        return clock.hour.flatMap { calendar.date(bySettingHour: $0, minute: clock.minute ?? 0, second: 0, of: day) }
-    }
-
-    /// The same clock time and date, in `zone`.
-    private static func date(_ date: Date, in zone: TimeZone) -> Date {
-        var there = Calendar(identifier: .gregorian)
-        there.timeZone = zone
-        return there.date(from: Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date)) ?? date
-    }
-
-    // MARK: Days
-
-    /// The one short weekday the detector doesn't read, right before a time. Anywhere else it's left
-    /// for the check on what's in the title.
-    private static func spellingOutSunday(in text: String) -> String {
-        text.replacingOccurrences(of: #"(?i)\bsun\b(?=\s+(?:at\s+)?(?:\d|noon|midnight))"#, with: "sunday", options: .regularExpression)
-    }
-
-    /// A weekday typed on that weekday comes back a week on. With the time still ahead, it means today,
-    /// unless it says "next".
-    private static func todaysOccurrence(of date: Date, named text: String, now: Date) -> Date? {
-        let calendar = Calendar.current
-        guard text.range(of: weekdayName, options: [.regularExpression, .caseInsensitive]) != nil,
-              text.range(of: #"\bnext\b"#, options: [.regularExpression, .caseInsensitive]) == nil,
-              let sooner = calendar.date(byAdding: .day, value: -7, to: date),
-              calendar.isDate(sooner, inSameDayAs: now), sooner > now else { return nil }
-        return sooner
-    }
-
-    private static let weekdayName = #"\b(?:mon|tue|wed|thu|fri|sat|sun)[a-z]*\b"#
-
-    /// A range over 16 hours has to say which two days it runs between.
-    private static func namesTwoDays(_ text: Substring) -> Bool {
-        guard let regex = try? NSRegularExpression(pattern: weekdayName + #"|\btomorrow\b"#, options: .caseInsensitive) else { return false }
-        let line = String(text) as NSString
-        return Set(regex.matches(in: String(text), range: NSRange(location: 0, length: line.length)).map {
-            line.substring(with: $0.range).lowercased().prefix(3)
-        }).count >= 2
-    }
-
-    // MARK: The title
-
-    /// Words the detector takes for a time of day, so they're part of what it matched. For an event
-    /// they're the name.
-    private static let namingWords: Set<String> = ["breakfast", "brunch", "lunch", "dinner", "supper", "night"]
-
-    /// What's left once the dates are out.
-    private static func title(of text: String, without ranges: [Range<String.Index>]) -> String {
-        var title = text
-        for range in ranges.sorted(by: { $0.lowerBound > $1.lowerBound }) {
-            let kept = text[range].split(separator: " ").first { namingWords.contains($0.lowercased()) }
-            title.replaceSubrange(range, with: kept.map { " \($0) " } ?? " ")
-        }
-        let edges = CharacterSet.whitespacesAndNewlines.union(CharacterSet(charactersIn: ".,;:!?-–—"))
-        title = title.replacingOccurrences(of: #"\s+"#, with: " ", options: .regularExpression).trimmingCharacters(in: edges)
-        // Whatever led up to the date, which the title has no more use for.
-        for word in ["at", "on", "for", "from", "this", "next"] {
-            if title.lowercased() == word { return "" }
-            if title.lowercased().hasSuffix(" " + word) { title = String(title.dropLast(word.count + 1)) }
-        }
-        for word in ["at", "on"] where title.lowercased().hasPrefix(word + " ") { title = String(title.dropFirst(word.count + 1)) }
-        return title.trimmingCharacters(in: edges)
-    }
-
-    /// Dates that were left in the title because nothing read them. These speak for a date whatever else
-    /// was read: weekdays, days from now, and anything every week, which one event can't be.
-    private static let dateWords = #"\b(?:mon|tues?|wed|weds|thu|thur|thurs|fri|fir|frid|sat|sun|mondays?|tuesdays?|wednesdays?|thursdays?|fridays?|saturdays?|sundays?"#
-        + #"|today|tonight|tomorrow|yesterday|tmr|tmrw|tmw|tomo|2moro|2morrow|every|from now"#
-        + #"|(?:next|this) (?:week|month|year)|(?:a|one|two|\d+) (?:days?|weeks?|months?)(?: (?:from|after|before)|$)|in (?:a|one|two|\d+) (?:days?|weeks?|months?|years?))\b"#
-    /// These only count when no day was read: "weekend trip sat 9am" and "call june fri 3pm" are fine.
-    private static let dayWords = #"\b(?:jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december"#
-        + #"|weekends?|fortnight|christmas|xmas|thanksgiving|easter|halloween|new year)\b"#
-
-    private static func looksLikeADate(_ title: String, hasDay: Bool) -> Bool {
-        func has(_ pattern: String) -> Bool { title.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil }
-        if has(dateWords) || (!hasDay && has(dayWords)) { return true }
-        // Near enough to a day that it's a slip of the finger. "Sandy" and "Mandy" are two letters off.
-        let days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-        return title.lowercased().split(whereSeparator: { !$0.isLetter }).contains { word in
-            word.count >= 5 && (days.contains { editDistance(word, $0) <= 1 } || editDistance(word, "tomorrow") <= 2)
-        }
-    }
-
-    /// Letters to add, drop or change, or a pair to swap, to get from one word to the other.
-    private static func editDistance(_ first: Substring, _ second: String) -> Int {
-        let (a, b) = (Array(first), Array(second))
-        guard abs(a.count - b.count) <= 2 else { return 3 }
-        var table = (0...a.count).map { row in (0...b.count).map { row == 0 ? $0 : $0 == 0 ? row : 0 } }
-        for i in 1...a.count {
-            for j in 1...b.count {
-                table[i][j] = min(table[i - 1][j] + 1, table[i][j - 1] + 1, table[i - 1][j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1))
-                if i > 1, j > 1, a[i - 1] == b[j - 2], a[i - 2] == b[j - 1] { table[i][j] = min(table[i][j], table[i - 2][j - 2] + 1) }
-            }
-        }
-        return table[a.count][b.count]
-    }
+    private static let leftoverLength = #"\bfor\s+\d+(?:[.,]\d+)?\s*(?:h|hrs?|hours?|m|mins?|minutes?|days?|weeks?|months?)\b|\b\d+\s*(?:days?|weeks?|months?)$"#
 
     // MARK: Zones
 
-    /// Initials that are words first. "dentist 3pm art class" has nothing to do with Argentina.
-    private static let wordsNotZones: Set<String> = ["art", "cat", "cot", "eat", "pet", "wat", "west", "wet", "wit"]
-
-    private static func zoneInitials(_ word: String) -> WorldPlace? {
-        wordsNotZones.contains(word.lowercased()) ? nil : WorldTime.initials(word)
+    private enum TypedZone: Equatable {
+        case none
+        case zone(TimeZone)
+        case unclear
     }
 
-    /// A zone the detector left behind, right after the time: it reads "PST" and "pst", but not "est",
-    /// "pkt" or "lahore time". The two-letter ones only count at the very end, as "pt" and "ct" mean
-    /// other things in the middle of a line.
-    private static func zone(after range: Range<String.Index>, in text: String) -> (range: Range<String.Index>, zone: TimeZone)? {
-        let rest = text[range.upperBound...]
-        if let match = rest.range(of: #"^\s+[A-Za-z ]{2,30}?\s+time\b"#, options: .regularExpression) {
-            let name = rest[match].dropLast(4).trimmingCharacters(in: .whitespaces)
-            if let place = WorldTime.place(name) { return (match, place.zone) }
+    /// Zones that hardly mean anything else.
+    private static let commonZones: Set<String> = ["est", "edt", "pst", "pdt", "cst", "cdt", "mst", "mdt", "gmt", "utc", "cet", "cest", "ist", "jst", "pkt", "aest"]
+    /// Initials that are words first. In capitals they're zones.
+    private static let wordsNotZones: Set<String> = ["aft", "art", "cat", "cot", "eat", "pet", "wat", "west", "wet", "wit"]
+
+    /// Takes a zone from the end of the line. It only counts with nothing after it but the day, so in
+    /// "meet fri 3pm sgt jones" and "fri 3pm PT session" it's part of the title.
+    private static func pullZone(after clock: Int, from line: inout [Piece]) -> TypedZone {
+        let tail = line.indices.filter { $0 > clock && line[$0].word != nil && !isJoiner(line[$0]) }
+        let words = tail.compactMap { line[$0].word }
+        guard let first = words.first else { return .none }
+        func take(_ zone: TypedZone) -> TypedZone {
+            for index in tail.reversed() { line.remove(at: index) }
+            return zone
         }
-        guard let match = rest.range(of: #"^\s+[A-Za-z]{2,5}\b"#, options: .regularExpression) else { return nil }
-        let word = rest[match].trimmingCharacters(in: .whitespaces)
-        guard let place = zoneInitials(word), word.count > 2 || match.upperBound == rest.endIndex else { return nil }
-        return (match, place.zone)
+        if words.count > 1, commonZones.contains(first.lowercased()) { return .unclear }
+        if (2...4).contains(words.count), words.last?.lowercased() == "time" {
+            let name = words.dropLast().joined(separator: " ")
+            if name.lowercased() == "local" { return take(.none) }
+            guard let place = WorldTime.place(name) else { return .unclear }
+            return take(.zone(place.zone))
+        }
+        guard words.count == 1 else { return .none }
+        // "(est)" and "e.s.t." are that zone, and "et/pt" and "gmt+5" can't be read as one.
+        let typed = first.filter { $0 != "." }.trimmingCharacters(in: CharacterSet(charactersIn: "()[],"))
+        let parts = typed.split { !$0.isLetter }.map(String.init)
+        guard parts == [typed] else { return parts.contains { WorldTime.initials($0) != nil } ? .unclear : .none }
+        guard let place = WorldTime.initials(typed) else { return .none }
+        let isInCapitals = typed == typed.uppercased()
+        if !isInCapitals, wordsNotZones.contains(typed.lowercased()) { return .none }
+        // "gym fri 6pm pt" could be either.
+        if !isInCapitals, typed.count == 2 { return .unclear }
+        return take(.zone(place.zone))
     }
 
-    /// "call est 3pm", or "call lahore time 3pm": a zone that isn't where it could be read.
-    private static func endsInAZone(_ title: String) -> Bool {
-        let words = title.split(separator: " ").map(String.init)
-        guard let last = words.last else { return false }
-        if last.count > 2, zoneInitials(last) != nil { return true }
-        guard last.lowercased() == "time", words.count > 1 else { return false }
-        return (1...min(3, words.count - 1)).contains { count in WorldTime.place(words.dropLast().suffix(count).joined(separator: " ")) != nil }
+    /// "call est 3pm", "call lahore time fri 3pm": a zone ahead of the time, where it isn't read.
+    /// Initials that mean other things too, as "gst" and "bst" do, go for part of the title.
+    private static func hasAZoneBeforeTheTime(_ line: [Piece]) -> Bool {
+        line.indices.filter { line[$0].word == nil }.contains { mark in
+            let words = line[..<mark].reversed().prefix { $0.word != nil }.compactMap { $0.word?.lowercased() }
+            guard let last = words.first else { return false }
+            guard last == "time" else { return commonZones.contains(last) }
+            return (1...2).contains { count in
+                words.count > count && WorldTime.place(words[1...count].reversed().joined(separator: " ")) != nil
+            }
+        }
     }
 }

@@ -209,3 +209,53 @@ struct CommandHistoryTests {
         #expect(ids.count == 6)
     }
 }
+
+/// Names typed in full, which a timer shouldn't get to first. The lists are samples: nothing here
+/// reaches the real Shortcuts.
+@MainActor
+@Suite(.serialized)
+struct CommandNameTests {
+    private let viewModel: NotchViewModel
+
+    init() {
+        SnapshotRenderer.useScratchDefaults()
+        viewModel = NotchViewModel(geometry: NotchGeometry(screenFrame: CGRect(x: 0, y: 0, width: 1512, height: 982),
+                                                           closedSize: CGSize(width: 186, height: 37), hasHardwareNotch: true))
+    }
+
+    private func first(_ text: String) -> String? { CommandEngine.results(for: text, in: viewModel).first?.id }
+
+    @Test(arguments: ["Water 8", "Log 2 glasses", "Timer 25"])
+    func aShortcutEndingInANumberIsntATimer(name: String) {
+        ShortcutsService.shared.loadSample([name])
+        defer { ShortcutsService.shared.loadSample([]) }
+        #expect(first("run \(name)") == "shortcut-\(name)")
+        #expect(!CommandEngine.results(for: "run \(name)", in: viewModel).map(\.id).contains("timer"))
+    }
+
+    @Test func aProfileEndingInANumberIsntATimer() {
+        let profile = Profile(id: UUID(), name: "Work 2", rule: nil, values: [:])
+        ProfileStore.shared.loadSample([profile], active: nil)
+        defer { ProfileStore.shared.loadSample([], active: nil) }
+        #expect(first("profile Work 2") == "profile-\(profile.id)")
+        #expect(!CommandEngine.results(for: "profile Work 2", in: viewModel).map(\.id).contains("timer"))
+    }
+
+    @Test func aTimerCalledRunIsStillATimer() {
+        ShortcutsService.shared.loadSample(["Morning routine"])
+        defer { ShortcutsService.shared.loadSample([]) }
+        #expect(first("run 30m") == "timer")
+        #expect(first("run Morning") == "shortcut-Morning routine")
+    }
+
+    @Test func theExactNameComesFirst() {
+        ShortcutsService.shared.loadSample(["Archive Backup", "Backup", "Backup Photos"])
+        defer { ShortcutsService.shared.loadSample([]) }
+        #expect(first("run Backup") == "shortcut-Backup")
+        #expect(first("run backup") == "shortcut-Backup")
+        let (late, work) = (Profile(id: UUID(), name: "Work Late", rule: nil, values: [:]), Profile(id: UUID(), name: "Work", rule: nil, values: [:]))
+        ProfileStore.shared.loadSample([late, work], active: nil)
+        defer { ProfileStore.shared.loadSample([], active: nil) }
+        #expect(first("profile Work") == "profile-\(work.id)")
+    }
+}

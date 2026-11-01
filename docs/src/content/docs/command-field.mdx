@@ -63,30 +63,35 @@ The reminder goes to the Reminders app, so it needs the Reminders permission. Th
 
 ## Events
 
-`cal` adds an event to your default calendar, for an hour unless you say otherwise. The row shows what it read before you press <Keys k="Return" />.
+`cal` adds an event to your default calendar, for an hour unless you say otherwise. It needs a day and a time, and the row shows what it read before you press <Keys k="Return" />.
 
 | Type | And Dynotch adds |
 |---|---|
 | `cal dentist fri 3pm` | Dentist, on Friday from 3 to 4 |
+| `cal dentist today 3pm` | Today. A time on its own isn't enough |
 | `cal standup mon 9am 30m` | Half an hour |
 | `cal review fri 2pm for 45 min` | 45 minutes |
 | `cal lunch fri 12-1pm` | From noon to one |
-| `cal call fri 3pm est`, `cal call 3pm lahore time` | At 3 in that zone, shown in your own time. The zone goes right after the time |
+| `cal call fri 3pm est`, `cal call fri 3pm lahore time` | At 3 in that zone, shown in your own time. The zone goes last |
+
+The day can be `today`, `tonight`, `tomorrow`, a weekday, `next fri`, `25 dec`, `dec 25 2027` or `2026-12-25`, and it goes right beside the time or first on the line, as in `cal fri dentist 3pm`. Dates with slashes, like `11/13`, aren't read, as they mean different days to different people.
 
 A wrong event is worse than no event, so anything it can't be sure of, the row says, and <Keys k="Return" /> adds nothing:
 
 | The row says | For |
 |---|---|
 | No time in that yet | A day on its own, like `cal dentist fri`, or `tonight` and `tomorrow morning` with no clock time |
-| Add am or pm to the time | `3:30` or `at 5`, which could be either. `09:30`, `15:30` and `noon` are fine |
-| Can't read the day in that | A day it missed, like `tomorow`, `next week` or `every friday`, which would have ended up in the title |
-| That reads as more than one time | Two times or dates in one line, or something like `24/7` that might be a date |
-| There's no such date | `nov 31` |
+| No day in that yet | A time with no day it can read, which is where `tomorow`, `next week` or `5th` end up. `today` is enough |
+| Add am or pm to the time | `3:30` or `at 5`, which could be either, or `9-2am`, which could run past midnight from either end. `09:30`, `15:30` and `noon` are fine |
+| Can't read the day in that | A day away from the time, like `fri with sam 3pm`, or one that a word beside it changes, like `black friday`, `2nd fri` or `every friday` |
+| That reads as more than one time | Two times or two days in one line |
+| There's no such date | `nov 31`, a weekday the date doesn't fall on, or a time the clocks skip that night |
 | Say when it starts | `until 5pm` on its own |
 | Can't read how long that is | A length over a day, like `for 3 days` |
-| Put the time zone right after the time | A zone anywhere else in the line |
+| Can't read the time zone in that | A zone ahead of the time, one it doesn't know, or `pt` in lowercase, which could be something else. `PT` is fine |
+| That time has passed | A time that's gone, today or on a day that's over |
 
-`in 2 hours` isn't understood yet. A time on its own that's already passed means tomorrow, and a time on a day that's gone isn't added. A weekday means today if it's that day and the time is still ahead, and otherwise the next one.
+`in 2 hours` isn't understood yet. A weekday means today if it's that day, and the coming one if not. `next fri` means the Friday of next week.
 
 The event goes to the Calendar app, so it needs the Calendar permission. The field asks for it the first time.
 

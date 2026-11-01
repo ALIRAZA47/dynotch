@@ -14,6 +14,8 @@ final class ShortcutsService: ObservableObject {
 
     private init() {}
 
+    func loadSample(_ names: [String]) { all = names }
+
     func reload() async {
         let result = await Shell.run("/usr/bin/shortcuts", ["list"])
         all = result.output.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
