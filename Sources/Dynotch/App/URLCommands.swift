@@ -6,6 +6,9 @@ import SwiftUI
 ///
 ///     dynotch://notify?text=Deploy%20done&detail=…&symbol=checkmark.circle.fill&tint=green&seconds=4
 ///                      &button=Open&url=https://…   a button in the glance, for an https link
+///                      &key=deploy                  its own notice, so another script's doesn't replace it
+///                      &terminal=iTerm.app&session=…&tty=/dev/ttys003&folder=/a&bundle=…
+///                                                   where a command ran, for a button back to it
 ///     dynotch://open?tab=tray          home, tray, focus or stats
 ///     dynotch://close
 ///     dynotch://timer/start            start, pause, toggle, reset or skip
@@ -17,7 +20,8 @@ import SwiftUI
 /// notices carry a terminal badge, Tray adds point at files without copying them and skip
 /// ~/Library, and nothing reads a protected database on a link's behalf. A capture link only
 /// opens the editor over the screen: nothing is copied or saved until the user acts, and Esc
-/// closes it.
+/// closes it. A button back to a terminal does nothing until it's clicked, can only bring forward
+/// an app from `KnownTerminal`'s list, and at most selects a tab in it.
 @MainActor
 enum URLCommands {
     static func handle(_ url: URL) {
@@ -31,9 +35,13 @@ enum URLCommands {
 
         switch path.first {
         case "notify":
+            // A script's own button stays the main one. Without one, the way back is.
+            let origin = TerminalOrigin(program: value("terminal"), bundleID: value("bundle"), sessionID: value("session"),
+                                        tty: value("tty"), folder: value("folder"))
             notify(text: value("text") ?? "", detail: value("detail"), symbol: value("symbol"),
                    tint: value("tint"), seconds: value("seconds").flatMap(Double.init),
-                   button: button(title: value("button"), url: value("url")))
+                   actions: [button(title: value("button"), url: value("url")), origin.action].compactMap { $0 },
+                   key: value("key"))
         case "open":
             NotchManager.shared.open(tab: value("tab").flatMap(tab(named:)))
         case "close":
@@ -65,7 +73,7 @@ enum URLCommands {
     }
 
     private static func notify(text: String, detail: String?, symbol: String?, tint: String?, seconds: Double?,
-                               button: NoticeAction?) {
+                               actions: [NoticeAction], key: String?) {
         var text = String(text.prefix(100))
         var detail = detail.map { String($0.prefix(140)) }.flatMap { $0.isEmpty ? nil : $0 }
         // The ear beside the camera fits a couple of words; longer text goes on the row underneath.
@@ -78,10 +86,11 @@ enum URLCommands {
             }
         }
         let symbol = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil) == nil ? nil : $0 } ?? "bell.fill"
-        LiveActivityCenter.shared.post(LiveNotice(key: "command", symbol: symbol, tint: color(named: tint) ?? .white,
+        let key = ScriptActivityStore.cleaned(key, limit: ScriptActivityStore.longestKey).map { "script.\($0)" } ?? "command"
+        LiveActivityCenter.shared.post(LiveNotice(key: key, symbol: symbol, tint: color(named: tint) ?? .white,
                                                   text: text, detail: detail, fromScript: true,
-                                                  actions: button.map { [$0] } ?? [], timing: .waits, recall: .whole),
-                                       for: min(max(seconds ?? 4, 1), 30))
+                                                  actions: actions, timing: .waits, recall: .whole),
+                                       for: min(max(seconds.flatMap { $0.isFinite ? $0 : nil } ?? 4, 1), 30))
     }
 
     private static func timer(_ action: String) {

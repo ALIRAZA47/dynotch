@@ -21,10 +21,15 @@ dependencies.
 | **Live activities** (closed notch) | Album art and an equalizer while music plays; the song title when the track changes; focus-timer countdown; volume and brightness HUD; charging; low battery (Mac and Bluetooth devices); upcoming events five minutes ahead; Bluetooth devices connecting; a recording's red dot and time; Shortcuts finishing; a screenshot landing in the Tray; rain about to start; notifications from Messages, Mail, Slack and other apps (see [Notification peeks](#notification-peeks)). |
 | **Notices** | A notice can have buttons, which show in the glance: **Open** on a message, **Copy Code** on a login code, **Open** and **Show** on a download (and its icon drags out to any app), **Show** and **Open** on a screenshot, **Install** on an update, **Join** on a meeting. A click on a notice with buttons brings up the glance, so a stray click never joins a call. Notices take turns: a second one waits a moment, one of the same kind updates in place, and a volume meter sits on top of a message and gives it its time back. |
 | **Quiet** | While the mic or a camera is in use, or something fills the screen, like a slideshow or a film, peeks, script notices and song titles keep out of the way, with a count at the end of the right ear. One or two show when it's over, and more come as one notice. What would be out of date by then, like the weather or a Focus changing, goes unshown; what answers something you did, a timer ending and low battery still show, and a meeting about to start shows without its name. **Settings → Live Activities → Options** turns off **Quiet on calls** and **Quiet in full screen**. |
-| **Two at once** | A second activity keeps a small glyph at the end of the right ear while another takes the notch: the mute badge, a timer's or a download's ring, the Focus that's on, or the album art. The main activity keeps the order above: notices, the song title, the timer that ends soonest, a download, then music. |
+| **Two at once** | A second activity keeps a small glyph at the end of the right ear while another takes the notch: a recording's red dot, how many tool calls are waiting, the mute badge, a script's, a timer's or a download's ring, the Focus that's on, or the album art. The main activity keeps the order above: notices, a recording, the song title, a script's progress, the timer that ends soonest, a CI run, a download, then music. |
 | **Microphone** | ⌃⌥M, or **Mute Microphone** in the menu bar menu, mutes the mic in every app (by its mute control, or by turning its input level down when it has none). A red badge stays in the closed notch while it's muted. An on-air ring outlines the closed notch while a camera (green) or the mic (orange) is in use. Like macOS's own indicator, it leaves out Siri listening for its name. |
 | **Downloads** | A ring in the closed notch while files arrive in ~/Downloads: a real percentage for Safari, which records its progress, and the size so far for Chrome, Firefox and Opera, whose partial files only grow. A notice names the file when it's done, and an option puts finished downloads in the Tray. |
 | **Focus** | The symbol of the Focus that's on, in its color, at the end of the right ear, and a notice when a Focus turns on or off, whether by hand or on a schedule. macOS only tells apps whether a Focus is on, so Dynotch reads which one from the Focus settings, which takes Full Disk Access. Without it, nothing shows. |
+| **Agents** | Every Claude Code session in the notch, in the terminal and in the desktop app: what's working, what's waiting and what's done, in an Agents tab that's there while there are sessions, with a count at the end of the right ear for what needs you. A tool call waiting for permission can be allowed or denied from the glance, with the whole command on show, and **Back** goes to the session. Claude Code's own prompt stays up the whole time, whichever answers first wins, and nothing ever allows by itself. |
+| **Scripts** | `dynotch progress deploy 40` draws a thin line along the foot of the closed notch, with the percentage in the glance, and `dynotch status --json` reads the notch back. Each script has its own name, and one that goes quiet is taken down and says so. |
+| **Claude usage** | How much of your 5-hour and 7-day limits you've used and when they reset, as a ring in the glance, with a heads-up at 80%. The numbers come from Claude Code's status line, through `dynotch statusline`, and the glance says how old they are. |
+| **CI** | `dynotch ci`, or a `git push` with the long-command hook on, follows GitHub Actions on your branch: the workflow in the closed notch while it runs, then **Passed** or **Failed** with **Open Run**. The glance counts pull requests waiting for your review. It uses your own `gh` login, and polls only while a run is active. |
+| **Back to the terminal** | A long command's notice has a button back to where it ran: the exact tab in iTerm2, Terminal and Ghostty, and any other terminal comes to the front. |
 | **Glance** | Resting the pointer on the closed notch grows it into a glance at what's live, with a control or two: the track with play, pause and skip; the Pomodoro or a named timer with pause and +1 min; a meeting about to start with Join; a download; the last notice. With nothing live, it shows the date, the battery, the weather, the next event and the Tray, each a click from its tab. A notice has its buttons here, and the notice stays while the pointer is on it. A bell with a count opens **Recent**, the last few notices worth keeping, in memory only; for a notification, that's the app's name and nothing it said. A click anywhere else on it, or a swipe down, opens the whole notch; a swipe up or moving away closes it. **Settings → General → Hover shows** brings back the old behavior, the whole notch on hover. |
 | **Command field** | ⌃⌥K from anywhere, or **Type a command** in the open notch's header. Type `tea 4m` for a timer, `note Buy coffee` for a note, `remind Call Sam 5pm` for a reminder (the time comes out of the title, and a time that's passed means tomorrow), `dark`, `awake`, `mute`, `screenshot` or `sleep` for a toggle, `awake 2h` or `awake until 5pm` to keep the Mac awake for a while, `next`, `previous` or `pause` for the music, `vol 30` or `bright 60` for a level, `output AirPods` to switch outputs, `connect` or `disconnect` and a device's name, `join` for the next meeting with a link, `clear tray`, `clip` and some words to find what you've copied (Return copies it back), `settings tray` for a Settings page, a profile's name to switch to it, `run` and a shortcut's name to run it, `18% of 240` or `5 km to mi` for a sum or a conversion (Return copies the answer). It also finds notes and Tray files by what's in their names and text, and opens a tab by its name. With nothing typed, it suggests one of each. ↑ and ↓ pick a row, Return runs it, Escape clears what's typed and then leaves. |
 | **Nook tab** | Media player for Apple Music and Spotify: artwork, the track and where it's playing, scrubber, a big play button, next/previous, shuffle, repeat, favorite (Apple Music; Spotify doesn't let other apps like songs) and the output picker, on a glow in the album art's color. Beside it, a stack of up to two widgets, one at a time: Calendar, Mirror, Shortcuts, Focus timer, Batteries, Quick toggles, Notes or Weather. The stack turns by itself to the calendar shortly before an event, the weather before rain and the batteries when one runs low; a swipe up or down over it, or the dots on its edge, turn it by hand. A card with more than it shows, like a long note or the batteries, scrolls first. |
@@ -144,11 +149,15 @@ drives them with synthesized events off screen, prints a line per check and leav
 ## Scripting
 
 Dynotch answers `dynotch://` links, and `scripts/dynotch` wraps them for the shell.
-The app carries a copy in `Dynotch.app/Contents/Resources/dynotch`; link it onto your
-`PATH` to use it anywhere:
+The app carries a copy in `Dynotch.app/Contents/Resources/dynotch`.
+**Settings → General → Terminal setup** links it onto your `PATH`, adds the long-command hook to
+`~/.zshrc`, and merges the Claude Code hooks and status line into `~/.claude/settings.json`. It
+shows each change first, leaves everything else in those files as it is, and can undo what it did.
+To link the command by hand:
 
 ```bash
-sudo ln -s /Applications/Dynotch.app/Contents/Resources/dynotch /usr/local/bin/dynotch
+mkdir -p ~/.local/bin
+ln -s /Applications/Dynotch.app/Contents/Resources/dynotch ~/.local/bin/dynotch
 ```
 
 | Command | What it does |
@@ -161,19 +170,27 @@ sudo ln -s /Applications/Dynotch.app/Contents/Resources/dynotch /usr/local/bin/d
 | `dynotch tray --show report.pdf` | Adds files to the Tray, and opens it with `--show`. The items point at the files where they are, never copies; nothing under `~/Library` is taken; and the notch says what a script added. |
 | `dynotch profile Work` | Switches to a saved profile by name. The notch says which, or that there's no such profile. |
 | `dynotch capture` | Freezes the screen to capture a region, like ⌃⌥S. While a recording runs, it stops that instead. |
+| `dynotch progress deploy 40 --detail Uploading` | Draws a thin line along the foot of the closed notch, with the percentage in the glance. Each name is its own, so two scripts don't overwrite each other. `done` and `fail` end it with a notice, `clear` ends it quietly, and a script that goes quiet for two minutes (`--quiet-after` changes that) is taken down and says so. |
+| `dynotch status --json` | Reads back what the notch is showing, and each script's progress. Only ever the kind of notice, never what it says. |
+
+`progress` and `status` go over a Unix domain socket, since a link can't answer back. It sits in a
+folder only your user can open, never on a network port, and Dynotch checks who's on the other end
+of each connection. The socket can tell the notch something or ask what it's showing. It can't run
+anything. If Dynotch isn't running, these two say so and exit with 1.
 
 Other apps can open the same links, for example
 `dynotch://notify?text=Hello&tint=orange`, `dynotch://timer/start`, `dynotch://profile?name=Work` or
 `dynotch://capture`.
 
-**When a long command finishes.** Source `notify-long-commands.zsh` (it sits next to
-`dynotch` in the app) from `~/.zshrc`. Any command that runs for 30 seconds or more
+**When a long command finishes.** Terminal setup does this, or source
+`notify-long-commands.zsh` (it sits next to `dynotch` in the app) from `~/.zshrc`. Any command that runs for 30 seconds or more
 then ends with a "Done" or "Failed" notice. `DYNOTCH_LONG_COMMAND` changes the threshold.
 The notice names the command alone, `make` say, since its arguments can hold tokens;
 `DYNOTCH_LONG_COMMAND_DETAIL=full` includes them.
 
-**When Claude Code needs you.** Claude Code hooks can call the same command. Add this
-to `~/.claude/settings.json`:
+**When Claude Code needs you.** Terminal setup adds the hooks behind the Agents tab, or see
+[Agents](https://dynotch.alirazakhan.me/agents/) to add them by hand. If all you want is a word when
+Claude needs you, hooks can call the same command. Add this to `~/.claude/settings.json`:
 
 ```json
 {
@@ -273,6 +290,7 @@ Each permission is requested the first time you use the feature that needs it.
 |---|---|
 | Automation: Music, Spotify | Track info, artwork and playback controls |
 | Automation: System Events | The Dark Mode toggle |
+| Automation: iTerm2, Terminal, Ghostty | Going back to the right tab from a notice. Asked for the first time you click the button |
 | Calendar, Reminders | The Calendar and Reminders widgets |
 | Camera | The Mirror widget (it's only on while you're looking at it) |
 | Accessibility | Replace system HUD: handling the volume and brightness keys. Asked for when you turn it on |
@@ -303,6 +321,9 @@ above). An ad hoc build may lose them.
 - The brightness HUD and the Control tab's brightness slider reach the built-in display through
   the private DisplayServices framework. If that's unavailable, the HUD stays quiet and the slider
   isn't shown.
+- The Claude usage ring only hears from terminal sessions, since Claude Code doesn't run its status
+  line in sessions started in the desktop app. While you work there, the ring stays at whatever a
+  terminal session last reported, and says how old that is.
 - Not included from MacNotch: AI translation, and Night Shift / True Tone toggles (they have
   no public API).
 - Which Focus is on comes from Focus settings files that Apple doesn't document. A scheduled
@@ -328,6 +349,8 @@ Sources/Dynotch/
   HUD/        volume (CoreAudio) and brightness monitors, media-key tap
   Notifications/  notification peeks: Notification Center reader, settings
   Activities/ microphone and camera, downloads, Focus
+  Socket/     the local socket, the dynotch command's side of it, and what scripts report
+  Agents/     Claude Code's sessions and usage, CI, and going back to a terminal
   Profiles/   saved setups and the rules that switch them
   Settings/   settings window and permissions page
   Welcome/    the first-run welcome tour

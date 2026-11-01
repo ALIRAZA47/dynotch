@@ -41,7 +41,7 @@ enum SnapshotRenderer {
         NSPasteboard.dynotch.releaseGlobally()
     }
 
-    private struct Scene {
+    struct Scene {
         let name: String
         let phase: NotchViewModel.Phase
         var activity: ClosedActivity = .idle
@@ -73,6 +73,8 @@ enum SnapshotRenderer {
         var command: String?
         /// The glance has turned to the recent list.
         var showingRecent = false
+        /// The glance has turned to Claude's usage.
+        var showingUsage = false
         /// The Focus tab's second card shows the notes.
         var focusShowsNotes = false
         /// The open notch at this size instead of the setting's, for this scene only.
@@ -98,6 +100,10 @@ enum SnapshotRenderer {
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         PowerMonitor.shared.start()
         loadSamples(in: folder)
+        // Before a settings page can read anything of the real home folder.
+        let setupHome = FileManager.default.temporaryDirectory.appendingPathComponent("dynotch-snapshot-home-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: setupHome) }
+        TerminalSetupModel.shared.useSample(home: setupHome)
 
         let geometry = NotchGeometry(screenFrame: CGRect(x: 0, y: 0, width: 1728, height: 1117),
                                      closedSize: CGSize(width: 185, height: 32), hasHardwareNotch: true)
@@ -342,6 +348,14 @@ enum SnapshotRenderer {
             Scene(name: "recording-6-saving", phase: .closed, activity: .recording, setUp: { loadRecording(saving: true) }),
             Scene(name: "recording-7-landed", phase: .closed, activity: .notice(recordingLanded)),
             Scene(name: "recording-8-display-gone", phase: .closed, activity: .notice(recordingDisplayGone)),
+            // Beside what scripts and Claude Code put in the notch.
+            Scene(name: "recording-9-and-script", phase: .closed, activity: .recording,
+                  secondary: .script(ScriptActivity(key: "deploy", percent: 40)), setUp: { loadRecording() }),
+            Scene(name: "recording-10-and-tool-calls", phase: .closed, activity: .recording, secondary: .agentsWaiting(2),
+                  setUp: { loadRecording() }),
+            Scene(name: "recording-11-tool-call-notice", phase: .closed, activity: .notice(LiveNotice(
+                key: "agents.asking.b", symbol: "hand.raised.fill", tint: AgentDeck.tint, text: "Needs you", detail: "Bash · docs-site",
+                fromScript: true)), secondary: .recording, setUp: { loadRecording() }),
             Scene(name: "glance-24-recording", phase: .glance, activity: .recording, setUp: { loadRecording() }),
             Scene(name: "glance-25-recording-long", phase: .glance, activity: .recording, setUp: { loadRecording(seconds: 3765) }),
             Scene(name: "glance-26-recording-narrow", phase: .glance, activity: .recording, geometry: narrowNotch, setUp: { loadRecording() }),
@@ -350,6 +364,12 @@ enum SnapshotRenderer {
                   setUp: { loadRecording() }),
             Scene(name: "glance-28-recording-saving", phase: .glance, activity: .recording, setUp: { loadRecording(saving: true) }),
             Scene(name: "glance-29-recording-landed", phase: .glance, activity: .notice(recordingLanded)),
+            // Stop stays, with a tool call waiting.
+            Scene(name: "glance-30-recording-tool-call-waiting", phase: .glance, activity: .recording, secondary: .agentsWaiting(1), setUp: {
+                loadRecording()
+                AgentDeck.shared.loadSample(sessions: [], approvals: [AgentApproval(sessionID: "s", project: "lantern", tool: "Bash",
+                                                                                    input: ["command": "swift build"])])
+            }),
             Scene(name: "85-closed-copied-text", phase: .closed, activity: .notice(copiedText)),
             Scene(name: "86-closed-no-text", phase: .closed, activity: .notice(noText)),
             Scene(name: "87-closed-qr-code", phase: .closed, activity: .notice(qrCodeLongHost)),
@@ -374,7 +394,7 @@ enum SnapshotRenderer {
                 QuickToggles.shared.loadSample(awakeUntil: sampleTime.addingTimeInterval(102 * 60))
             }),
             Scene(name: "79-open-tray-pinned", phase: .open, tab: .tray, setUp: { TrayStore.shared.loadSample(pinned: 1) }),
-        ] + widgetScenes() + [
+        ] + scriptScenes(tea: tea) + agentScenes() + usageScenes() + ciScenes() + terminalScenes() + widgetScenes() + [
             // The other widgets beside the player, busy cards and empty ones. These change the samples, so they go last.
             Scene(name: "96-open-nook-timer-toggles", phase: .open, tab: .home, prepare: {
                 (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.timer, .toggles)
@@ -413,7 +433,8 @@ enum SnapshotRenderer {
             let viewModel = NotchViewModel(geometry: sceneGeometry)
             viewModel.stage(phase: scene.phase, activity: scene.activity, secondary: scene.secondary, tab: scene.tab,
                             traySide: scene.traySide, clipSearch: scene.clipSearch, draggingFiles: scene.draggingFiles,
-                            draggingImages: scene.draggingImages, command: scene.command, showingRecent: scene.showingRecent)
+                            draggingImages: scene.draggingImages, command: scene.command, showingRecent: scene.showingRecent,
+                            showingUsage: scene.showingUsage)
             // The command field can make the notch taller than the setting.
             let height = max(size.height, viewModel.metrics.height + 40)
             let content = ZStack(alignment: .top) {
@@ -441,6 +462,7 @@ enum SnapshotRenderer {
         renderClipboardSettings(into: folder)
         renderThemes(into: folder)
         renderProfiles(into: folder)
+        renderTerminalSetup(into: folder)
         renderWelcome(into: folder)
         renderCapture(into: folder)
         renderNotesLeftBehind(into: folder)
@@ -613,6 +635,41 @@ enum SnapshotRenderer {
 
     /// The General page scrolled to its Profiles section, as the menu bar's Profile Settings opens it:
     /// with sample profiles in dark mode, and before there are any in light mode.
+    /// The Terminal setup card on the General page: at rest with one thing in the way, the review, then
+    /// the undo. It works on the scratch home `render` gave it, as the real thing would.
+    private static func renderTerminalSetup(into folder: URL) {
+        let model = TerminalSetupModel.shared
+        let stages: [(name: String, appearance: NSAppearance.Name, stage: @MainActor () -> Void)] = [
+            ("setup-1-rest", .darkAqua, { model.cancel() }),
+            ("setup-2-review", .darkAqua, { model.stageReview() }),
+            ("setup-3-installed", .aqua, {
+                model.stageReview()
+                model.applyForSample()
+            }),
+            ("setup-4-undo", .aqua, { model.stageReview(undo: true) }),
+        ]
+        var count = 0
+        for (index, stage) in stages.enumerated() {
+            stage.stage()
+            guard wanted(stage.name) else { continue }
+            model.revealRequested = true
+            let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
+                                         styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
+            let navigation = SettingsNavigation()
+            navigation.page = .general
+            SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
+            window.appearance = NSAppearance(named: stage.appearance)
+            window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -80_000))
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: .now + 1.5)
+            if save(window, to: folder.appendingPathComponent(stage.name + ".png")) { count += 1 }
+            window.orderOut(nil)
+            window.close()
+        }
+        model.cancel()
+        print("Wrote \(count) terminal setup snapshots to \(folder.path)")
+    }
+
     private static func renderProfiles(into folder: URL) {
         var count = 0
         for (index, appearance) in [NSAppearance.Name.darkAqua, .aqua].enumerated() {
@@ -866,6 +923,10 @@ enum SnapshotRenderer {
         loadOutputs(pickerShown: false)
         AudioLevels.shared.loadSample(nil)
         LiveActivityCenter.shared.loadSample(recents: [], unseen: 0)
+        ScriptActivityStore.shared.loadSample([])
+        AgentDeck.shared.clearSample()
+        UsageStore.shared.clearSample()
+        CIMonitor.shared.clearSample()
         QuickToggles.shared.loadSample(awakeUntil: nil)
         TrayStore.shared.loadSample(pinned: nil)
         ScreenRecorder.shared.loadSample(.idle)
@@ -1014,6 +1075,40 @@ enum SnapshotRenderer {
     /// The widgets no other scene brings to the top of the Nook's stack, each first in it beside one
     /// that never asks for the room, on black and on glass. They leave the widgets set, so they come
     /// just before 96, which sets its own.
+    /// A script's progress: with a number, without one yet, on a virtual notch, beside other things.
+    private static func scriptScenes(tea: Countdown) -> [Scene] {
+        let deploy = ScriptActivity(key: "deploy", percent: 62, detail: "Uploading the build")
+        let build = ScriptActivity(key: "nightly-backup-run", percent: 8, symbol: "externaldrive.fill", tint: .teal)
+        let waiting = ScriptActivity(key: "migrate")
+        let virtualNotch = NotchGeometry(screenFrame: CGRect(x: 0, y: 0, width: 2560, height: 1440),
+                                         closedSize: CGSize(width: 190, height: 24), hasHardwareNotch: false)
+        return [
+            Scene(name: "script-1-closed", phase: .closed, activity: .script(deploy)),
+            Scene(name: "script-2-closed-symbol", phase: .closed, activity: .script(build)),
+            Scene(name: "script-3-closed-no-number", phase: .closed, activity: .script(waiting)),
+            Scene(name: "script-4-closed-virtual", phase: .closed, activity: .script(deploy), geometry: virtualNotch),
+            Scene(name: "script-5-hover", phase: .hovering, activity: .script(deploy)),
+            Scene(name: "script-6-with-timer", phase: .closed, activity: .script(deploy), secondary: .timer),
+            Scene(name: "script-7-beside-a-notice", phase: .closed, activity: .notice(LiveNotice(
+                key: "power", symbol: "bolt.fill", tint: .green, text: "82%")), secondary: .script(deploy)),
+            Scene(name: "script-8-glance", phase: .glance, activity: .script(deploy),
+                  setUp: { ScriptActivityStore.shared.loadSample([deploy]) }),
+            Scene(name: "script-9-glance-more", phase: .glance, activity: .script(deploy),
+                  setUp: { ScriptActivityStore.shared.loadSample([deploy, build, waiting]) }),
+            Scene(name: "script-10-glance-no-number", phase: .glance, activity: .script(waiting),
+                  setUp: { ScriptActivityStore.shared.loadSample([waiting]) }),
+            Scene(name: "script-11-done", phase: .closed, activity: .notice(LiveNotice(
+                key: "script.deploy", symbol: "checkmark.circle.fill", tint: .green, text: "Done",
+                detail: "deploy · 2m 14s", fromScript: true))),
+            Scene(name: "script-12-failed", phase: .closed, activity: .notice(LiveNotice(
+                key: "script.deploy", symbol: "xmark.octagon.fill", tint: .red, text: "Failed",
+                detail: "deploy · tests failed", fromScript: true))),
+            Scene(name: "script-13-quiet", phase: .closed, activity: .notice(LiveNotice(
+                key: "script.deploy", symbol: "questionmark.circle.fill", tint: .gray, text: "Went quiet",
+                detail: "deploy", fromScript: true))),
+        ]
+    }
+
     private static func widgetScenes() -> [Scene] {
         let stacks: [(name: String, first: HomeWidget, second: HomeWidget)] = [
             ("notes", .notes, .mirror), ("shortcuts", .shortcuts, .mirror),

@@ -44,8 +44,8 @@ export const nav: NavGroup[] = [
     title: 'Automate',
     tint: '#33B8C7',
     icon: 'terminal',
-    summary: 'The dynotch command and links',
-    pages: ['dynotch-command', 'links', 'recipes'],
+    summary: 'The dynotch command, links and your agents',
+    pages: ['dynotch-command', 'links', 'agents', 'claude-usage', 'ci', 'terminal', 'recipes'],
   },
   {
     title: 'Reference',

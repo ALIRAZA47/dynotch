@@ -21,15 +21,21 @@ struct ClosedLayout: Equatable {
     var notchHeight: CGFloat
     var earWidth: CGFloat
     var rowHeight: CGFloat
+    /// Room along the foot for a script's progress line.
+    var footHeight: CGFloat = 0
 
     /// The second activity's glyph, and the gap before it.
     static let glyphSize: CGFloat = 16
     static let glyphSpacing: CGFloat = 8
     /// The widest a notice's second row makes the notch; longer text is cut off.
     static let maxRowWidth: CGFloat = 420
+    /// The line along the foot, the gap under it, and how far it stays clear of the bottom corners.
+    static let footLineHeight: CGFloat = 3
+    static let footGap: CGFloat = 5
+    static let footInset: CGFloat = 14
 
     var totalWidth: CGFloat { notchWidth + earWidth * 2 }
-    var totalHeight: CGFloat { notchHeight + rowHeight }
+    var totalHeight: CGFloat { notchHeight + rowHeight + footHeight }
 
     init(activity: ClosedActivity, secondary: CompactActivity?, notch: CGSize) {
         self.init(besideCamera: activity, notch: notch)
@@ -86,6 +92,16 @@ struct ClosedLayout: Equatable {
         case .recording:
             // Room for "1:02:45" on the right, as for the stopwatch.
             earWidth = 72
+            rowHeight = 0
+        case .script(let script):
+            // The symbol and up to ten letters of the name on the left, "100%" on the right.
+            let name = CGFloat(min(script.key.count, 10)) * 7
+            earWidth = max(64, 10 + 14 + 6 + name + 6, 11 + 36 + 8)
+            rowHeight = 0
+            footHeight = Self.footLineHeight + Self.footGap
+        case .ci(let run):
+            // The workflow's name, up to twelve letters, on the left.
+            earWidth = max(64, 10 + 14 + 6 + CGFloat(min(run.workflow.count, 12)) * 7 + 6)
             rowHeight = 0
         case .notice(let notice):
             switch notice.kind {
@@ -145,12 +161,20 @@ final class NotchViewModel: ObservableObject {
 
     /// The glance has turned to the recent list.
     @Published private(set) var isShowingRecent = false
+    /// The glance has turned to Claude's usage.
+    @Published private(set) var isShowingUsage = false
+    /// Review has turned the glance to the tool calls waiting, which takes it from a recording's Stop.
+    @Published private(set) var isReviewing = false
+    /// When the latest press on the notch began. Allow goes by this rather than by when it's let go.
+    var lastPress = Date.distantPast
     private var clickedForGlance = Date.distantPast
     private var glanceAppeared = Date.distantPast
 
     /// Something was dragged out of the tray and the drag hasn't ended yet.
     @Published var isDraggingOut = false
     var onOpen: (() -> Void)?
+    /// The open notch is turning to the glance, which is smaller, so the pointer may end up outside it.
+    var onTurnToGlance: (() -> Void)?
     /// A swipe over the Nook's stack of widgets: true for the next card, false for the one before.
     let stackTurns = PassthroughSubject<Bool, Never>()
 
@@ -174,6 +198,15 @@ final class NotchViewModel: ObservableObject {
         AppSettings.shared.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        // The Agents tab comes and goes with the sessions, and an approval takes over the glance.
+        AgentDeck.shared.objectWillChange
+            .sink { [weak self] _ in self?.objectWillChange.send() }
+            .store(in: &cancellables)
+        // Review was for those waiting then. The next to come waits for a recording like any other.
+        AgentDeck.shared.$approvals
+            .filter(\.isEmpty)
+            .sink { [weak self] _ in self?.isReviewing = false }
+            .store(in: &cancellables)
     }
 
     var isOpen: Bool { phase == .open }
@@ -193,6 +226,12 @@ final class NotchViewModel: ObservableObject {
     /// What the glance shows, from what's live right now.
     var glanceContent: GlanceContent {
         if isShowingRecent { return .recent(rows: LiveActivityCenter.shared.recents.count) }
+        // A tool call can wait for a recording, since Claude Code's own prompt is still there. Review
+        // asks for it by name, so that brings it up all the same.
+        if !isRecording || isReviewing, AppSettings.shared.liveAgents, let approval = AgentDeck.shared.approvals.first {
+            return .approval(approval)
+        }
+        if isShowingUsage, AppSettings.shared.liveUsage { return .usage }
         // The recording's for as long as it runs, whatever the closed notch shows, so Stop stays put.
         if isRecording { return .recording }
         return GlanceContent(activity: activity)
@@ -204,8 +243,10 @@ final class NotchViewModel: ObservableObject {
         Date.now.timeIntervalSince(clickedForGlance) > NSEvent.doubleClickInterval
     }
 
-    /// A notice with buttons is showing. They're in the glance, so that's where a click goes.
+    /// A notice with buttons is showing, or a tool call is waiting. Both are in the glance, so that's
+    /// where a click goes.
     var noticeHasActions: Bool {
+        if AppSettings.shared.liveAgents, !AgentDeck.shared.approvals.isEmpty { return true }
         if case .notice(let notice) = activity { return !notice.actions.isEmpty }
         return false
     }
@@ -222,6 +263,11 @@ final class NotchViewModel: ObservableObject {
     /// only knows of clicks.
     var acceptsStop: Bool {
         Date.now.timeIntervalSince(glanceAppeared) >= Self.stopGate
+    }
+
+    /// Stop has come up in a glance that was already there, when a tool call it was showing went.
+    func stopAppeared() {
+        glanceAppeared = .now
     }
 
     /// The open notch with the command field up: tall enough for its rows, at least as tall as the tabs.
@@ -257,8 +303,11 @@ final class NotchViewModel: ObservableObject {
                                 topRadius: theme.topRadius, bottomRadius: theme.bottomRadius)
         case .glance:
             let closed = geometry.closedSize
-            return NotchMetrics(width: min(settings.openWidth, closed.width + GlanceContent.earWidth * 2),
-                                height: closed.height + glanceContent.extraHeight,
+            let content = glanceContent
+            var width = closed.width + GlanceContent.earWidth * 2
+            // A command shows whole, so the more room it has the fewer lines it takes.
+            if case .approval = content { width = max(width, ApprovalGlance.width) }
+            return NotchMetrics(width: min(settings.openWidth, width), height: closed.height + content.extraHeight,
                                 topRadius: 8, bottomRadius: 22)
         case .closed, .hovering:
             let hovering = phase == .hovering
@@ -284,6 +333,8 @@ final class NotchViewModel: ObservableObject {
         withAnimation(.notchOpen) {
             phase = .open
             isShowingRecent = false
+            isShowingUsage = false
+            isReviewing = false
         }
         onOpen?()
         NowPlayingService.shared.refresh()
@@ -307,6 +358,29 @@ final class NotchViewModel: ObservableObject {
         withAnimation(.notchGlance) { isShowingRecent = true }
     }
 
+    /// Turns the glance to Claude's usage, from the recent list too.
+    func showUsage() {
+        glance()
+        withAnimation(.notchGlance) {
+            isShowingRecent = false
+            isShowingUsage = true
+        }
+    }
+
+    /// Notes when a press began, by the event's own time, in case it waited its turn on a busy main thread.
+    func notePress(_ event: NSEvent) {
+        lastPress = Date.now.addingTimeInterval(event.timestamp - ProcessInfo.processInfo.systemUptime)
+    }
+
+    /// Turns to the tool call waiting for an answer, which is only ever answered in the glance.
+    func showApproval() {
+        clickedForGlance = .now
+        isReviewing = true
+        guard phase == .open else { return glance() }
+        onTurnToGlance?()
+        withAnimation(.notchGlance) { phase = .glance }
+    }
+
     /// Grows the hovered notch into a glance at what's live.
     func glance() {
         guard phase == .closed || phase == .hovering else { return }
@@ -320,6 +394,8 @@ final class NotchViewModel: ObservableObject {
             isDraggingFiles = false
             isCommandMode = false
             isShowingRecent = false
+            isShowingUsage = false
+            isReviewing = false
         }
         commandQuery = ""
         clipSearch = ""
@@ -383,9 +459,12 @@ final class NotchViewModel: ObservableObject {
 
     func stage(phase: Phase, activity: ClosedActivity, secondary: CompactActivity? = nil, tab: NotchTab = .home,
                traySide: TraySide = .files, clipSearch: String = "",
-               draggingFiles: Bool = false, draggingImages: Bool = false, command: String? = nil, showingRecent: Bool = false) {
+               draggingFiles: Bool = false, draggingImages: Bool = false, command: String? = nil, showingRecent: Bool = false,
+               showingUsage: Bool = false) {
         self.phase = phase
         isShowingRecent = showingRecent
+        isShowingUsage = showingUsage
+        isReviewing = false
         self.activity = activity
         self.secondary = secondary
         self.tab = tab

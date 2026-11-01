@@ -16,6 +16,7 @@ final class NotchWindowController {
     private var isQuiet = false
     private var isInside = false
     /// Opened from the keyboard or menu: stays open until the pointer has been over it once.
+    /// The same for an approval the open notch turned to, whose glance may not reach the pointer.
     private var awaitingPointer = false
     private var hoverTask: Task<Void, Never>?
     private var closeTask: Task<Void, Never>?
@@ -48,6 +49,11 @@ final class NotchWindowController {
         panel.contentView = host
         layout()
         panel.orderFrontRegardless()
+        panel.onPress = { [weak self] event in self?.viewModel.notePress(event) }
+        viewModel.onTurnToGlance = { [weak self] in
+            self?.cancelClose()
+            self?.awaitingPointer = true
+        }
 
         // These publish before the value changes, so act on the next turn.
         viewModel.$phase
@@ -136,6 +142,8 @@ final class NotchWindowController {
         }
         let inside = hitRect().contains(point)
         setInteractive(inside)
+        // It has found the glance, or the approval it was turned to has gone, so that can close as usual.
+        if awaitingPointer, viewModel.isGlancing, inside || !viewModel.noticeHasActions { awaitingPointer = false }
         if inside != isInside {
             isInside = inside
             inside ? pointerEntered() : pointerExited()
@@ -243,7 +251,8 @@ final class NotchWindowController {
                     hasSkipped = true
                     viewModel.stackTurns.send(towardEnd)
                 }
-            } else if !gestures {
+            } else if !gestures || (viewModel.isGlancing && verticalScroller(at: point) != nil) {
+                // Over a command with more than it shows, a swipe scrolls that.
                 break
             } else if !viewModel.isOpen, scrollTotal > 14 {
                 scrollTotal = 0
@@ -345,7 +354,7 @@ final class NotchWindowController {
     private func pointerExited() {
         hoverTask?.cancel()
         viewModel.setHovering(false)
-        if viewModel.isOpen || viewModel.isGlancing { scheduleClose() }
+        if viewModel.isOpen || (viewModel.isGlancing && !awaitingPointer) { scheduleClose() }
     }
 
     private func scheduleClose(after delay: TimeInterval = 0.15) {

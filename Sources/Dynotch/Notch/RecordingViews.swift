@@ -65,6 +65,7 @@ struct RecordingGlance: View {
                 }
             }
         }
+        .onAppear { viewModel.stopAppeared() }
     }
 
     /// "1280 × 720 · MP4"

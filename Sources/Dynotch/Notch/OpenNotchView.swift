@@ -36,6 +36,7 @@ struct OpenNotchView: View {
             case .tray: TrayTabView(viewModel: viewModel)
             case .focus: FocusTabView()
             case .stats: ControlTabView()
+            case .agents: AgentsTabView(viewModel: viewModel)
             }
         }
     }
@@ -51,7 +52,7 @@ struct OpenHeaderView: View {
         // Each side gets what's left of the width once the camera housing is excluded.
         let side = max(0, (settings.openWidth - NotchTheme.inset * 2 - viewModel.geometry.closedSize.width) / 2 - 6)
         HStack(spacing: 0) {
-            TabSwitcher(viewModel: viewModel)
+            TabSwitcher(viewModel: viewModel, width: side)
                 .frame(width: side, alignment: .leading)
             Spacer(minLength: 0)
             HStack(spacing: 4) {
@@ -68,15 +69,21 @@ struct OpenHeaderView: View {
 /// goes back to plain glass, so none is picked out.
 private struct TabSwitcher: View {
     @ObservedObject var viewModel: NotchViewModel
+    /// The room beside the camera.
+    let width: CGFloat
     @ObservedObject private var settings = AppSettings.shared
+    @ObservedObject private var deck = AgentDeck.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Namespace private var selection
+
+    /// A fifth tab doesn't fit at the narrowest open notch unless they all stand closer.
+    private var isTight: Bool { settings.enabledTabs.count > 4 && width < 216 }
 
     var body: some View {
         HStack(spacing: 2) {
             ForEach(settings.enabledTabs) { tab in
                 TabButton(tab: tab, isSelected: viewModel.visibleTab == tab, isMuted: viewModel.isCommandMode,
-                          namespace: selection) {
+                          isTight: isTight, namespace: selection) {
                     // The jewel slides to the tab; with Reduce Motion it eases there without the spring.
                     withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .notchTab) {
                         viewModel.endCommand()
@@ -96,6 +103,7 @@ private struct TabButton: View {
     let isSelected: Bool
     /// The command field covers the tabs, so the selected one goes back to plain glass.
     let isMuted: Bool
+    let isTight: Bool
     let namespace: Namespace.ID
     let action: () -> Void
     @Environment(\.notchTheme) private var theme
@@ -116,8 +124,8 @@ private struct TabButton: View {
             }
             // Ink on the jewel, white on glass.
             .foregroundStyle(isSelected ? theme.ink(on: depth) : hovering ? theme.primary : theme.primary.opacity(0.55))
-            .padding(.horizontal, isSelected ? 10 : 8)
-            .frame(minWidth: 30)
+            .padding(.horizontal, isTight ? (isSelected ? 8 : 5) : (isSelected ? 10 : 8))
+            .frame(minWidth: isTight ? 24 : 30)
             .frame(height: 24)
             .background {
                 if isSelected {
