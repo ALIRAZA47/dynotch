@@ -111,6 +111,28 @@ struct CommandHistoryTests {
         #expect(results.prefix(3).allSatisfy { $0.action != nil })
     }
 
+    /// The first row is one Return away with nothing typed. These get typed out, and a second Return
+    /// runs them.
+    @Test func whatCantBeTakenBackIsTypedOutFirst() {
+        CommandHistory.record("sleep")
+        let row = CommandEngine.results(for: "", in: viewModel)[0]
+        #expect(row.id == "sleep")
+        #expect(row.hint == "sleep")
+        viewModel.run(row)
+        #expect(viewModel.commandQuery == "sleep")
+        #expect(CommandHistory.ranked() == ["sleep"])
+    }
+
+    @Test func aProfileIsTypedOutToo() throws {
+        let profile = Profile(id: UUID(), name: "Work", rule: nil, values: [:])
+        ProfileStore.shared.loadSample([profile], active: nil)
+        defer { ProfileStore.shared.loadSample([], active: nil) }
+        CommandHistory.record("profile-\(profile.id)")
+        let row = try #require(CommandEngine.results(for: "", in: viewModel).first)
+        viewModel.run(row)
+        #expect(viewModel.commandQuery == "profile Work")
+    }
+
     @Test func whatsGoneDoesntComeBack() {
         CommandHistory.record("shortcut-Deleted long ago")
         CommandHistory.record("profile-00000000-0000-0000-0000-000000000000")

@@ -29,7 +29,8 @@ enum ColorText {
 
     private static func channel(_ value: Double) -> Int { Int((value * 255).rounded()) }
 
-    private static func alpha(_ value: Double) -> String { Calculator.format((value * 100).rounded() / 100) }
+    /// With a point whatever the Mac's language, as this goes in CSS.
+    private static func alpha(_ value: Double) -> String { String((value * 100).rounded() / 100) }
 
     private static func hex(_ color: Value) -> String {
         let digits = [color.red, color.green, color.blue].map { String(format: "%02x", channel($0)) }.joined()

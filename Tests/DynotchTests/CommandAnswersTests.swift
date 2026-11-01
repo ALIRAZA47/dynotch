@@ -70,6 +70,12 @@ struct WorldTimeTests {
         #expect(plain(value) == "5:00 AM Sun")
     }
 
+    /// A zone that changes its clocks says which side it's on, whatever was typed.
+    @Test func theOffsetUsedIsTheOneShown() {
+        #expect(answer("3pm cet in lahore", now: date("2026-07-15T12:00:00Z")) == "3:00 PM GMT+2 = 6:00 PM in Lahore")
+        #expect(answer("3pm cest in lahore", now: date("2026-11-15T12:00:00Z")) == "3:00 PM GMT+1 = 7:00 PM in Lahore")
+    }
+
     @Test func zonesThatChangeClocksOnDifferentDays() {
         // New York changes a week after London, so the gap is an hour short that week.
         #expect(answer("9am new york in london", now: date("2026-10-28T12:00:00Z")) == "9:00 AM in New York = 1:00 PM in London")
@@ -78,7 +84,7 @@ struct WorldTimeTests {
 
     @Test(arguments: ["5 in lahore", "13pm in lahore", "0am in lahore", "25:00 in lahore", "12:99 in tokyo", "5pm in atlantis",
                       "tea in lahore", "time in nowhere", "5pm nowhere in lahore", "lahore", "5pm", "time", "san francisco to tokyo",
-                      "9am to 5pm in lahore"])
+                      "9am to 5pm in lahore", "time to eat", "time to art", "time to pet", "now to tokyo"])
     func whatIsntATimeSomewhere(text: String) {
         #expect(answer(text) == nil)
     }
@@ -127,9 +133,41 @@ struct DateTextTests {
         #expect(answer("2026-01-01")?.text == "Thursday, January 1, 2026 · 303 days ago")
     }
 
-    @Test(arguments: ["2026-13-45", "2026-02-30", "2026-1-5", "10-31", "26-10-31", "20261031"])
+    @Test(arguments: ["2026-13-45", "2026-02-30", "2026-1-5", "10-31", "26-10-31", "20261031", "1500-10-20", "5000-12-20"])
     func aDayThatDoesntExistStaysASum(text: String) {
         #expect(answer(text) == nil)
+    }
+
+    /// It would be the year 2569 on a Thai Mac, and nothing at all on an Islamic one, and then a sum.
+    @Test(arguments: [Calendar.Identifier.buddhist, .islamicUmmAlQura, .japanese])
+    func aDateIsGregorianWhateverTheMacUses(identifier: Calendar.Identifier) {
+        var calendar = Calendar(identifier: identifier)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        #expect(DateText.answer("2026-10-31", now: now, calendar: calendar, locale: english)?.text.hasSuffix("· today") == true)
+    }
+
+    @Test(arguments: ["days until 2026-02-30", "days since 2026-13-01", "days until nov 31", "days until feb 30"])
+    func aDayThatDoesntExistHasNoCount(text: String) {
+        #expect(DateText.answer(text) == nil)
+    }
+
+    @Test(arguments: ["days from today to 25 dec", "days from now until 25 dec", "days from 1 jan to 25 dec", "days between 1 jan and 25 dec"])
+    func twoDatesArentAnsweredAsOne(text: String) {
+        #expect(DateText.answer(text) == nil)
+    }
+
+    @Test func aWordThatStartsLikeADayIsntOne() throws {
+        let value = try #require(DateText.answer("days since wedding \(day(-30))")?.value)
+        #expect(value == "30")
+    }
+
+    /// The detector sets a day to noon, and this has to come out the same before noon as after.
+    @Test func todayIsTodayAtAnyHour() {
+        let (calendar, today) = (Calendar.current, Calendar.current.startOfDay(for: .now))
+        for hour in [1, 11, 13, 23] {
+            let moment = calendar.date(byAdding: .hour, value: hour, to: today)!
+            #expect(DateText.answer("days since \(day(0))", now: moment)?.value == "0")
+        }
     }
 
     @Test func daysToADateWithAYear() {
@@ -200,6 +238,14 @@ struct DataSizeTests {
         #expect(UnitConversion.convert("8 bits to bytes")?.value == "1")
         #expect(UnitConversion.convert("2 terabytes in gigabytes")?.value == "2000")
         #expect(UnitConversion.convert("100 mbit to mb")?.value == "12.5")
+    }
+
+    @Test func aCapitalThenALowercaseBIsBits() {
+        #expect(UnitConversion.convert("1 Gb to GB")?.text == "1 Gb = 0.125 GB")
+        #expect(UnitConversion.convert("100 Mb to MB")?.value == "12.5")
+        #expect(UnitConversion.convert("1 Tb to TB")?.value == "0.125")
+        #expect(UnitConversion.convert("100 mb to MB")?.value == "100")
+        #expect(UnitConversion.convert("100 MB to GB")?.value == "0.1")
     }
 
     @Test func aSizeIsntAWeight() {

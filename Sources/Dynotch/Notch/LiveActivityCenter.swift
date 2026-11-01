@@ -175,6 +175,7 @@ final class LiveActivityCenter: ObservableObject {
             ScreenRecorder.shared.$state.map { $0 == .idle }.removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
             FocusMonitor.shared.$mode.map { _ in () }.eraseToAnyPublisher(),
             QuickToggles.shared.$isKeepingAwake.map { _ in () }.eraseToAnyPublisher(),
+            QuietMonitor.shared.$reason.map { _ in () }.eraseToAnyPublisher(),
             AppSettings.shared.objectWillChange.map { _ in () }.eraseToAnyPublisher()
         )
         // @Published fires before the value changes; read it on the next turn.
@@ -288,6 +289,13 @@ final class LiveActivityCenter: ObservableObject {
         if recents.count > Self.mostRecents { recents.removeLast(recents.count - Self.mostRecents) }
     }
 
+    /// Music, with its words on a row underneath if they're wanted. They keep out of the way on a call
+    /// or a presentation, as song titles do.
+    static func music(with lyrics: Lyrics?, inClosedNotch: Bool, isQuiet: Bool) -> ClosedActivity {
+        guard inClosedNotch, !isQuiet, let lyrics else { return .music }
+        return .lyrics(rowWidth: lyrics.rowWidth)
+    }
+
     private func recompute() {
         let settings = AppSettings.shared
         let media = NowPlayingService.shared
@@ -321,9 +329,8 @@ final class LiveActivityCenter: ObservableObject {
         } else if downloading {
             activity = .download
         } else if musicPlaying {
-            // Words on the notch keep out of the way on a call, as song titles do.
-            let lyrics = settings.lyricsInClosedNotch && !QuietMonitor.shared.isQuiet ? LyricsService.shared.lyrics : nil
-            activity = lyrics.map { .lyrics(rowWidth: $0.rowWidth) } ?? .music
+            activity = Self.music(with: LyricsService.shared.lyrics, inClosedNotch: settings.lyricsInClosedNotch,
+                                  isQuiet: QuietMonitor.shared.isQuiet)
         } else {
             activity = .idle
         }

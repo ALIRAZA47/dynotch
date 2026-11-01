@@ -62,10 +62,19 @@ enum FileActions {
                     continuation.resume(returning: nil)
                     return
                 }
-                var encoding = String.Encoding.utf8
-                continuation.resume(returning: (try? String(contentsOf: url, encoding: .utf8)) ?? (try? String(contentsOf: url, usedEncoding: &encoding)))
+                continuation.resume(returning: text(in: url))
             }
         }
+    }
+
+    /// UTF-8, then whatever the file says or looks like: Latin-1 and Shift-JIS files don't say.
+    nonisolated private static func text(in url: URL) -> String? {
+        if let text = try? String(contentsOf: url, encoding: .utf8) { return text }
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        var text: NSString?
+        var isLossy: ObjCBool = false
+        let encoding = NSString.stringEncoding(for: data, encodingOptions: nil, convertedString: &text, usedLossyConversion: &isLossy)
+        return encoding != 0 && !isLossy.boolValue ? text as String? : nil
     }
 
     static func isArchive(_ url: URL) -> Bool {

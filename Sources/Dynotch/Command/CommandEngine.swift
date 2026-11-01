@@ -63,14 +63,21 @@ enum CommandEngine {
             results.append(reminder(body))
             saidWhat = true
         }
+        // An event that can be read speaks for the line. One that can't still says so, last, so whatever
+        // else the line matches keeps its place and its Return.
+        var unreadEvent: CommandResult?
         if let body = remainder(of: text, after: ["calendar", "cal"]) {
-            results.append(event(body))
-            saidWhat = saidWhat || !body.isEmpty
+            let row = event(body)
+            if row.action == nil {
+                unreadEvent = row
+            } else {
+                results.append(row)
+                saidWhat = true
+            }
         }
-        // "tr" on its own is still the start of "tray".
+        // "tr" on its own is still the start of "tray", and a Shortcut called Translate Clipboard still shows.
         if let body = remainder(of: text, after: ["translate", "tr"]), !body.isEmpty || lower == "translate" {
             results.append(translation(body))
-            saidWhat = true
         }
         // These only speak for the line if they found something, so a shortcut called Connect VPN or
         // a timer called Output still get their turn.
@@ -125,6 +132,7 @@ enum CommandEngine {
             results.append(contentsOf: files(matching: lower))
         }
 
+        if let unreadEvent { results.insert(unreadEvent, at: min(results.count, maximumResults - 1)) }
         if results.isEmpty {
             results.append(CommandResult(id: "nothing", symbol: "questionmark", tint: .gray,
                                          title: "Nothing for “\(text)”", hint: "tea 4m"))
@@ -192,14 +200,27 @@ enum CommandEngine {
     }
 
     /// The commands in the history that can still run: a shortcut that's been deleted doesn't come back.
+    /// The first row is one Return away with nothing typed, so what can't be taken back, or reaches
+    /// someone else, is typed out first, and a second Return runs it.
     private static func learnedRows(_ ids: [String], starters: [CommandResult]) -> [CommandResult] {
         let rows = toggles(matching: "") + starters + valueCommands + tabs(matching: "") + [openSettings]
         let shown = ids.lazy.compactMap { id -> CommandResult? in
-            var row = rows.first { $0.id == id } ?? named(id)
-            row?.isLearned = true
+            guard var row = rows.first(where: { $0.id == id }) ?? named(id) else { return nil }
+            row.isLearned = true
+            if let typed = typedOut(id) {
+                row.hint = typed
+                row.action = { _ in .fill(typed) }
+            }
             return row
         }
         return Array(shown.prefix(maximumResults))
+    }
+
+    /// What to type to run this one, for those that shouldn't run on a single Return.
+    private static func typedOut(_ id: String) -> String? {
+        if ["join", "sleep"].contains(id) { return id }
+        if id.hasPrefix(shortcutPrefix) { return "run " + id.dropFirst(shortcutPrefix.count) }
+        return ProfileStore.shared.profiles.first { profileID($0) == id }.map { "profile \($0.name)" }
     }
 
     /// A row whose ID holds what it's for: a shortcut, a profile or a page of Settings.
@@ -214,8 +235,8 @@ enum CommandEngine {
 
     /// Counts a row that's been run, as the command it belongs to. What a clip, a note or a file is
     /// was typed, or it's gone by the next look, so those aren't counted, and neither is a number an
-    /// output or a device goes by, which doesn't last. Nor is anything that can't be taken back,
-    /// since a row on an empty field is one Return away.
+    /// output or a device goes by, which doesn't last. Nor is what loses something, like clearing the
+    /// Tray or disconnecting a device, which has no place on an empty field.
     static func noteUse(of id: String, now: Date = .now) {
         guard AppSettings.shared.learnsCommands, let command = learnedID(of: id) else { return }
         CommandHistory.record(command, now: now)
@@ -253,7 +274,7 @@ enum CommandEngine {
     private static func reminder(_ body: String) -> CommandResult {
         let calendar = CalendarService.shared
         guard calendar.hasReminderAccess else {
-            return CommandResult(id: "remind", symbol: "checklist", tint: .blue, title: "Allow Reminders first") { _ in
+            return CommandResult(id: "remind-access", symbol: "checklist", tint: .blue, title: "Allow Reminders first") { _ in
                 calendar.requestReminderAccess()
                 return .stay
             }
@@ -277,7 +298,7 @@ enum CommandEngine {
         let calendar = calendar ?? CalendarService.shared
         let symbol = "calendar.badge.plus"
         guard calendar.hasEventAccess else {
-            return CommandResult(id: "cal", symbol: symbol, tint: .red, title: "Allow Calendar first") { _ in
+            return CommandResult(id: "cal-access", symbol: symbol, tint: .red, title: "Allow Calendar first") { _ in
                 calendar.requestEventAccess()
                 return .stay
             }
@@ -285,15 +306,20 @@ enum CommandEngine {
         guard !body.isEmpty else {
             return CommandResult(id: "cal", symbol: symbol, tint: .red, title: "Add an event", hint: "what, and when")
         }
+        func unread(_ title: String, _ hint: String?) -> CommandResult {
+            CommandResult(id: "cal", symbol: symbol, tint: .gray, title: title, hint: hint)
+        }
         switch EventText.read(body, now: now) {
-        case .noTime:
-            return CommandResult(id: "cal", symbol: symbol, tint: .gray, title: "No time in that yet", hint: "fri 3pm")
-        case .severalTimes:
-            return CommandResult(id: "cal", symbol: symbol, tint: .gray, title: "That reads as more than one time", hint: "one at a time")
-        case .noTitle:
-            return CommandResult(id: "cal", symbol: symbol, tint: .gray, title: "An event needs a name", hint: "dentist fri 3pm")
-        case .past(let date):
-            return CommandResult(id: "cal", symbol: symbol, tint: .gray, title: "That time has passed", hint: ReminderText.describe(date))
+        case .noTime: return unread("No time in that yet", "fri 3pm")
+        case .needsAMOrPM: return unread("Add am or pm to the time", "3:30pm")
+        case .noStart: return unread("Say when it starts", "3pm to 5pm")
+        case .severalTimes: return unread("That reads as more than one time", "one at a time")
+        case .unclearDay: return unread("Can't read the day in that", "fri 3pm")
+        case .unclearZone: return unread("Put the time zone right after the time", "3pm est")
+        case .unclearLength: return unread("Can't read how long that is", "for 45 min")
+        case .noSuchDate: return unread("There's no such date", nil)
+        case .noTitle: return unread("An event needs a name", "dentist fri 3pm")
+        case .past(let date): return unread("That time has passed", ReminderText.describe(date))
         case .event(let event):
             let when = ReminderText.describe(event.start)
             return CommandResult(id: "cal", symbol: symbol, tint: .red, title: "Add event: \(event.title)",
@@ -722,13 +748,15 @@ enum ReminderText {
         return (title.isEmpty ? text : title, date)
     }
 
-    /// "Today 5:00 PM", "Tomorrow 9:00 AM", "Fri 31 Oct 9:00 AM".
+    /// "Today 5:00 PM", "Tomorrow 9:00 AM", "Fri 31 Oct 9:00 AM", and the year when it isn't this one.
     static func describe(_ date: Date) -> String {
         let calendar = Calendar.current
         let time = date.formatted(date: .omitted, time: .shortened)
         if calendar.isDateInToday(date) { return "Today \(time)" }
         if calendar.isDateInTomorrow(date) { return "Tomorrow \(time)" }
-        return date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) + " " + time
+        let day = Date.FormatStyle.dateTime.weekday(.abbreviated).day().month(.abbreviated)
+        let isThisYear = calendar.isDate(date, equalTo: .now, toGranularity: .year)
+        return date.formatted(isThisYear ? day : day.year()) + " " + time
     }
 }
 
@@ -856,21 +884,26 @@ enum Calculator {
 enum UnitConversion {
     static func convert(_ text: String) -> (text: String, value: String)? {
         let pattern = #"^\s*(-?\d+(?:\.\d+)?)\s*([a-z°/]+)\s+(?:to|in|as)\s+([a-z°/]+)\s*$"#
-        let lower = text.lowercased()
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)),
-              let numberRange = Range(match.range(at: 1), in: lower),
-              let fromRange = Range(match.range(at: 2), in: lower),
-              let toRange = Range(match.range(at: 3), in: lower),
-              let amount = Double(lower[numberRange]),
-              let from = units[String(lower[fromRange])],
-              let to = units[String(lower[toRange])],
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let numberRange = Range(match.range(at: 1), in: text),
+              let fromRange = Range(match.range(at: 2), in: text),
+              let toRange = Range(match.range(at: 3), in: text),
+              let amount = Double(text[numberRange]),
+              let from = unit(named: text[fromRange]),
+              let to = unit(named: text[toRange]),
               from.kind == to.kind else { return nil }
         let base = from.unit.converter.baseUnitValue(fromValue: amount)
         let result = to.unit.converter.value(fromBaseUnitValue: base)
         // A size can be a tiny part of the next one up, which two places would round to nothing.
         let value = from.kind == .information ? size(result) : Calculator.format((result * 100).rounded() / 100)
         return ("\(Calculator.format(amount)) \(from.unit.symbol) = \(value) \(to.unit.symbol)", value)
+    }
+
+    /// Case only matters between bits and bytes, as "Gb" against "GB". All in lowercase means bytes.
+    private static func unit(named name: Substring) -> (unit: Dimension, kind: Kind)? {
+        if name.count == 2, name.last == "b", let first = name.first, "KMGT".contains(first) { return units["\(first.lowercased())bit"] }
+        return units[name.lowercased()]
     }
 
     /// To nine figures, however large or small.
@@ -930,6 +963,7 @@ enum UnitConversion {
         add(UnitInformationStorage.kilobits, .information, "kbit", "kilobit", "kilobits")
         add(UnitInformationStorage.megabits, .information, "mbit", "megabit", "megabits")
         add(UnitInformationStorage.gigabits, .information, "gbit", "gigabit", "gigabits")
+        add(UnitInformationStorage.terabits, .information, "tbit", "terabit", "terabits")
         return table
     }()
 }

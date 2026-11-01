@@ -40,7 +40,7 @@ final class PomodoroTimer: ObservableObject {
     private var settingsObserver: AnyCancellable?
 
     /// What runs the Shortcut chosen for a session's start or end. The tests count them instead.
-    var runShortcut: @MainActor (String) -> Void = { ShortcutsService.shared.run($0, quietly: true) }
+    var runShortcut: @MainActor (String) -> Void = { ShortcutsService.shared.runInTurn($0) }
 
     private init() {
         let settings = AppSettings.shared

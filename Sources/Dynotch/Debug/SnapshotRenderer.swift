@@ -418,6 +418,9 @@ enum SnapshotRenderer {
                 CalendarService.shared.loadSample(events: [], reminders: [])
                 NotesStore.shared.loadSample([""])
             }),
+            Scene(name: "99-open-focus-empty-notes", phase: .open, tab: .focus, hasTimers: false, focusShowsNotes: true, setUp: {
+                FocusHistory.shared.loadSample(days: [])
+            }),
         ] + lyricsScenes() + clipboardScenes() + sizeScenes() + edgeScenes(virtualNotch: virtualNotch)
 
         let settings = AppSettings.shared
@@ -1091,7 +1094,7 @@ enum SnapshotRenderer {
             Scene(name: "lyrics-7-closed", phase: .closed, activity: .lyrics(rowWidth: width), setUp: at(81)),
             Scene(name: "lyrics-8-closed-gap", phase: .closed, activity: .lyrics(rowWidth: width), setUp: at(95)),
             Scene(name: "lyrics-9-closed-long-line", phase: .closed, activity: .lyrics(rowWidth: width), setUp: at(115)),
-            Scene(name: "lyrics-10-closed-and-timer", phase: .closed, activity: .lyrics(rowWidth: width), secondary: .timer, setUp: at(81)),
+            Scene(name: "lyrics-10-closed-and-keep-awake", phase: .closed, activity: .lyrics(rowWidth: width), secondary: .keepAwake, setUp: at(81)),
             Scene(name: "lyrics-11-hover", phase: .hovering, activity: .lyrics(rowWidth: width), setUp: at(81)),
         ]
     }

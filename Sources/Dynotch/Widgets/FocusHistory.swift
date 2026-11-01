@@ -111,7 +111,11 @@ final class FocusHistory: ObservableObject {
         let descriptor = open(fileURL.path, O_WRONLY | O_CREAT | O_APPEND, 0o600)
         guard descriptor >= 0 else { return }
         let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
-        guard (try? handle.write(contentsOf: lines)) != nil else { return }
+        guard (try? handle.write(contentsOf: lines)) != nil else {
+            // Some of it may have gone, so the next try starts on a line of its own.
+            endsMidLine = true
+            return
+        }
         unwritten = []
         endsMidLine = false
     }
@@ -131,7 +135,8 @@ final class FocusHistory: ObservableObject {
 
 /// How the week's going, beside the switch on the Focus tab's second card: today and the week in
 /// numbers, and a bar for each day of the week, with today's in the Pomodoro's color. Nothing shows
-/// until there's a session this week, but it still takes the room, which pushes what's after it right.
+/// until there's a session this week, but it still takes the row's room, which keeps what's after it
+/// on the right.
 struct FocusStrip: View {
     @ObservedObject private var history = FocusHistory.shared
     @Environment(\.notchTheme) private var theme
@@ -151,6 +156,8 @@ struct FocusStrip: View {
                 .help(Self.spoken(summary))
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(Self.spoken(summary))
+            } else {
+                Color.clear.frame(height: 0)
             }
         }
         .frame(maxWidth: .infinity, alignment: .trailing)
@@ -191,9 +198,10 @@ struct FocusStrip: View {
         minutes < 60 ? "\(minutes)m" : minutes % 60 == 0 ? "\(minutes / 60)h" : "\(minutes / 60)h \(minutes % 60)m"
     }
 
-    private static func spoken(_ summary: FocusHistory.Summary) -> String {
+    static func spoken(_ summary: FocusHistory.Summary) -> String {
         func count(_ sessions: Int, _ minutes: Int) -> String {
-            "\(sessions) \(sessions == 1 ? "session" : "sessions"), \(TimerText.describe(TimeInterval(minutes * 60)))"
+            guard sessions > 0 else { return "none yet" }
+            return "\(sessions) \(sessions == 1 ? "session" : "sessions"), \(TimerText.describe(TimeInterval(minutes * 60)))"
         }
         return "Focus today: \(count(summary.sessionsToday, summary.minutesToday)). "
             + "This week: \(count(summary.sessionsThisWeek, summary.minutesThisWeek))."

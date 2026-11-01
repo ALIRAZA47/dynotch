@@ -48,11 +48,33 @@ struct LyricsParsingTests {
 
     @Test func whatComesFromAStrangerIsTrimmed() throws {
         let lyrics = try #require(Lyrics(lrc: "[00:01.00] One\u{0007}\u{202E}\n[00:02.00] " + String(repeating: "x", count: 5000)))
-        #expect(lyrics.lines[0].text.hasPrefix("One"))
-        #expect(!lyrics.lines[0].text.contains("\u{0007}"))
+        #expect(lyrics.lines[0].text == "One")
         #expect(lyrics.lines[1].text.count == 300)
-        let long = String(repeating: "[00:01.00] a\n", count: 10_000)
-        #expect(try #require(Lyrics(lrc: long)).lines.count == 3000)
+    }
+
+    /// These are all one kind of character to `CharacterSet.controlCharacters`, and words need them.
+    @Test func joinersStay() throws {
+        let text = "می\u{200C}خواهم 👩\u{200D}💻"
+        #expect(try #require(Lyrics(lrc: "[00:01.00] \(text)")).lines[0].text == text)
+    }
+
+    @Test func aTabIsASpace() throws {
+        #expect(try #require(Lyrics(lrc: "[00:01.00] One\ttwo")).lines[0].text == "One two")
+    }
+
+    @Test func onlySoManyLinesHoweverTheyreWritten() throws {
+        #expect(try #require(Lyrics(lrc: String(repeating: "[00:01.00] a\n", count: 10_000))).lines.count == 3000)
+        #expect(try #require(Lyrics(lrc: String(repeating: "[0:0]", count: 400_000) + " a")).lines.count == 3000)
+    }
+
+    @Test func theLineChangesWhenTheNextOneStarts() throws {
+        let lyrics = try #require(Lyrics(lrc: "[00:10.00] One\n[00:20.00] Two\n[00:30.00] Three"))
+        let now = Date(timeIntervalSinceReferenceDate: 800_000_000)
+        let changes = lyrics.changes(after: 15, from: now)
+        #expect(changes.count == 2)
+        #expect(lyrics.line(at: 15 + changes[0].timeIntervalSince(now)) == "Two")
+        #expect(lyrics.line(at: 15 + changes[1].timeIntervalSince(now)) == "Three")
+        #expect(lyrics.changes(after: 99, from: now).isEmpty)
     }
 
     @Test func theLineAtAMoment() throws {
@@ -90,8 +112,19 @@ struct LyricsClientTests {
         #expect(request.url?.path == "/api/get")
         #expect(try query(track) == ["track_name": "Midnight City", "artist_name": "M83",
                                      "album_name": "Hurry Up, We're Dreaming", "duration": "243"])
-        #expect(request.allHTTPHeaderFields == ["User-Agent": "Dynotch v1.5.0 (https://github.com/ALIRAZA47/dynotch)", "Accept": "application/json"])
+        #expect(request.allHTTPHeaderFields == ["User-Agent": "Dynotch v1.5.0 (https://github.com/ALIRAZA47/dynotch)", "Accept": "application/json",
+                                                "Accept-Language": "en"])
         #expect(request.httpBody == nil)
+    }
+
+    /// Ephemeral alone still keeps cookies in memory, which would tie one request to the next.
+    @Test func nothingIsKeptBetweenRequests() {
+        let configuration = LyricsClient.configuration
+        #expect(configuration.httpCookieStorage == nil)
+        #expect(!configuration.httpShouldSetCookies)
+        #expect(configuration.httpCookieAcceptPolicy == .never)
+        #expect(configuration.urlCache == nil)
+        #expect(configuration.urlCredentialStorage == nil)
     }
 
     @Test func noAlbumIsLeftOut() throws {
@@ -101,7 +134,7 @@ struct LyricsClientTests {
     }
 
     /// It takes 1 to 3600, and answers anything else with a 400.
-    @Test(arguments: [0.0, 0.4, 3601.0, 9000.0])
+    @Test(arguments: [0.0, 0.4, 3601.0, 9000.0, .nan, .infinity, 1e300, -5])
     func aLengthItWontTakeIsLeftOut(duration: TimeInterval) throws {
         var track = track
         track.duration = duration
@@ -149,6 +182,16 @@ struct LyricsClientTests {
         #expect(LyricsClient.answer(to: Data(), response(503, ["Retry-After": "1"])) == .wait(1))
         #expect(LyricsClient.answer(to: Data(), response(429, [:])) == .wait(nil))
         #expect(LyricsClient.answer(to: Data(), response(429, ["Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"])) == .wait(nil))
+    }
+
+    /// `Duration` traps on the first two, and the limiter stops limiting on `nan`.
+    @Test(arguments: ["inf", "nan", "1e400", "0x10", "-5", "1.5", ""])
+    func aWaitThatMakesNoSenseCountsAsNotSaying(value: String) {
+        #expect(LyricsClient.answer(to: Data(), response(429, ["Retry-After": value])) == .wait(nil))
+    }
+
+    @Test func aHugeWaitIsCappedAtADay() {
+        #expect(LyricsClient.answer(to: Data(), response(429, ["Retry-After": "99999999"])) == .wait(86_400))
     }
 
     /// As it answered on 2026-10-31: Cloudflare's own 502, in plain text. That says nothing about the track.
@@ -385,6 +428,18 @@ struct LyricsServiceTests {
         #expect(Date.now.timeIntervalSince(started) >= 1)
     }
 
+    /// A skip while the request is out doesn't lose what it comes back with.
+    @Test func aWaitComesThroughASkip() async {
+        server.isHolding = true
+        play(track)
+        await wait { server.asked.count == 1 }
+        server.answer = { _ in (Data(), response(429, ["Retry-After": "30"])) }
+        play(other)
+        server.release()
+        try? await Task.sleep(for: .milliseconds(800))
+        #expect(server.asked == ["Midnight City"])
+    }
+
     @Test func turningItOffForgetsItAll() async {
         play(track)
         await wait { service.lyrics != nil }
@@ -464,6 +519,14 @@ struct LyricsServiceTests {
     @Test func itsStillTheMusic() {
         #expect(CompactActivity.music.isShown(by: .lyrics(rowWidth: 300)))
         #expect(GlanceContent(activity: .lyrics(rowWidth: 300)) == .music)
+    }
+
+    @Test func theRowShowsOnlyWhenItsWantedAndTheresRoom() throws {
+        let lyrics = try #require(Lyrics(lrc: "[00:01.00] One"))
+        #expect(LiveActivityCenter.music(with: lyrics, inClosedNotch: true, isQuiet: false) == .lyrics(rowWidth: lyrics.rowWidth))
+        #expect(LiveActivityCenter.music(with: lyrics, inClosedNotch: true, isQuiet: true) == .music)
+        #expect(LiveActivityCenter.music(with: lyrics, inClosedNotch: false, isQuiet: false) == .music)
+        #expect(LiveActivityCenter.music(with: nil, inClosedNotch: true, isQuiet: false) == .music)
     }
 }
 

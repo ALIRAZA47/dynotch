@@ -21,21 +21,34 @@ struct Lyrics: Equatable {
     /// Nil when nothing in it has a time.
     init?(lrc: String) {
         var lines: [Line] = []
-        for row in lrc.split(whereSeparator: \.isNewline).prefix(Self.mostLines) {
+        for row in lrc.split(whereSeparator: \.isNewline) where lines.count < Self.mostLines {
             var rest = Substring(row)
             var times: [TimeInterval] = []
-            while let (time, after) = Self.stamp(at: rest) {
+            while times.count + lines.count < Self.mostLines, let (time, after) = Self.stamp(at: rest) {
                 times.append(time)
                 rest = after
             }
-            let text = String(rest.unicodeScalars.filter { !CharacterSet.controlCharacters.contains($0) }.map(Character.init))
-                .trimmingCharacters(in: .whitespaces)
-            lines += times.map { Line(time: $0, text: String(text.prefix(Self.longestLine))) }
+            let text = Self.cleaned(rest)
+            lines += times.map { Line(time: $0, text: text) }
         }
         guard lines.contains(where: { !$0.text.isEmpty }) else { return nil }
         self.lines = lines.sorted { $0.time < $1.time }
         let font = NSFont.systemFont(ofSize: 12, weight: .medium)
         rowWidth = lines.lazy.map { ($0.text as NSString).size(withAttributes: [.font: font]).width }.max() ?? 0
+    }
+
+    /// Tabs turn into spaces, and control characters and what could turn the line around go. Joiners
+    /// stay, as Persian, Urdu and emoji need them.
+    private static func cleaned(_ text: Substring) -> String {
+        var scalars = String.UnicodeScalarView()
+        for scalar in text.unicodeScalars {
+            if scalar == "\t" {
+                scalars.append(" ")
+            } else if scalar.properties.generalCategory != .control, !(0x202A...0x202E).contains(scalar.value), !(0x2066...0x2069).contains(scalar.value) {
+                scalars.append(scalar)
+            }
+        }
+        return String(String(scalars).trimmingCharacters(in: .whitespaces).prefix(longestLine))
     }
 
     /// The time at the start of `text`, and what's after it. Tags like [ar:M83] aren't times.
@@ -47,6 +60,12 @@ struct Lyrics: Equatable {
         let seconds = parts.count == 3 ? Double("\(parts[1]).\(parts[2])") : Double(parts[1])
         guard let seconds, seconds >= 0, seconds < 60 else { return nil }
         return (Double(minutes) * 60 + seconds, text[text.index(after: end)...])
+    }
+
+    /// When the line changes from here on, with `elapsed` gone at `now`. A moment after each line's
+    /// time, so that line is the one that's found.
+    func changes(after elapsed: TimeInterval, from now: Date) -> [Date] {
+        lines.filter { $0.time > elapsed }.map { now.addingTimeInterval($0.time - elapsed + 0.05) }
     }
 
     /// The line being sung at `elapsed`. Nil before the first and in a gap.

@@ -71,9 +71,22 @@ The reminder goes to the Reminders app, so it needs the Reminders permission. Th
 | `cal standup mon 9am 30m` | Half an hour |
 | `cal review fri 2pm for 45 min` | 45 minutes |
 | `cal lunch fri 12-1pm` | From noon to one |
-| `cal call 3pm pst` | At 3 in Pacific time, in your own time |
+| `cal call fri 3pm est`, `cal call 3pm lahore time` | At 3 in that zone, shown in your own time. The zone goes right after the time |
 
-If it can't find a time, the row says so and <Keys k="Return" /> adds nothing, so a day on its own isn't enough: `cal dentist fri` waits for a time. The same goes for two times in one line, and for a time with no name. `in 2 hours` isn't understood yet. A time on its own that's already passed means tomorrow, and a time on a day that's gone isn't added.
+A wrong event is worse than no event, so anything it can't be sure of, the row says, and <Keys k="Return" /> adds nothing:
+
+| The row says | For |
+|---|---|
+| No time in that yet | A day on its own, like `cal dentist fri`, or `tonight` and `tomorrow morning` with no clock time |
+| Add am or pm to the time | `3:30` or `at 5`, which could be either. `09:30`, `15:30` and `noon` are fine |
+| Can't read the day in that | A day it missed, like `tomorow`, `next week` or `every friday`, which would have ended up in the title |
+| That reads as more than one time | Two times or dates in one line, or something like `24/7` that might be a date |
+| There's no such date | `nov 31` |
+| Say when it starts | `until 5pm` on its own |
+| Can't read how long that is | A length over a day, like `for 3 days` |
+| Put the time zone right after the time | A zone anywhere else in the line |
+
+`in 2 hours` isn't understood yet. A time on its own that's already passed means tomorrow, and a time on a day that's gone isn't added. A weekday means today if it's that day and the time is still ahead, and otherwise the next one.
 
 The event goes to the Calendar app, so it needs the Calendar permission. The field asks for it the first time.
 
@@ -97,7 +110,7 @@ Conversions cover length, mass, temperature, volume, speed and data sizes. Sizes
 | `days until 25 dec`, `days since 1 jan 2020` | How many days. With no year, it's the coming one, or the last one with `since` |
 | `#a894ff to rgb`, `to hsl`, `rgb(168, 148, 255) to hex` | The color written another way |
 
-Any city macOS has a time zone for works, along with a short list of others, like Lahore, San Francisco and Mumbai, and a zone's initials. Initials mean that zone's clock rather than a fixed offset: in summer `pst` is read as PDT, and the answer says PDT.
+Any city macOS has a time zone for works, along with a short list of others, like Lahore, San Francisco and Mumbai, and a zone's initials. Initials mean that zone's clock rather than a fixed offset, so in summer `pst` is read as PDT and `cet` as GMT+2, and the answer shows the one it used.
 
 ## Translating
 
@@ -121,9 +134,9 @@ It needs macOS 26 and languages that are already installed. If they aren't, the 
 
 ## What you use comes first
 
-The commands you've run lately and run often rise to the top of the empty field, so <Keys k="⌃⌥K" /> then <Keys k="Return" /> repeats the one you use most. Only the command is counted, like **Keep the Mac awake** or a Shortcut by its name, with how often and when you last ran it. What you type is never kept: `tea 4m` counts as a timer, and a note counts as a note.
+The commands you've run lately and run often rise to the top of the empty field, so <Keys k="⌃⌥K" /> then <Keys k="Return" /> repeats the one you use most, if it needs nothing more. A timer, a note, a reminder, an event, a sum, a translation or a level fills the field for you to finish. Only the command is counted, like **Keep the Mac awake** or a Shortcut by its name, with how often and when you last ran it. What you type is never kept: `tea 4m` counts as a timer, and a note counts as a note.
 
-Clearing the Tray and disconnecting a device never show up there, so a stray <Keys k="Return" /> can't do them. Nor do outputs and connecting a device.
+A Shortcut, a profile, **Join** and **Sleep** are typed out by the first <Keys k="Return" />, and the second runs them, so a stray one can't. Clearing the Tray and disconnecting a device never show up there at all. Nor do outputs and connecting a device.
 
 ## Turning it off
 

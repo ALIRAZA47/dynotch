@@ -64,6 +64,15 @@ struct TranslationRequestTests {
     @Test func namesForLanguages() {
         #expect(TranslationRequest.name(of: Locale.Language(identifier: "es-MX")) == "Spanish")
         #expect(TranslationRequest.name(of: Locale.Language(identifier: "pa")) == "Punjabi")
+        #expect(TranslationRequest.name(of: Locale.Language(identifier: "zh-TW")) == "Traditional Chinese")
+    }
+
+    /// A Mac set to a region goes to the language's listed code, which is the one macOS offers.
+    @Test(arguments: [("en-PK", "English"), ("en-GB", "English"), ("es-MX", "Spanish"), ("zh-TW", "Traditional Chinese"), ("zh-CN", "Chinese")])
+    func aRegionalMacsLanguage(system: String, name: String) {
+        let request = TranslationRequest("bonjour", system: Locale.Language(identifier: system))
+        #expect(request.targetName == name)
+        #expect(request.target == Locale.Language(identifier: TranslationRequest.languages.first { $0.name == name }!.code))
     }
 
     /// Only Natural Language's model, which runs on the Mac.
@@ -71,6 +80,7 @@ struct TranslationRequestTests {
         #expect(OnDeviceText.language(of: "bonjour tout le monde")?.languageCode == "fr")
         #expect(OnDeviceText.language(of: "Guten Morgen, wie geht es dir?")?.languageCode == "de")
         #expect(OnDeviceText.language(of: "") == nil)
+        #expect(OnDeviceText.language(of: "12345 678") == nil)
     }
 }
 
@@ -96,6 +106,24 @@ struct OnDeviceTextTests {
     @Test func nothingToGoOnIsNoLanguage() async {
         guard OnDeviceText.isAvailable else { return }
         #expect(await OnDeviceText.translate("", from: nil, to: english, name: "English") == .failure(.unknownLanguage))
+        #expect(await OnDeviceText.translate("12345", from: nil, to: english, name: "English") == .failure(.unknownLanguage))
+    }
+
+    /// Stand-ins for what the frameworks throw: `GenerationError` and `LanguageModelError` can't both
+    /// be named where this has to build, so it goes by the name of the case.
+    private enum ModelError: Error {
+        case guardrailViolation(String), refusal(String), unsupportedLanguageOrLocale(String)
+        case exceededContextWindowSize(String), contextSizeExceeded(String), timeout(String)
+    }
+
+    @Test func whatTheModelThrows() {
+        #expect(OnDeviceText.failure(for: ModelError.guardrailViolation("")) == .refused)
+        #expect(OnDeviceText.failure(for: ModelError.refusal("")) == .refused)
+        #expect(OnDeviceText.failure(for: ModelError.unsupportedLanguageOrLocale("")) == .unsupportedLanguage)
+        #expect(OnDeviceText.failure(for: ModelError.exceededContextWindowSize("")) == .tooLong)
+        #expect(OnDeviceText.failure(for: ModelError.contextSizeExceeded("")) == .tooLong)
+        #expect(OnDeviceText.failure(for: ModelError.timeout("")) == .failed)
+        #expect(OnDeviceText.failure(for: CocoaError(.fileReadUnknown)) == .failed)
     }
 
     @Test func whatMacOSSaysOfTheLanguages() {
@@ -133,6 +161,15 @@ struct OnDeviceTextTests {
         let url = try file("note.txt", try #require("Grüße".data(using: .utf16)))
         defer { try? FileManager.default.removeItem(at: url) }
         #expect(await FileActions.text(of: url) == "Grüße")
+    }
+
+    /// No marker in the file to say so, and not valid UTF-8.
+    @Test(arguments: [String.Encoding.isoLatin1, .windowsCP1252, .shiftJIS])
+    func anEncodingThatDoesntSayIsWorkedOut(encoding: String.Encoding) async throws {
+        let text = encoding == .shiftJIS ? "こんにちは世界、今日はいい天気ですね" : "Déjà vu, garçon, à bientôt, très bien"
+        let url = try file("note.txt", try #require(text.data(using: encoding)))
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(await FileActions.text(of: url) != nil)
     }
 
     @Test func aLargeOrMissingFileIsLeftAlone() async throws {
@@ -233,6 +270,7 @@ final class TextActionsTests {
         (.alreadyIn("English"), "That's already in English", false),
         (.unknownLanguage, "Couldn't tell what language that is", false),
         (.needsNewerMacOS, "This needs macOS 26", false),
+        (.unreadable, "Couldn't read that as text", false),
         (.failed, "Something went wrong on the Mac", false),
     ])
     func whatCantBeDoneIsSaidAndTheClipboardStays(failure: OnDeviceText.Failure, message: String, hasFix: Bool) async {
@@ -258,13 +296,13 @@ final class TextActionsTests {
         #expect(notices.last?.detail == "A summary of the start of it")
     }
 
-    /// Too long for the model comes back as an error that isn't the documented one on macOS 27.
-    @Test func aFailureOnALongTextGetsOneMoreTryWithLess() async {
+    /// Scripts differ in how much of the model they take, so what's too long gets one more try.
+    @Test func tooLongGetsOneMoreTryWithLess() async {
         let asked = asked
         let long = String(repeating: "a", count: TextActions.longestSummary)
         let system = OnDeviceText.System(translate: { _, _, _, _ in .failure(.failed) }, summarize: { text in
             asked.texts.append(text)
-            return text.count > TextActions.shortSummary ? .failure(.failed) : .success("Short.")
+            return text.count > TextActions.shortSummary ? .failure(.tooLong) : .success("Short.")
         })
         await TextActions.summarize(long, to: pasteboard, system: system, notify: notify)
         #expect(asked.texts.count == 2)
@@ -273,8 +311,21 @@ final class TextActionsTests {
         #expect(notices.last?.detail == "A summary of the start of it")
     }
 
-    @Test func aFailureOnAShortTextIsntTriedTwice() async {
-        await TextActions.summarize("Short text.", to: pasteboard, system: system(.failure(.failed)), notify: notify)
+    @Test func stillTooLongSaysSo() async {
+        let long = String(repeating: "a", count: TextActions.longestSummary)
+        await TextActions.summarize(long, to: pasteboard, system: system(.failure(.tooLong)), notify: notify)
+        #expect(asked.texts.count == 2)
+        #expect(notices.last?.detail == "That's too long for Apple's model")
+    }
+
+    @Test func tooLongOnWhatsAlreadyShortIsntTriedAgain() async {
+        await TextActions.summarize("Short text.", to: pasteboard, system: system(.failure(.tooLong)), notify: notify)
+        #expect(asked.texts.count == 1)
+    }
+
+    @Test func aFailureIsntTriedTwice() async {
+        let long = String(repeating: "a", count: TextActions.longestSummary)
+        await TextActions.summarize(long, to: pasteboard, system: system(.failure(.failed)), notify: notify)
         #expect(asked.texts.count == 1)
     }
 

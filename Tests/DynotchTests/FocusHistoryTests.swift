@@ -178,6 +178,76 @@ final class FocusHistoryTests {
         #expect(FocusStrip.time(60) == "1h")
         #expect(FocusStrip.time(225) == "3h 45m")
     }
+
+    @Test func aDayWithNoneSaysSoInWords() {
+        var summary = FocusHistory.Summary()
+        summary.sessionsThisWeek = 2
+        summary.minutesThisWeek = 50
+        #expect(FocusStrip.spoken(summary) == "Focus today: none yet. This week: 2 sessions, 50 min.")
+    }
+
+    /// A write that stopped part way leaves a cut-off line for the next one to start after.
+    @Test func aFailedWriteLeavesTheNextOnALineOfItsOwn() throws {
+        try write(#"{"end":"2026-10-31T17:00:00Z","minutes":25}"# + "\n")
+        let history = FocusHistory(folder: folder)
+        history.load(now: end)
+        try FileManager.default.setAttributes([.posixPermissions: 0o400], ofItemAtPath: file.path)
+        history.add(minutes: 50, ended: end)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+        history.add(minutes: 75, ended: end)
+        let next = FocusHistory(folder: folder)
+        next.load(now: end)
+        #expect(next.sessions.map(\.minutes) == [25, 50, 75])
+    }
+}
+
+/// Shortcuts that run by themselves, with a stand-in for what runs them.
+@MainActor
+@Suite(.serialized)
+struct ShortcutQueueTests {
+    /// Each run waits until it's let go, so what's in turn is what the test says it is.
+    private final class Runs {
+        var started: [String] = []
+        var waiting: [CheckedContinuation<Bool, Never>] = []
+
+        func finish(_ succeeded: Bool = true) {
+            if !waiting.isEmpty { waiting.removeFirst().resume(returning: succeeded) }
+        }
+    }
+
+    private let service = ShortcutsService.shared
+    private let runs = Runs()
+    private let original = ShortcutsService.shared.runner
+
+    init() {
+        SnapshotRenderer.useScratchDefaults()
+        service.runner = { [runs] name in
+            runs.started.append(name)
+            return await withCheckedContinuation { runs.waiting.append($0) }
+        }
+    }
+
+    private func wait(until condition: () -> Bool) async {
+        let limit = Date.now.addingTimeInterval(30)
+        while !condition(), .now < limit { try? await Task.sleep(for: .milliseconds(5)) }
+    }
+
+    @Test func theyGoOneAtATimeInOrderAndNoneIsDropped() async {
+        service.runInTurn("Focus On")
+        service.runInTurn("Focus Off")
+        service.runInTurn("Focus On")
+        await wait { runs.started.count == 1 }
+        #expect(runs.started == ["Focus On"])
+        runs.finish()
+        await wait { runs.started.count == 2 }
+        #expect(runs.started == ["Focus On", "Focus Off"])
+        runs.finish(false)
+        await wait { runs.started.count == 3 }
+        #expect(runs.started == ["Focus On", "Focus Off", "Focus On"])
+        runs.finish()
+        await wait { runs.waiting.isEmpty }
+        service.runner = original
+    }
 }
 
 /// Through the real timer, with a stand-in for the Shortcut runner. The history is the scratch one.
@@ -200,13 +270,12 @@ struct PomodoroSessionTests {
         history.loadSample(days: [])
     }
 
-    /// Starts a phase that ends at once, whatever it says it lasts.
-    private func runOutThePhase() {
-        let phase = timer.phase
+    /// Starts a focus phase that ends at once, whatever it says it lasts.
+    private func runOutTheSession() {
         timer.loadSample(remaining: 0.02, running: false)
         timer.start()
         let limit = Date.now.addingTimeInterval(30)
-        while timer.phase == phase, .now < limit { RunLoop.main.run(until: .now.addingTimeInterval(0.02)) }
+        while timer.phase == .focus, .now < limit { RunLoop.main.run(until: .now.addingTimeInterval(0.02)) }
     }
 
     private func catchShortcuts() -> () -> [String] {
@@ -226,13 +295,13 @@ struct PomodoroSessionTests {
     }
 
     @Test func aFinishedSessionIsRemembered() {
-        runOutThePhase()
+        runOutTheSession()
         #expect(history.sessions.map(\.minutes) == [1])
         #expect(history.summary().sessionsToday == 1)
     }
 
     @Test func itsSavedInTheScratchFolder() throws {
-        runOutThePhase()
+        runOutTheSession()
         let saved = try String(contentsOf: URL.dynotchSupport.appendingPathComponent("focus-history.jsonl"), encoding: .utf8)
         #expect(saved.contains(#""minutes":1"#))
     }
@@ -260,15 +329,20 @@ struct PomodoroSessionTests {
     }
 
     @Test func aBreakIsntASession() {
+        settings.shortBreakMinutes = 0
+        defer { settings.shortBreakMinutes = 5 }
         timer.skip()
-        runOutThePhase()
+        #expect(timer.phase == .shortBreak)
+        timer.start()
+        let limit = Date.now.addingTimeInterval(30)
+        while timer.phase == .shortBreak, .now < limit { RunLoop.main.run(until: .now.addingTimeInterval(0.02)) }
         #expect(timer.phase == .focus)
         #expect(history.sessions.isEmpty)
     }
 
     @Test func noShortcutChosenRunsNothing() {
         let ran = catchShortcuts()
-        runOutThePhase()
+        runOutTheSession()
         #expect(ran().isEmpty)
     }
 
@@ -284,7 +358,7 @@ struct PomodoroSessionTests {
     @Test func aSessionThatRunsOutRunsItsEnd() {
         let ran = catchShortcuts()
         useShortcuts()
-        runOutThePhase()
+        runOutTheSession()
         #expect(ran() == ["Focus On", "Focus Off"])
     }
 

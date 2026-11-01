@@ -17,8 +17,18 @@ enum LyricsClient {
 
     typealias Fetch = @Sendable (URLRequest) async throws -> (Data, URLResponse)
 
-    /// No cookies and nothing kept on disk.
-    private static let session = URLSession(configuration: .ephemeral)
+    /// No cookies, even in memory, and nothing kept, so nothing ties one request to the next.
+    static let configuration: URLSessionConfiguration = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.urlCredentialStorage = nil
+        configuration.urlCache = nil
+        return configuration
+    }()
+
+    private static let session = URLSession(configuration: configuration)
     static let live: Fetch = { try await session.data(for: $0) }
 
     /// A response larger than this isn't lyrics.
@@ -30,8 +40,8 @@ enum LyricsClient {
         guard !track.title.isEmpty, !track.artist.isEmpty else { return nil }
         var items = [URLQueryItem(name: "track_name", value: track.title), URLQueryItem(name: "artist_name", value: track.artist)]
         if !track.album.isEmpty { items.append(URLQueryItem(name: "album_name", value: track.album)) }
-        let seconds = Int(track.duration.rounded())
-        if (1...3600).contains(seconds) { items.append(URLQueryItem(name: "duration", value: String(seconds))) }
+        let seconds = track.duration.rounded()
+        if (1...3600).contains(seconds) { items.append(URLQueryItem(name: "duration", value: String(Int(seconds)))) }
         var components = URLComponents()
         components.scheme = "https"
         components.host = "lrclib.net"
@@ -44,6 +54,8 @@ enum LyricsClient {
         // LRCLIB asks every client to say who it is.
         request.setValue("Dynotch v\(version) (https://github.com/ALIRAZA47/dynotch)", forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        // Left to itself, URLSession would say what language the Mac is in.
+        request.setValue("en", forHTTPHeaderField: "Accept-Language")
         return request
     }
 
@@ -64,10 +76,17 @@ enum LyricsClient {
         case 400, 404:
             return .none
         case 429, 503:
-            return .wait(response.value(forHTTPHeaderField: "Retry-After").flatMap(TimeInterval.init))
+            return .wait(waitAsked(in: response))
         default:
             return .failed
         }
+    }
+}
+
+extension LyricsClient {
+    /// `Retry-After` in whole seconds, up to a day. A date or anything odd counts as not saying.
+    private static func waitAsked(in response: HTTPURLResponse) -> TimeInterval? {
+        response.value(forHTTPHeaderField: "Retry-After").flatMap { UInt($0) }.map { min(TimeInterval($0), 86_400) }
     }
 }
 
@@ -193,9 +212,11 @@ final class LyricsService: ObservableObject {
     private func lookUp(_ key: Key) async {
         guard (try? await Task.sleep(for: settle)) != nil else { return }
         for _ in 0..<Self.tries {
-            let wait = limiter.wait(at: .now)
-            if wait > 0 {
+            // Looked at again after each wait, as a request that was still out may have brought a longer one.
+            var wait = limiter.wait(at: .now)
+            while wait > 0 {
                 guard (try? await Task.sleep(for: .seconds(wait))) != nil else { return }
+                wait = limiter.wait(at: .now)
             }
             guard let track, Key(track) == key else { return }
             guard let request = LyricsClient.request(for: track) else {
@@ -209,6 +230,8 @@ final class LyricsService: ObservableObject {
             } else {
                 answer = .failed
             }
+            // A wait is for whatever's asked next, whether or not this track is still the one playing.
+            if case .wait(let seconds) = answer { limiter.hold(for: seconds ?? failureWait, from: .now) }
             guard !Task.isCancelled else { return }
             switch answer {
             case .found(let lyrics):
@@ -220,8 +243,8 @@ final class LyricsService: ObservableObject {
                 remember(nil, for: key)
                 lookup = nil
                 return
-            case .wait(let seconds):
-                limiter.hold(for: seconds ?? failureWait, from: .now)
+            case .wait:
+                break
             case .failed:
                 limiter.hold(for: failureWait, from: .now)
             }

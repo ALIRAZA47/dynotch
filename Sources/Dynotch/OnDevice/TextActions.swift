@@ -40,16 +40,15 @@ enum TextActions {
         }
     }
 
-    /// Summarizes and copies. A first try can come back too long for the model, whatever it's made of,
-    /// and the error for that isn't the documented one on every macOS, so a failure on a long text
-    /// gets one more try with less of it.
+    /// Summarizes and copies. A first try can come back too long for the model, as scripts differ in
+    /// how much of it they take, so that gets one more try with less.
     static func summarize(_ text: String, to pasteboard: NSPasteboard = .dynotch, system: OnDeviceText.System = .live,
                           notify: @escaping Notify = ImageActions.show) async {
         let first = String(text.prefix(longestSummary))
         var answered = first
         let answer = await ImageActions.saying(summarizing, notify: notify) {
             let answer = await system.summarize(first)
-            guard case .failure(.failed) = answer, first.count > shortSummary else { return answer }
+            guard case .failure(.tooLong) = answer, first.count > shortSummary else { return answer }
             answered = String(text.prefix(shortSummary))
             return await system.summarize(answered)
         }
@@ -79,14 +78,14 @@ enum TextActions {
 }
 
 /// Translate on a clip or a text file: a submenu of languages, the Mac's own first. `text` is read
-/// when one is picked, as a file might be large.
+/// when one is picked, as a file might be large, and says so if it can't be.
 struct TranslateMenu: View {
     let text: () async -> String?
     var after: () -> Void = {}
 
     private static var languages: [(name: String, code: String)] {
-        let own = TranslationRequest.languages.filter { Locale.Language(identifier: $0.code).languageCode == Locale.current.language.languageCode }
-        return own + TranslationRequest.languages.filter { language in !own.contains { $0.code == language.code } }
+        let own = TranslationRequest.listed(Locale.current.language)
+        return (own.map { [$0] } ?? []) + TranslationRequest.languages.filter { $0.code != own?.code }
     }
 
     var body: some View {
@@ -95,7 +94,10 @@ struct TranslateMenu: View {
                 Button(language.name) {
                     after()
                     Task {
-                        guard let text = await text() else { return }
+                        guard let text = await text() else {
+                            ImageActions.show(TextActions.notice(for: .unreadable, title: "Can't translate"), for: 6)
+                            return
+                        }
                         await TextActions.translate(TranslationRequest(text: text, source: nil, target: language), showsResult: false)
                     }
                 }

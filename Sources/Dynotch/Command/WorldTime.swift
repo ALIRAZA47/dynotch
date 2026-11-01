@@ -10,7 +10,7 @@ struct WorldPlace: Equatable {
 
 /// What the time is somewhere else, worked out on the Mac: "5pm pst in lahore", "3:30pm london to
 /// tokyo", "noon in nyc", "time in tokyo", "tokyo time". Initials mean that zone's clock rather than
-/// a fixed offset, so `pst` in summer is read as PDT, and the answer says so.
+/// a fixed offset, so `pst` in summer is read as PDT, and the answer shows the offset it used.
 enum WorldTime {
     /// A city or initials, in any case. Every city macOS names a zone after is here, with `cities` for
     /// the ones it doesn't.
@@ -22,6 +22,11 @@ enum WorldTime {
         }
         guard let city = places[key], let zone = TimeZone(identifier: city.zone) else { return nil }
         return WorldPlace(name: city.name, zone: zone)
+    }
+
+    /// Initials on their own, in any case: `place` also answers to cities.
+    static func initials(_ text: String) -> WorldPlace? {
+        place(text).flatMap { $0.isInitials ? $0 : nil }
     }
 
     /// The time at `place`, with its day when that isn't the day it is here.
@@ -36,9 +41,12 @@ enum WorldTime {
         if let name = lower.groups(of: #"(.+) time"#)?[0], let place = place(name) {
             return current(in: place, now: now, here: here, locale: locale)
         }
-        guard let groups = lower.groups(of: #"(.+?)\s+(?:in|to)\s+(.+)"#), let left = groups[0], let right = groups[1],
+        guard let groups = lower.groups(of: #"(.+?)\s+(in|to)\s+(.+)"#), let left = groups[0], let right = groups[2],
               let target = place(right) else { return nil }
-        if ["time", "now", "the time"].contains(left) { return current(in: target, now: now, here: here, locale: locale) }
+        // "time to eat" isn't East Africa.
+        if ["time", "now", "the time"].contains(left) {
+            return groups[1] == "in" ? current(in: target, now: now, here: here, locale: locale) : nil
+        }
         guard let wall = wallClock(left) else { return nil }
         var source: WorldPlace?
         if let name = wall.place {
@@ -85,11 +93,10 @@ enum WorldTime {
 
     private static func label(_ place: WorldPlace, at date: Date) -> String {
         guard place.isInitials else { return "in \(place.name)" }
-        // A zone that changes its clocks says which side of the change it's on. macOS only has initials
-        // of its own for some zones, and "GMT+9" says less than what was typed.
-        guard place.zone.nextDaylightSavingTimeTransition(after: date) != nil,
-              let initials = place.zone.abbreviation(for: date), !initials.contains(where: \.isNumber) else { return place.name }
-        return initials
+        // A zone that changes its clocks says which side of the change it's on, as PDT or as GMT+2,
+        // since what was typed may be the other side. For one that doesn't, what was typed says more.
+        guard place.zone.nextDaylightSavingTimeTransition(after: date) != nil else { return place.name }
+        return place.zone.abbreviation(for: date) ?? place.name
     }
 
     private static func time(_ date: Date, in zone: TimeZone, locale: Locale) -> String {

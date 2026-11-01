@@ -22,6 +22,9 @@ enum OnDeviceText {
         case deviceNotEligible
         case refused
         case unsupportedLanguage
+        case tooLong
+        /// A file that couldn't be opened or read as text.
+        case unreadable
         case failed
 
         var message: String {
@@ -36,6 +39,8 @@ enum OnDeviceText {
             case .deviceNotEligible: "This Mac can't run Apple Intelligence"
             case .refused: "Apple's model wouldn't summarize that"
             case .unsupportedLanguage: "Apple's model doesn't read that language"
+            case .tooLong: "That's too long for Apple's model"
+            case .unreadable: "Couldn't read that as text"
             case .failed: "Something went wrong on the Mac"
             }
         }
@@ -66,11 +71,12 @@ enum OnDeviceText {
         return false
     }
 
-    /// What language this looks like, when no one said.
+    /// What language this looks like, when no one said. Numbers and emoji aren't in one.
     static func language(of text: String) -> Locale.Language? {
         let recognizer = NLLanguageRecognizer()
         recognizer.processString(text)
-        return recognizer.dominantLanguage.map { Locale.Language(identifier: $0.rawValue) }
+        guard let language = recognizer.dominantLanguage, language != .undetermined else { return nil }
+        return Locale.Language(identifier: language.rawValue)
     }
 
     /// `name` is what to call the target. `isAvailable` is for the tests, to go the way an older macOS
@@ -79,7 +85,8 @@ enum OnDeviceText {
                           isAvailable: Bool = OnDeviceText.isAvailable) async -> Result<String, Failure> {
         guard isAvailable, #available(macOS 26, *) else { return .failure(.needsNewerMacOS) }
         guard let source = source ?? language(of: text) else { return .failure(.unknownLanguage) }
-        guard source.languageCode != target.languageCode else { return .failure(.alreadyIn(name)) }
+        // By script too, as Simplified and Traditional Chinese are both `zh`.
+        guard source.languageCode != target.languageCode || source.script != target.script else { return .failure(.alreadyIn(name)) }
         let availability = LanguageAvailability()
         let status = await availability.status(from: source, to: target)
         let supported = status == .unsupported ? await availability.supportedLanguages : []
@@ -111,14 +118,20 @@ enum OnDeviceText {
             + "Use the text's own language. Answer with the summary and nothing else.")
         do {
             return .success(try await session.respond(to: text).content)
-        } catch let error as LanguageModelSession.GenerationError {
-            switch error {
-            case .guardrailViolation, .refusal: return .failure(.refused)
-            case .unsupportedLanguageOrLocale: return .failure(.unsupportedLanguage)
-            default: return .failure(.failed)
-            }
         } catch {
-            return .failure(.failed)
+            return .failure(failure(for: error))
+        }
+    }
+
+    /// What went wrong, by the name of the error's case. macOS 26 throws `GenerationError`, and macOS 27
+    /// throws `LanguageModelError` instead with much the same cases, which CI's SDK doesn't have.
+    /// Neither can be named here, as this has to build against both.
+    static func failure(for error: any Error) -> Failure {
+        switch Mirror(reflecting: error).children.first?.label {
+        case "guardrailViolation", "refusal": .refused
+        case "unsupportedLanguageOrLocale": .unsupportedLanguage
+        case "exceededContextWindowSize", "contextSizeExceeded": .tooLong
+        default: .failed
         }
     }
 
@@ -157,10 +170,17 @@ struct TranslationRequest: Equatable {
         languages.first { $0.name.lowercased() == name.lowercased() }
     }
 
+    /// The one in the list that `language` is a form of, as `en-PK` is English and `zh-TW` is Traditional.
+    static func listed(_ language: Locale.Language) -> (name: String, code: String)? {
+        languages.first { entry in
+            let listed = Locale.Language(identifier: entry.code)
+            return listed.languageCode == language.languageCode && listed.script == language.script
+        }
+    }
+
     /// What to call a language, in English like the rest of the app.
     static func name(of language: Locale.Language) -> String {
-        languages.first { Locale.Language(identifier: $0.code).languageCode == language.languageCode }?.name
-            ?? Locale(identifier: "en").localizedString(forLanguageCode: language.minimalIdentifier) ?? language.minimalIdentifier
+        listed(language)?.name ?? Locale(identifier: "en").localizedString(forLanguageCode: language.minimalIdentifier) ?? language.minimalIdentifier
     }
 
     init(_ body: String, system: Locale.Language = Locale.current.language) {
@@ -172,7 +192,7 @@ struct TranslationRequest: Equatable {
                   let target = groups[1].flatMap(Self.language(named:)) {
             self.init(text: text, source: nil, target: target)
         } else {
-            self.init(text: body, source: nil, target: (Self.name(of: system), system.minimalIdentifier))
+            self.init(text: body, source: nil, target: Self.listed(system) ?? (Self.name(of: system), system.minimalIdentifier))
         }
     }
 
