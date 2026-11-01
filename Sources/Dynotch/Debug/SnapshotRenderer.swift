@@ -313,7 +313,7 @@ enum SnapshotRenderer {
             Scene(name: "command-24-translate", phase: .open, command: "tr hola to english"),
             Scene(name: "command-22-event-length", phase: .open, command: "cal standup mon 9am 30m"),
             Scene(name: "command-23-event-no-time", phase: .open, command: "cal dentist fri"),
-            Scene(name: "command-24-event-no-day", phase: .open, command: "cal dentist 3pm"),
+            Scene(name: "command-25-event-no-day", phase: .open, command: "cal dentist 3pm"),
             // What's been used comes first, and the suggestions fill the rest.
             Scene(name: "command-20-learned", phase: .open, command: "", setUp: {
                 for (id, uses) in [("stopwatch", 4), ("tab-tray", 3), ("awake", 2)] {
