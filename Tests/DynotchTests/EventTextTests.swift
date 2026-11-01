@@ -130,8 +130,8 @@ struct EventTextTests {
         "meetup c# fri 3pm", "@sam sync fri 3pm", "drop by fri 3pm", "on call fri 9am", "at home fri 9am", "on site visit fri 9am",
         "pay gst fri 3pm", "review bst fri 3pm", "year 9 ict fri 3pm", "breakfast fri 8am", "sam lunch fri 1pm", "lunch with sam fri 1pm",
         "catch up next fri 3pm", "year end fri 3pm", "west end fri 8pm", "race finish sat 3pm", "project end fri 5pm", "see dr tomorrow 3pm",
-        "appointment with dr today 3pm", "call ash fri 3pm", "wear black sat 3pm", "fashion week fri 3pm", "review 6 months fri 3pm",
-        "sprint 2 weeks fri 3pm", "high noon fri 8pm", "midnight mass dec 24 11pm", "story time fri 3pm", "weekly sync fri 3pm", "swim 400m fri 7am",
+        "appointment with dr today 3pm", "call ash fri 3pm", "wear black sat 3pm", "fashion week fri 3pm", "electrician coming tue 9-11am",
+        "high noon fri 8pm", "midnight mass dec 24 11pm", "story time fri 3pm", "weekly sync fri 3pm", "swim 400m fri 7am",
         "flowers for mom fri 3pm",
     ])
     func aTitleStaysAsTyped(text: String) throws {
@@ -177,7 +177,7 @@ struct EventTextTests {
     @Test(arguments: [
         "gym fri 6pm pt", "gym fri 6pm PT", "call fri 3pm et", "call fri 3pm ET", "class fri 3pm ART", "hospital fri 3pm CT", "pay fri 3pm gst",
         "exam mon 9am ict", "class fri 3pm ict", "review fri 3pm bst", "clinic fri 3pm trt", "VET FRI 3PM CAT", "dentist fri 3pm art", "vet fri 3pm cat",
-        "call fri 3pm et/pt", "call fri 3pm gmt+5", "call est 3pm", "call pkt fri 3pm", "call lahore time 3pm", "call new york time fri 3pm",
+        "call fri 3pm ast", "call fri 3pm et/pt", "call fri 3pm gmt+5", "call est 3pm", "call pkt fri 3pm", "call lahore time 3pm", "call new york time fri 3pm",
     ])
     func aZoneThatCantBeReadIsSaid(text: String) {
         #expect(read(text) == .unclearZone)
@@ -207,7 +207,7 @@ struct EventTextTests {
         "fri 3pm est dentist", "call fri 3pm with sam pst", "call fri 3pm sam est", "webinar fri 3pm us eastern", "call fri 3pm in est", "call fri 3pm eastern",
         "call fri 3pm pacific", "call fri 3pm lahore", "call fri 3pm idt", "call fri 3pm myt", "call fri 3pm zulu", "call fri 3pm +0500",
         "call fri 3pm central european time", "call fri 3pm aus time", "swim fri 7am 400m", "sprint fri 7am 100m", "dentist fri 3pm week", "dentist fri 3pm in december",
-        "dentist fri 3pm the week after", "dentist fri 9am after christmas", "dentist fri 3pm of december", "dentist 3pm fri 13", "dentist fri 3pm weekly",
+        "dentist fri 9am after christmas", "dentist fri 3pm of december", "dentist 3pm fri 13", "dentist fri 3pm weekly",
         "block fri 2pm focus time", "fri 3pm family time", "fri 7pm game time", "vet fri 3pm cat time", "kids fri 3pm pet time", "class fri 3pm art time",
         "gym fri 6pm pt time", "fri 3pm cat-sitting", "fri 3pm art-class",
     ])
@@ -237,6 +237,7 @@ struct EventTextTests {
         ("standup fri 09:00-09:30", 1800), ("meeting fri 09:00-17:00", 28800), ("meeting fri 9:00-17:00", 28800), ("party sat 9pm-2am", 18000),
         ("dentist fri 3-4pm", 3600), ("work fri 9-5pm", 28800), ("party fri 9pm-midnight", 10800), ("lunch fri noon-2pm", 7200), ("lunch fri 11-1pm", 7200),
         ("lunch fri 11:30-1pm", 5400), ("lunch fri 12-2pm", 7200), ("night shift fri 7pm-7am", 43200), ("party fri night 1am-3am", 7200),
+        ("meeting fri 03:00-04:00pm", 3600), ("meeting fri 03:00 - 04:00 PM", 3600), ("class mon 06-07pm", 3600), ("town hall tue 09:30-10:30 PM", 3600),
     ] as [(String, TimeInterval)])
     func aRangeSetsTheLength(text: String, seconds: TimeInterval) {
         #expect(length(text) == seconds)
@@ -248,6 +249,8 @@ struct EventTextTests {
         #expect(event("work fri 9-5pm")?.start == moment("2026-11-06 09:00"))
         #expect(event("party sat 9pm-2am")?.start == moment("2026-11-07 21:00"))
         #expect(event("party fri night 1am-3am")?.start == moment("2026-11-07 01:00"))
+        #expect(event("meeting fri 03:00-04:00pm")?.start == moment("2026-11-06 15:00"))
+        #expect(event("town hall tue 09:30-10:30 PM")?.start == moment("2026-11-10 21:30"))
     }
 
     /// The clocks go back at 2:00 that night, so 10pm to 6am is nine hours and still ends at six.
@@ -271,7 +274,7 @@ struct EventTextTests {
     @Test(arguments: [
         ("meeting fri 3pm for an hour", 3600), ("meeting fri 3pm for half an hour", 1800), ("meeting fri 3pm for an hour and a half", 5400),
         ("meeting fri 3pm for 1 hour and 30 minutes", 5400), ("meeting fri 3pm 1 hour and 30 minutes", 5400), ("standup for 30 min 9:30am mon", 1800),
-        ("standup for 1h 9:30am mon", 3600),
+        ("standup for 1h 9:30am mon", 3600), ("standup mon 9am for 15m", 900),
     ] as [(String, TimeInterval)])
     func lengthsInWords(text: String, seconds: TimeInterval) {
         #expect(length(text) == seconds)
@@ -280,7 +283,7 @@ struct EventTextTests {
 
     @Test(arguments: ["meeting fri 3pm for 3 days", "meeting fri 3pm for 25 hours", "meeting for 2 weeks fri 3pm", "trip fri 9am 3 days", "meeting fri 3pm for two hours",
                       "meeting fri 3pm for thirty minutes", "meeting fri 3pm two hours", "meeting for two hours fri 3pm", "standup 30m mon 9am", "standup 30 min mon 9am",
-                      "meeting fri 3pm for 2 1/2 hours"])
+                      "meeting fri 3pm for 2 1/2 hours", "pitch for 5m round fri 3pm", "invoice for 5m fri 3pm", "loan for 2m mon 9am"])
     func aLengthItCantUseIsSaid(text: String) {
         #expect(read(text) == .unclearLength)
     }
@@ -326,7 +329,9 @@ struct EventTextTests {
     /// These come out the same whatever day and hour they're typed.
     @Test(arguments: ["dentist 3:30", "dentist 1:00", "dentist 9:30", "dentist 10:30", "dentist 12:30", "dentist fri at 7", "call mon at 8", "call fri at 3",
                       "dentist at 5", "party tonight at 1", "party tonight at 2", "party tonight at 12", "party sat 9-2am", "party sat 8-1am", "party sat 10-2am",
-                      "night shift fri 10-6am", "gym fri 12-1am", "dentist fri 3pm-5", "lunch fri 9-noon", "meeting fri 3-2pm", "meeting fri 1-12pm"])
+                      "night shift fri 10-6am", "gym fri 12-1am", "dentist fri 3pm-5", "lunch fri 9-noon", "meeting fri 3-2pm", "meeting fri 1-12pm",
+                      "party sat 8-12pm", "workshop sat 9-12pm", "qawwali night fri 9-12pm", "mehndi 4 dec 8-12pm", "meeting fri 04:00-02:00pm", "meeting fri 1:00-14:00",
+                      "meeting fri 3:00-15:00", "table 4 - 8pm sat", "gate 12 - 5pm fri", "room 5 - 3pm fri", "apollo 13 - 3pm fri", "table 4 to 8pm sat", "dentist 3-4pm fri"])
     func aTimeThatCouldBeEitherAsksWhich(text: String) {
         #expect(read(text) == .needsAMOrPM)
     }
@@ -336,6 +341,12 @@ struct EventTextTests {
         "call fri 3pm every week", "dentist fri 3pm next week", "dentist next week fri 3pm", "dentist fri 3pm in 2 weeks", "dentist fortnight fri 3pm", "lunch with sun 1pm",
         "call mr sun 3pm", "dentist the friday 3pm", "dentist a week from friday 3pm", "dentist the following fri 3pm", "what's next fri 3pm", "sale black friday 9am",
         "service good friday 10am", "lunch easter sunday 1pm", "sale cyber monday 9am", "dentist 2030 dec 25 3pm", "dentist last dec 5 3pm", "party next nov 13 9pm",
+        "bbq bank holiday monday 2pm", "picnic easter monday 10am", "fair whit monday 10am", "service holy saturday 8pm", "giving tuesday 9am", "shop small business saturday 9am",
+        "dentist a week today 3pm", "dentist a week on fri 3pm", "dentist week from today 3pm", "dentist ten days from today 3pm", "dentist a week tomorrow 3pm",
+        "dentist two weeks on friday 3pm", "brunch next weekend sat 11am", "dentist following week fri 3pm", "dentist in a couple of weeks fri 3pm",
+        "dentist in a few weeks fri 3pm", "dentist in ten days fri 3pm", "dentist in december fri 3pm", "trip in january mon 9am", "dentist late nov fri 3pm",
+        "gym weekly mon 7am", "dentist fortnightly fri 3pm", "standup daily mon 9am", "review 6 months fri 3pm", "sprint 2 weeks fri 3pm", "tutor SAT 3pm",
+        "take SAT dec 5 8am", "call dr. sun 3pm", "dentist fri 3pm the week after",
         "drinks fri night 9am", "meeting tomorrow morning 5pm", "call tonight 12pm", "dentist tonight 3pm",
     ])
     func aDayItCantTakeAtItsWordIsSaid(text: String) {
@@ -358,7 +369,8 @@ struct EventTextTests {
     }
 
     @Test(arguments: ["focus fri until 3pm", "work fri until 5pm", "work until 5pm fri", "call till 4pm", "meeting ends 3pm", "meeting fri ends at 3pm",
-                      "call end 3pm", "workshop finishes 5pm", "shift ending 6pm", "drinks after 8pm fri", "drinks fri before 8pm"])
+                      "call end 3pm", "workshop finishes 5pm", "shift ending 6pm", "drinks after 8pm fri", "drinks fri before 8pm", "work to 5pm fri", "on call through 5pm fri",
+                      "away thru 5pm fri", "work up to 5pm fri", "dinner half past 7pm fri", "meeting quarter past 3pm fri", "meeting quarter to 3pm fri", "meeting 10 past 3pm fri"])
     func anEndAloneIsntAStart(text: String) {
         #expect(read(text) == .noStart)
     }
@@ -371,7 +383,7 @@ struct EventTextTests {
 
     @Test(arguments: ["dentist tomorrow 3pm and gym fri 4pm", "review 10:30 fri 3pm", "meeting fri 3pm-2pm", "meeting fri 11pm-1pm", "fri 3pm to fri 5pm dentist",
                       "offsite sat 9am to sun 5pm", "leave mon to fri 9am", "standup mon to fri 9am", "conference mon to wed 9am", "sat exam fri 9am", "dentist fri or sat 3pm",
-                      "dentist fri 3pm tomorrow", "dentist between 3 and 5pm fri", "dentist 3 or 4pm fri"])
+                      "dentist fri 3pm tomorrow", "dentist between 3 and 5pm fri", "dentist 3 or 4pm fri", "dentist 3, 4pm fri", "5, 6 dec 3pm", "conference 5 to 7 dec 9am"])
     func twoTimesCantBeOneEvent(text: String) {
         #expect(read(text) == .severalTimes)
     }

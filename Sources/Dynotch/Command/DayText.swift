@@ -88,7 +88,7 @@ enum DayText {
         }
         read(#"\bthis\s+(morning|afternoon|evening)\b"#) { groups in (.today, part(named: groups[0])) }
         // Not "mon-fri", which is a run of days rather than a day.
-        read(#"(?<![\w-])(?:(next|this|last)\s+)?(?:coming\s+)?"# + weekdayName + #"(?:['’]s)?\b(?!-)"# + partName) { groups in
+        read(#"(?<![\w-])(?:(next|this|last)(?:\s+coming)?\s+)?"# + weekdayName + #"(?:['’]s)?\b(?!-)"# + partName) { groups in
             let which: Which = switch groups[0]?.lowercased() {
             case "next": .next
             case "last": .last

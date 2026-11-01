@@ -69,6 +69,10 @@ enum EventText {
             return .noTime
         case .exact(let start, let end):
             (from, to) = (start, end)
+        case .bareRange(let start, let end):
+            // "work fri 9-5pm". After a name, as in "table 4 - 8pm sat", the 4 could belong to it.
+            guard let dayPlace = line.firstIndex(where: { $0.day != nil }), dayPlace < place else { return .needsAMOrPM }
+            (from, to) = (start, end)
         case .unsure(let minutes):
             guard let minutes, let settled = part.flatMap({ settled(minutes, by: $0) }) else { return .needsAMOrPM }
             (from, to) = (settled, nil)
@@ -93,9 +97,12 @@ enum EventText {
         guard title.range(of: leftoverLength, options: [.regularExpression, .caseInsensitive]) == nil else { return .unclearLength }
         guard !endsInAZone(words) else { return .unclearZone }
         guard let day = days.first else { return .noDay }
-        // "between 3 and 5pm fri", "3 or 4pm fri": the title's holding half of it.
-        guard !["and", "or", "between", "&"].contains(words.last?.lowercased() ?? "") else { return .severalTimes }
-        guard !namesAnotherDay, !isChanged(day, by: words.last?.lowercased() ?? ""),
+        // "between 3 and 5pm fri", "3 or 4pm fri", "5 to 7 dec": the title's holding half of it.
+        guard !["and", "or", "between", "&"].contains(words.last?.lowercased() ?? ""),
+              words.joined(separator: " ").range(of: #"[0-9](?:,| to| -| –| —)$"#, options: .regularExpression) == nil else { return .severalTimes }
+        let lead = words.last?.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".,")) ?? ""
+        guard !namesAnotherDay, title.range(of: beforeTheDay, options: [.regularExpression, .caseInsensitive]) == nil,
+              !isChanged(day, by: lead), !isAnExam(body[day.range], in: body),
               part.map({ $0.minutes.contains(from) || ($0 == .night && from < endOfNight) }) != false else { return .unclearDay }
 
         var overnight = 0
@@ -206,15 +213,24 @@ enum EventText {
     // MARK: The day
 
     /// Right before a weekday, these change which one it is, or show it's somebody: "first monday",
-    /// "the following friday", "lunch with sun".
+    /// "the following friday", "easter monday", "lunch with sun".
     private static let wordsBeforeAWeekday: Set<String> = [
         "every", "each", "first", "second", "third", "fourth", "fifth", "following", "the", "what's", "whats", "with", "mr", "mrs", "ms", "dr", "prof",
+        "easter", "holy", "whit",
     ]
     /// Holidays, with the weekday they're named for. "wear black sat 3pm" is fine.
-    private static let holidays = ["black": 6, "good": 6, "cyber": 2, "easter": 1, "palm": 1, "ash": 4, "holy": 5, "shrove": 3, "maundy": 5]
+    private static let holidays = ["black": 6, "good": 6, "cyber": 2, "palm": 1, "ash": 4, "shrove": 3, "maundy": 5, "holiday": 2, "giving": 3, "business": 7]
 
     /// Anywhere in the line, these move the day it names: "dentist fri 3pm next week".
-    private static let otherDays = #"\b(?:every|fortnight|from now|next (?:week|month|year)|in (?:a|an|one|two|three|four|five|six|[0-9]+) (?:days?|weeks?|wks?|months?|mos?|years?)|(?:a|an|one|two|three|four|five|six|[0-9]+) (?:days?|weeks?|months?) (?:from|after|before|later|ago))\b"#
+    private static let otherDays = #"\b(?:every|fortnight|from now|next (?:week|month|year)|in (?:a|an|one|two|three|four|five|six|[0-9]+) (?:days?|weeks?|wks?|months?|mos?|years?)|(?:days?|weeks?|wks?|months?) (?:from|after|before|later|ago|on))\b"#
+    /// Last in the name, right before the day, these move it or repeat it: "a week fri", "in december
+    /// fri", "gym weekly mon".
+    private static let beforeTheDay = #"\b(?:(?:a|an|one|two|three|four|five|six|seven|eight|nine|ten|few|couple of|next|this|following|[0-9]+) (?:days?|weeks?|wks?|months?|mos?|weekend)|(?:in|late|early|mid|next|this|end of|start of) (?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*|weekly|fortnightly|biweekly|daily|monthly)$"#
+
+    /// "tutor SAT 3pm": in a line that's otherwise in lowercase, these are more likely something else.
+    private static func isAnExam(_ day: Substring, in line: String) -> Bool {
+        ["SAT", "SUN", "MON"].contains(where: day.hasPrefix) && line != line.uppercased()
+    }
 
     private static func isChanged(_ day: DayText.Found, by word: String) -> Bool {
         guard !["after", "before"].contains(word) else { return true }
@@ -234,6 +250,8 @@ enum EventText {
     private enum Clock: Equatable {
         /// Minutes from midnight, up to a whole day for midnight itself.
         case exact(start: Int, end: Int?)
+        /// A range that starts with a number and nothing else, as "3-4pm" does.
+        case bareRange(start: Int, end: Int)
         /// No am or pm, and it could be either. A single time has its minutes here.
         case unsure(Int?)
         /// Not a time, like 13pm.
@@ -303,48 +321,54 @@ enum EventText {
 
     private static func clock(from first: Side, to second: Side?) -> Clock {
         guard let second else { return first.clock }
+        // "03:00-04:00pm", with or without its zeros.
+        if let isPM = second.isPM, first.isPM == nil, first.word == nil, (1...12).contains(first.hour), case .exact(let end, _) = second.clock {
+            return range(from: first, to: end, isPM: isPM)
+        }
         switch (first.clock, second.clock) {
         case (.invalid, _), (_, .invalid):
             return .invalid
         case (.exact(let start, _), .exact(let end, _)):
-            return .exact(start: start, end: end)
-        case (.unsure(let start?), .exact(let end, _)) where second.isPM == nil && second.word == nil:
+            return first.word == nil && first.isPM == nil && !first.hasMinutes ? .bareRange(start: start, end: end) : .exact(start: start, end: end)
+        case (.unsure(let start?), .exact(let end, _)) where second.word == nil:
             // "9:00-17:00": the end says it's a 24-hour clock.
-            return start < end ? .exact(start: start, end: end) : .unsure(nil)
-        case (.unsure, .exact(let end, _)):
-            return second.isPM.map { range(from: first, to: end, isPM: $0) } ?? .unsure(nil)
+            return start < end && start >= endOfNight ? .exact(start: start, end: end) : .unsure(nil)
         default:
             return .unsure(nil)
         }
     }
 
     /// "3-4pm": the end speaks for the start, or "11-1pm" goes across noon. What's left is asked: "9-2am"
-    /// could run past midnight from either end, and "3-2pm" and "12-1am" could be several things.
+    /// could run past midnight from either end, "9-12pm" could be the morning or the evening, and
+    /// "3-2pm" and "12-1am" could be several things.
     private static func range(from first: Side, to end: Int, isPM: Bool) -> Clock {
-        guard first.hour != 12 || isPM else { return .unsure(nil) }
+        guard first.hour != 12 || isPM, end != 12 * 60 else { return .unsure(nil) }
         var side = first
         side.isPM = isPM
-        if case .exact(let start, _) = side.clock, start < end { return .exact(start: start, end: end) }
+        var starts: Int?
+        if case .exact(let start, _) = side.clock, start < end { starts = start }
         side.isPM = !isPM
-        if case .exact(let start, _) = side.clock, start < end, start >= endOfNight { return .exact(start: start, end: end) }
-        return .unsure(nil)
+        if starts == nil, case .exact(let start, _) = side.clock, start < end, start >= endOfNight { starts = start }
+        guard let starts else { return .unsure(nil) }
+        return first.hasMinutes ? .exact(start: starts, end: end) : .bareRange(start: starts, end: end)
     }
 
     /// Ahead of the time, with or without the day between, these make it an end rather than a start.
     private static let untilWords: Set<String> = ["until", "till", "til"]
-    /// And so do these, but only right beside the time.
-    private static let endWords: Set<String> = ["end", "ends", "ending", "finish", "finishes", "finishing", "before", "after"]
+    /// And so do these, but only right beside the time. "half past 7pm" is another way of saying it.
+    private static let endWords: Set<String> = ["end", "ends", "ending", "finish", "finishes", "finishing", "before", "after", "to", "through", "thru", "past", "quarter", "half"]
 
     // MARK: Lengths
 
     /// "for 45 min", "for an hour" and "for half an hour" anywhere, or a length with its unit at the
     /// very end. A number alone is too easily something else, a length up front is as likely to be in
-    /// the title, as in "2h workshop fri 3pm", and "400m" is more likely a distance.
+    /// the title, as in "2h workshop fri 3pm", and "400m" or "for 5m fri" is more likely a distance or money.
     private static func pullLength(from text: String) -> (text: String, length: TimeInterval?) {
-        let minutes = #"(?:[0-9]{1,2}\s*m|[0-9]+(?:[.,][0-9]+)?\s*(?:min|mins|minute|minutes))"#
-        let hours = #"[0-9]+(?:[.,][0-9]+)?\s*(?:h|hr|hrs|hour|hours)(?:[0-9]{2}|\s*(?:and\s+)?"# + minutes + #")?"#
-        let amount = #"(?:half an hour|an hour and a half|an hour|"# + hours + "|" + minutes + ")"
-        for pattern in [#"\bfor\s+("# + amount + #")(?![\w:.])"#, #"\s("# + amount + #")\s*$"#] {
+        let short = #"[0-9]{1,2}\s*m"#
+        let minutes = #"[0-9]+(?:[.,][0-9]+)?\s*(?:min|mins|minute|minutes)"#
+        let hours = #"[0-9]+(?:[.,][0-9]+)?\s*(?:h|hr|hrs|hour|hours)(?:[0-9]{2}|\s*(?:and\s+)?(?:"# + short + "|" + minutes + #"))?"#
+        let amount = #"half an hour|an hour and a half|an hour|"# + hours + "|" + minutes
+        for pattern in [#"\bfor\s+("# + amount + #")(?![\w:.])"#, #"(?:\s+for)?\s("# + amount + "|" + short + #")\s*$"#] {
             guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
                   let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
                   let whole = Range(match.range, in: text), let group = Range(match.range(at: 1), in: text),
@@ -382,7 +406,7 @@ enum EventText {
     }
 
     /// Initials that mean other things, in capitals too: "gym fri 6pm PT", "pay gst", "class fri 3pm ART".
-    private static let wordsNotZones: Set<String> = ["aft", "art", "bst", "cat", "cot", "ct", "eat", "et", "gst", "ict", "mt", "pet", "pt", "trt", "wat", "west", "wet", "wit"]
+    private static let wordsNotZones: Set<String> = ["aft", "art", "ast", "bst", "cat", "cot", "ct", "eat", "et", "gst", "ict", "mt", "pet", "pt", "trt", "wat", "west", "wet", "wit"]
 
     private static func isZone(_ word: String) -> Bool {
         WorldTime.initials(word) != nil && !wordsNotZones.contains(word.lowercased())
