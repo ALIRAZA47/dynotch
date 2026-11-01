@@ -214,7 +214,7 @@ struct CommandHistoryTests {
 /// reaches the real Shortcuts.
 @MainActor
 @Suite(.serialized)
-struct CommandNameTests {
+struct CommandRowNameTests {
     private let viewModel: NotchViewModel
 
     init() {

@@ -46,7 +46,7 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>Dynotch. Inspired by NotchNook and MacNotch.</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Dynotch controls Music and Spotify, reads the current track for the notch, and switches Dark Mode from the quick toggles.</string>
+	<string>Dynotch controls Music and Spotify, reads the current track for the notch, switches Dark Mode from the quick toggles, and goes back to the tab a command ran in when you click its notice.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
 	<string>Dynotch shows your upcoming events in the notch, and adds the ones you type in the command field.</string>
 	<key>NSCalendarsUsageDescription</key>

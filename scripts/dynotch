@@ -1,23 +1,35 @@
 #!/bin/bash
-# Sends commands to Dynotch through its dynotch:// URL scheme.
+# Sends commands to Dynotch. Most go through its dynotch:// URL scheme. Those that
+# have to hear back use the app's local socket, through the app's own binary.
 #
 #   dynotch notify TEXT [--detail TEXT] [--symbol SF_SYMBOL] [--tint COLOR] [--seconds N]
-#                       [--button TITLE --url https://...]
-#   dynotch open [home|tray|focus|stats]
+#                       [--button TITLE --url https://...] [--key NAME]
+#                       [--terminal NAME] [--session ID] [--tty PATH] [--folder PATH] [--bundle ID]
+#   dynotch open [home|tray|focus|stats|agents]
 #   dynotch close
 #   dynotch timer [start|pause|toggle|reset|skip]
 #   dynotch tray [--show] FILE...
 #   dynotch profile NAME
 #   dynotch capture
+#   dynotch progress NAME [PERCENT|done|fail|clear] [--detail TEXT] [--symbol SF_SYMBOL]
+#                         [--tint COLOR] [--quiet-after SECONDS] [--button TITLE --url https://...]
+#   dynotch status [--json]
+#   dynotch ci [--repo OWNER/NAME] [--branch NAME] [--sha SHA] [--stop]
+#   dynotch statusline [--then COMMAND]
+#   dynotch hook
 #
 # COLOR is red, orange, yellow, green, mint, teal, cyan, blue, indigo, purple,
 # pink, white or gray, or a hex value such as #FF6B5C. A notice from here carries
 # a small terminal badge, so it can't pass for one of Dynotch's own. Tray items
-# point at the files where they are; nothing under ~/Library is taken.
+# point at the files where they are; nothing under ~/Library is taken. A progress
+# line is keyed by NAME, and goes away if its script is quiet for two minutes.
+# --terminal and the options after it say where a command ran, for a button on the
+# notice that goes back there. A terminal Dynotch doesn't know gets no button.
+# statusline and hook are for Claude Code to run, and read its JSON on their input.
 set -euo pipefail
 
 usage() {
-    sed -n '4,16p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '5,28p' "$0" | sed 's/^# \{0,1\}//'
     exit "${1:-0}"
 }
 
@@ -26,6 +38,26 @@ encode() { printf '%s' "$1" | od -An -tx1 -v | tr -d ' \n' | sed 's/../%&/g'; }
 
 # -g keeps whatever app you're in at the front.
 send() { open -g "dynotch://$1"; }
+
+# The app's binary, which sits one folder over from this script inside Dynotch.app. Called through a
+# link on your PATH, $0 is the link. Never a binary found anywhere else: an older Dynotch doesn't
+# know --cli, and would start up as a second copy of the app.
+binary() {
+    if [ -n "${DYNOTCH_BIN:-}" ]; then
+        printf '%s' "$DYNOTCH_BIN"
+        return
+    fi
+    local self
+    self="$(readlink -f "$0")"
+    local beside
+    beside="$(dirname "$self")/../MacOS/Dynotch"
+    if [ -x "$beside" ]; then
+        printf '%s' "$beside"
+    else
+        echo "dynotch: this command only works from inside Dynotch.app" >&2
+        exit 1
+    fi
+}
 
 [ $# -gt 0 ] || usage 1
 command="$1"
@@ -37,7 +69,7 @@ case "$command" in
         shift
         while [ $# -gt 0 ]; do
             case "$1" in
-                --detail|--symbol|--tint|--seconds|--button|--url)
+                --detail|--symbol|--tint|--seconds|--button|--url|--key|--terminal|--session|--tty|--folder|--bundle)
                     [ $# -gt 1 ] || usage 1
                     query+="&${1#--}=$(encode "$2")"
                     shift 2 ;;
@@ -76,6 +108,9 @@ case "$command" in
         send "profile?name=$(encode "$1")" ;;
     capture)
         send "capture" ;;
+    progress|status|statusline|hook|ci)
+        program="$(binary)"
+        exec "$program" --cli "$command" "$@" ;;
     -h|--help|help)
         usage ;;
     *)

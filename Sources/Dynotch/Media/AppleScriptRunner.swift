@@ -1,3 +1,4 @@
+import Carbon
 import Foundation
 
 /// The result of a script, read off the script thread so it can cross actors.
@@ -37,13 +38,38 @@ final class AppleScriptRunner: @unchecked Sendable {
     func run(_ source: String) async -> ScriptResult? {
         await withCheckedContinuation { continuation in
             queue.async {
-                let script = self.compiled[source] ?? NSAppleScript(source: source)
-                if self.compiled[source] == nil, self.compiled.count >= 32 { self.compiled.removeAll() }
-                self.compiled[source] = script
                 var error: NSDictionary?
-                let descriptor = script?.executeAndReturnError(&error)
+                let descriptor = self.script(for: source)?.executeAndReturnError(&error)
                 continuation.resume(returning: error == nil ? descriptor.map(ScriptResult.init) : nil)
             }
         }
+    }
+
+    /// Calls one handler of a script with text for its arguments. The text stays text: none of it
+    /// becomes source, so nothing in it can run. `handler` goes in lower case, as AppleScript keeps it.
+    func run(_ source: String, handler: String, arguments: [String]) async -> ScriptResult? {
+        await withCheckedContinuation { continuation in
+            queue.async {
+                let call = NSAppleEventDescriptor(eventClass: AEEventClass(kASAppleScriptSuite), eventID: AEEventID(kASSubroutineEvent),
+                                                  targetDescriptor: .currentProcess(), returnID: AEReturnID(kAutoGenerateReturnID),
+                                                  transactionID: AETransactionID(kAnyTransactionID))
+                call.setDescriptor(NSAppleEventDescriptor(string: handler), forKeyword: AEKeyword(keyASSubroutineName))
+                let list = NSAppleEventDescriptor.list()
+                for (index, argument) in arguments.enumerated() {
+                    list.insert(NSAppleEventDescriptor(string: argument), at: index + 1)
+                }
+                call.setParam(list, forKeyword: AEKeyword(keyDirectObject))
+                var error: NSDictionary?
+                let descriptor = self.script(for: source)?.executeAppleEvent(call, error: &error)
+                continuation.resume(returning: error == nil ? descriptor.map(ScriptResult.init) : nil)
+            }
+        }
+    }
+
+    private func script(for source: String) -> NSAppleScript? {
+        let script = compiled[source] ?? NSAppleScript(source: source)
+        if compiled[source] == nil, compiled.count >= 32 { compiled.removeAll() }
+        compiled[source] = script
+        return script
     }
 }

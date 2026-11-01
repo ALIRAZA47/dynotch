@@ -7,10 +7,14 @@
 # on your PATH. DYNOTCH_LONG_COMMAND sets the threshold in seconds (30 by default).
 # The notice names the command alone, such as "make": its arguments can hold tokens
 # and passwords, and the notch is on screen when you share it. To show them anyway,
-# set DYNOTCH_LONG_COMMAND_DETAIL=full.
+# set DYNOTCH_LONG_COMMAND_DETAIL=full. It also says which terminal and folder the
+# command ran in, so a button on the notice can go back there.
+#
+# After a git push that works, it also runs dynotch ci, so the notch follows the run on
+# GitHub Actions. To leave that out, set DYNOTCH_CI_AFTER_PUSH=0.
 
 zmodload zsh/datetime
-typeset -g _dynotch_started _dynotch_command
+typeset -g _dynotch_started _dynotch_command _dynotch_ci_command
 # The dynotch beside this file, found while it's being sourced.
 typeset -g _dynotch_bin="${${(%):-%x}:A:h}/dynotch"
 
@@ -50,13 +54,81 @@ _dynotch_precmd() {
         what=$(_dynotch_name "$_dynotch_command")
     fi
     local detail="$what · $took"
-    if (( exit_code == 0 )); then
-        "$bin" notify "Done" --detail "$detail" --symbol checkmark.circle.fill --tint green &!
+    # Where it ran, for the notice's button back there. Inside tmux no tab can be picked, and the
+    # session and tty are the pane's, so the marker and the app are all that go along.
+    local -a origin
+    origin=(--folder "$PWD")
+    [[ -n ${__CFBundleIdentifier:-} ]] && origin+=(--bundle "$__CFBundleIdentifier")
+    if [[ -n ${TMUX:-} ]]; then
+        origin+=(--terminal tmux)
     else
-        "$bin" notify "Failed" --detail "$detail" --symbol xmark.octagon.fill --tint red &!
+        local session=${ITERM_SESSION_ID:-${TERM_SESSION_ID:-}}
+        [[ -n ${TERM_PROGRAM:-} ]] && origin+=(--terminal "$TERM_PROGRAM")
+        [[ -n $session ]] && origin+=(--session "$session")
+        [[ -n ${TTY:-} ]] && origin+=(--tty "$TTY")
     fi
+    if (( exit_code == 0 )); then
+        "$bin" notify "Done" --detail "$detail" --symbol checkmark.circle.fill --tint green "${origin[@]}" &!
+    else
+        "$bin" notify "Failed" --detail "$detail" --symbol xmark.octagon.fill --tint red "${origin[@]}" &!
+    fi
+}
+
+# The whole line with its aliases expanded, so gp counts as git push.
+_dynotch_ci_preexec() {
+    _dynotch_ci_command=$3
+}
+
+# Whether a command line runs git push, behind the wrappers _dynotch_name sees through or after
+# other commands, as in git commit -m wip && git push. A dry run or a delete pushes nothing to follow.
+_dynotch_ci_pushes() {
+    local word state=command pushed=
+    for word in ${(z)1}; do
+        case $word in
+            ';'|'&'|'&&'|'||'|'|'|'|&'|'('|')'|'{'|'}') state=command; continue ;;
+        esac
+        case $state in
+            command)
+                case $word in
+                    *=*|-*|sudo|doas|env|time|nohup|nice|caffeinate|command|exec|builtin|noglob) ;;
+                    git|*/git) state=git ;;
+                    *) state=other ;;
+                esac ;;
+            git)
+                case $word in
+                    -C|-c|--git-dir|--work-tree|--namespace) state=value ;;
+                    -*) ;;
+                    push) state=push pushed=1 ;;
+                    *) state=other ;;
+                esac ;;
+            value) state=git ;;
+            push)
+                case $word in
+                    -n|--dry-run|-d|--delete|-h|--help) return 1 ;;
+                esac ;;
+        esac
+    done
+    [[ -n $pushed ]]
+}
+
+# After a git push that worked, has the notch follow this branch's CI. It runs apart from the
+# prompt and says nothing, whatever comes of it. A push is often quick, so DYNOTCH_LONG_COMMAND has
+# no say here. Without GitHub's gh command there's nothing to follow.
+_dynotch_ci_precmd() {
+    local exit_code=$? line=$_dynotch_ci_command
+    _dynotch_ci_command=
+    (( exit_code == 0 )) || return 0
+    [[ ${DYNOTCH_CI_AFTER_PUSH:-1} != 0 && -n $line ]] || return 0
+    _dynotch_ci_pushes "$line" || return 0
+    (( $+commands[gh] )) || return 0
+    local bin=$_dynotch_bin
+    [[ -x $bin ]] || bin=$commands[dynotch]
+    [[ -n $bin ]] || return 0
+    "$bin" ci </dev/null >/dev/null 2>&1 &!
 }
 
 autoload -Uz add-zsh-hook
 add-zsh-hook preexec _dynotch_preexec
 add-zsh-hook precmd _dynotch_precmd
+add-zsh-hook preexec _dynotch_ci_preexec
+add-zsh-hook precmd _dynotch_ci_precmd

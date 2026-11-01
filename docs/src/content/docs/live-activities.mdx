@@ -27,6 +27,10 @@ Each one has a switch in <Path to="Settings → Live Activities" />. All of them
 | Focus | Your Focus's symbol while one is on, and a notice when it changes |
 | Notifications | Messages, Mail, Slack and more as they arrive |
 | Keep Awake | A cup while the Mac is being kept awake |
+| Script progress | A line under the notch while a script reports its progress |
+| Claude Code | Your sessions, and tool calls waiting for an answer. See [Agents](/agents/) |
+| Claude usage | A ring in the glance, and a heads-up at 80%. See [Claude usage](/claude-usage/) |
+| CI runs | GitHub Actions on your branch, through to pass or fail. See [CI](/ci/) |
 
 <Note>**Focus** and **Notifications** need [Full Disk Access](/permissions/#full-disk-access), and show nothing without it.</Note>
 
@@ -68,7 +72,7 @@ When it's over, one or two show in turn, and more come as one notice, with **See
 
 ## Two at once
 
-A second activity keeps a small glyph at the end of the right ear while another takes the notch: a recording's red dot, the mute badge, how many notices are waiting, a timer's or a download's ring, Keep Awake's cup, the Focus that's on, or the album art.
+A second activity keeps a small glyph at the end of the right ear while another takes the notch: a recording's red dot, how many tool calls are waiting, the mute badge, how many notices are waiting, a script's, a timer's or a download's ring, a CI run, Keep Awake's cup, the Focus that's on, or the album art.
 
 <Shots min={320}>
   <Shot name="20-closed-timer-and-music" alt="A timer in the closed notch with the album art as a small glyph at the end of the right ear." caption="A timer, with the music as a glyph" />
@@ -82,8 +86,10 @@ The main activity follows this order, and the first that applies takes the notch
 1. Notices
 2. A recording
 3. The song title
-4. The timer that ends soonest
-5. A download
-6. Music
+4. A script's progress
+5. The timer that ends soonest
+6. A CI run
+7. A download
+8. Music
 
 Turn **Two at once** off in <Path to="Settings → Live Activities → Options" /> to show only the main one. A status like the mute badge or your Focus's symbol then shows only when nothing else does. A recording's red dot stays beside a notice all the same.

@@ -2,7 +2,15 @@ import AppKit
 import SwiftUI
 
 /// A borderless panel above the menu bar that never activates the app.
-final class NotchPanel: NSPanel {
+class NotchPanel: NSPanel {
+    /// A press has begun. This comes before anything in the panel hears of it.
+    var onPress: ((NSEvent) -> Void)?
+
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .leftMouseDown { onPress?(event) }
+        super.sendEvent(event)
+    }
+
     init(contentRect: CGRect) {
         super.init(contentRect: contentRect, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         isFloatingPanel = true

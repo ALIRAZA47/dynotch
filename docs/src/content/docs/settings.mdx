@@ -25,7 +25,25 @@ How the notch opens, and where it shows up.
 | Show the notch on | Built-in display, Main display or All displays | Built-in display |
 | Profiles | Saved setups. See [Profiles](/profiles/) | None |
 | Show menu bar icon | Settings, the tray and the timer, a click away | On |
+| Terminal setup | Puts the `dynotch` command, the hooks and the status line in place. See below | Nothing changed |
 | Launch at login | Starts Dynotch when you log in. Move it to Applications first | Off |
+
+### Terminal setup
+
+A card that does in a click what used to take a link and a dotfile edit. Nothing changes until you've seen it: **Review Changes** shows each change, with exactly what goes in, and you can switch off any of them. **Undo** takes out what the card added.
+
+| Item | What changes |
+|---|---|
+| The dynotch command | A link at `~/.local/bin/dynotch`, which needs no password |
+| Long commands | A marked block at the end of `~/.zshrc`, with `~/.local/bin` on your `PATH` if it isn't already. It also [follows CI](/ci/#after-every-push) after a `git push`, if you have `gh` |
+| Claude Code sessions | Hooks in `~/.claude/settings.json`, beside any you have. See [Agents](/agents/) |
+| Claude usage | The status line in `~/.claude/settings.json`. See [Claude usage](/claude-usage/) |
+
+The hooks and the status line run the link, so they bring it along, and taking the link out takes them out too.
+
+Whatever else is in those files stays as it is. A status line you already have stays: to feed the usage ring as well, see [Claude usage](/claude-usage/). If something else is at `~/.local/bin/dynotch`, it stays, and the hooks stay out. A settings file that isn't valid JSON is left alone. If a file changes while you're reviewing, nothing is touched and you get a fresh look.
+
+Before changing a file, Dynotch copies it to `~/Library/Application Support/Dynotch/setup-backups`, and keeps the last five of each.
 
 ## Appearance
 
@@ -52,7 +70,7 @@ What the closed notch shows beside the camera. See [Live activities](/live-activ
 
 <Shot name="settings-3-activities" themed alt="The Live Activities page of Dynotch's Settings." />
 
-The fourteen activities each have a switch, all on to start with, and a **Preview** tile shows a sample in the notch. Below them:
+The eighteen activities each have a switch, all on to start with, and a **Preview** tile shows a sample in the notch. Below them:
 
 | Setting | What it does | Starts as |
 |---|---|---|

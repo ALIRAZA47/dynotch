@@ -1,0 +1,65 @@
+---
+title: Back to the terminal
+description: Click a long command's notice and land where it ran.
+---
+
+When a long command ends, its notice can take you back to it. Click the notice in the closed notch to bring up the [glance](/glance/#a-notices-buttons), then click **Back to iTerm**, or whichever terminal it was. The button is on the Done notice as well as the Failed one, and it stays on the notice in the recent list.
+
+There's nothing to set up beyond the [long command recipe](/recipes/#when-a-long-command-finishes). The notice still names the command alone, since its arguments can hold tokens. What's new is that it also says which terminal and folder the command ran in.
+
+## Which terminals get the right tab
+
+| Terminal | Where you land |
+|---|---|
+| iTerm2 | The exact tab and pane |
+| Terminal | The exact tab |
+| Ghostty 1.4 and later | The exact tab and pane |
+| Ghostty 1.3 | The tab in the command's folder, if only one tab is there |
+| WezTerm, Warp, Alacritty, kitty, Hyper, Tabby, Rio | The app comes to the front |
+| VS Code, VSCodium, Cursor, Zed, Claude | The app comes to the front |
+| IntelliJ, WebStorm, PyCharm, GoLand, DataGrip | The app comes to the front |
+
+Ghostty 1.3 can only say which folder each tab is in. With two tabs in the same folder it could be either, so Ghostty comes to the front on whichever tab it was showing. Before 1.3, it just comes to the front.
+
+A tab that has closed since doesn't matter: the app still comes to the front. So does a terminal you've quit, which starts up again.
+
+The button says **Back** on Alacritty, whose name doesn't fit on it. A terminal that isn't in this table gets no button at all.
+
+## Inside tmux
+
+Inside tmux, the app that started tmux comes to the front, and no tab is picked. tmux keeps its panes to itself, so the terminal can't say which of its tabs has the one you want.
+
+## What macOS asks
+
+iTerm2, Terminal and Ghostty are reached through Automation, so macOS asks the first time you click the button for each one. If you'd rather not allow it, the app still comes to the front, only without picking the tab. You can change your mind in <Path to="System Settings → Privacy & Security → Automation" />.
+
+In Ghostty, `macos-applescript = false` has the same effect.
+
+The other terminals need no permission, since they only come to the front.
+
+## From your own scripts
+
+`dynotch notify` takes the same details, so a script of your own can have the button too:
+
+```bash
+dynotch notify "Deployed" --detail "api" --terminal "$TERM_PROGRAM" --tty "$(tty)" --folder "$PWD"
+```
+
+| Option | What it is |
+|---|---|
+| `--terminal NAME` | `$TERM_PROGRAM`, or `tmux` inside tmux |
+| `--bundle ID` | The app's bundle ID, `$__CFBundleIdentifier` in a shell. It tells apart editors that all say `vscode` |
+| `--session ID` | `$ITERM_SESSION_ID` in iTerm2 |
+| `--tty PATH` | The tab's tty, such as `/dev/ttys003` |
+| `--folder PATH` | The working folder |
+
+With a `--button` as well, that one is the main button and both show. On a [`dynotch://notify` link](/links/#notify), the same details are the parameters `terminal`, `bundle`, `session`, `tty` and `folder`.
+
+## What a link can't do with this
+
+Anything on the Mac can open a `dynotch://` link, so the button is kept to what you could do yourself:
+
+- It does nothing until you click it.
+- It can only bring forward an app on Dynotch's own list of terminals. A link naming anything else gets no button.
+- A tty, session or folder that doesn't look like one is ignored, and the app just comes to the front.
+- All it does in a terminal is select a tab. Nothing from a link becomes part of a script, and no shell command is ever run.
