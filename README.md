@@ -83,10 +83,10 @@ To use the `dynotch` command from Terminal, see [Scripting](#scripting).
 after launch, and a new version is announced in the notch. The check is one request to
 `api.github.com` that carries nothing but the app's version. **Install and Relaunch** downloads the
 release's zip, checks that the app inside is Dynotch, the version announced and newer, and
-signed with the same certificate as the copy you have, puts it in place and reopens Dynotch,
-which says so in the notch. Only the key that signs Dynotch's releases can make an app that
-passes, so a tampered download is refused. Settings, notes, Tray files and the permissions you
-gave it stay, as macOS sees the same app. A copy that can't replace itself, like one run
+signed with a certificate your copy trusts, puts it in place and reopens Dynotch, which says
+so in the notch. Only Dynotch's own release keys can make an app that passes, so a tampered
+download is refused. Settings, notes and Tray files stay, and so do the permissions you gave
+it, unless a release says otherwise in its notes. A copy that can't replace itself, like one run
 straight from the disk image, offers **Download** instead: it opens the new disk image in your
 browser; then quit Dynotch from its menu bar icon and replace the app in Applications.
 

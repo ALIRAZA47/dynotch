@@ -15,10 +15,10 @@ With **Check automatically** on, which it is unless you turn it off, Dynotch ask
 **Install and Relaunch** in <Path to="Settings → About" /> does the rest:
 
 1. It downloads the release's zip.
-2. It checks that the app inside is Dynotch, that it's the version announced and newer, and that it's signed with the same certificate as the copy you have.
+2. It checks that the app inside is Dynotch, that it's the version announced and newer, and that it's signed with a certificate your copy trusts.
 3. It puts the new version in place and reopens Dynotch, which says so in the notch.
 
-Only the key that signs Dynotch's releases can make an app that passes, so a tampered download is refused. Settings, notes, Tray files and the permissions you gave it all stay, because macOS sees the same app.
+Only Dynotch's own release keys can make an app that passes, so a tampered download is refused. Settings, notes and Tray files stay, and so do the permissions you gave it, unless a release says otherwise in its notes.
 
 <Note>
   A copy that can't replace itself, like one run straight from the disk image, offers **Download** instead. It opens the new disk image in your browser. Quit Dynotch from its menu bar icon, then replace the app in Applications.

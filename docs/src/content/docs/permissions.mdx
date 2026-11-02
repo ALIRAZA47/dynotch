@@ -42,4 +42,4 @@ See [Privacy and network](/privacy/) for what happens to what it reads.
 
 ## Keeping them across updates
 
-Updates are signed with the same certificate, so macOS sees the same app and permissions stay. If you [build Dynotch yourself](/build/), they survive rebuilds as long as the app is signed with the local identity. An ad hoc build may lose them.
+macOS ties a permission to the certificate that signed the app, so an update signed with the same one keeps them. A release that moves to a new certificate says so in its notes, and you'd allow them again. If you [build Dynotch yourself](/build/), they survive rebuilds as long as the app is signed with the local identity. An ad hoc build may lose them.
