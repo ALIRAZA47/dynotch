@@ -38,8 +38,13 @@ else
     [ "$PASS" = "$AGAIN" ] || { echo "The passwords differ." >&2; exit 1; }
     [ -n "$PASS" ] || { echo "The password can't be empty." >&2; exit 1; }
     mkdir -p "$(dirname "$KEYCHAIN")"
+    # create-keychain adds it to the search list, where a locked keychain can bring up password
+    # dialogs in other apps, so the list goes back. build.sh names this keychain when it signs.
+    SEARCH_LIST=()
+    while IFS= read -r entry; do SEARCH_LIST+=("$entry"); done < <(security list-keychains -d user | sed -E 's/^ *"//; s/" *$//')
     security create-keychain -p "$PASS" "$KEYCHAIN"
-    # Locks when the Mac sleeps and an hour after its last use. Never added to the search list.
+    security list-keychains -d user -s ${SEARCH_LIST[@]+"${SEARCH_LIST[@]}"}
+    # Locks when the Mac sleeps and an hour after its last use.
     security set-keychain-settings -l -u -t 3600 "$KEYCHAIN"
     echo "Created $KEYCHAIN."
 fi
