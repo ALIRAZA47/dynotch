@@ -374,3 +374,13 @@ The notch panel is as large as the open notch but only accepts the mouse while t
 pointer is over the visible shape. Everywhere else, clicks pass through to the apps
 underneath. A global and a local event monitor track the pointer for hover, swipes and
 file drags.
+
+## License
+
+Copyright (C) 2026 Ali Raza Khan
+
+Dynotch is free software, under the [GNU General Public License, version 3](LICENSE). You
+can use, change and share it. Anyone who passes on a copy, changed or not, sold or free,
+has to give people its source under the same license. It comes with no warranty.
+
+Versions up to 1.4.1 were released under the MIT License.
