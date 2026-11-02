@@ -194,8 +194,97 @@ struct TerminalSetupTests {
     @Test func aFileInItsPlaceStays() throws {
         let scratch = ScratchHome()
         try scratch.write("#!/bin/sh\n", to: ".local/bin/dynotch")
-        #expect(scratch.setup.state(of: .command) == .blocked("~/.local/bin/dynotch is something else, so it stays."))
+        #expect(scratch.setup.state(of: .command) == .blocked("Another file is at ~/.local/bin/dynotch. Move it away to set this up."))
+        #expect(scratch.setup.state(of: .claudeHooks) == .blocked("This needs the dynotch command first."))
         try scratch.install()
+        #expect(scratch.read(".local/bin/dynotch") == "#!/bin/sh\n")
+    }
+
+    @Test func aFolderInItsPlaceStays() throws {
+        let scratch = ScratchHome()
+        try FileManager.default.createDirectory(at: scratch.setup.linkURL, withIntermediateDirectories: true)
+        guard case .blocked = scratch.setup.state(of: .command) else { Issue.record("Not blocked"); return }
+    }
+
+    /// Opening one would wait for a writer that never comes, so this would hang rather than fail.
+    @Test func aPipeInItsPlaceIsNeverOpened() throws {
+        let scratch = ScratchHome()
+        try FileManager.default.createDirectory(at: scratch.setup.linkURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        #expect(mkfifo(scratch.setup.linkURL.path, 0o600) == 0)
+        guard case .blocked = scratch.setup.state(of: .command) else { Issue.record("Not blocked"); return }
+    }
+
+    private let script = TerminalSetup.scriptStart + ". Most go through its dynotch:// URL scheme.\n"
+
+    @Test func theScriptStartsTheWayTheCardLooksFor() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        #expect(try String(contentsOf: root.appendingPathComponent("scripts/dynotch"), encoding: .utf8).hasPrefix(TerminalSetup.scriptStart))
+    }
+
+    @Test func aCopyOfTheScriptIsPutRight() throws {
+        let scratch = ScratchHome()
+        try scratch.write(script, to: ".local/bin/dynotch", mode: 0o755)
+        #expect(scratch.setup.state(of: .command) == .outOfDate)
+        #expect(scratch.setup.state(of: .claudeHooks) == .notInstalled)
+        #expect(scratch.setup.state(of: .claudeStatusLine) == .notInstalled)
+        #expect(scratch.setup.installChanges(for: [.claudeHooks]).first?.summary == "Replace the old dynotch script in ~/.local/bin with a link")
+        try scratch.install()
+        let target = try FileManager.default.destinationOfSymbolicLink(atPath: scratch.setup.linkURL.path)
+        #expect(target == scratch.resources.appendingPathComponent("dynotch").path)
+        for item in SetupItem.allCases { #expect(scratch.setup.state(of: item) == .installed) }
+    }
+
+    @Test func aCopyFromAnOlderReleaseCounts() throws {
+        let scratch = ScratchHome()
+        try scratch.write("#!/bin/bash\n# Sends commands to Dynotch through its dynotch:// URL scheme.\n", to: ".local/bin/dynotch")
+        #expect(scratch.setup.state(of: .command) == .outOfDate)
+    }
+
+    @Test func aCopyGoesToTheBackupsFirst() throws {
+        let scratch = ScratchHome()
+        try scratch.write(script + "# mine\n", to: ".local/bin/dynotch")
+        try scratch.install([.command])
+        let backups = try FileManager.default.contentsOfDirectory(at: scratch.setup.backupsURL, includingPropertiesForKeys: nil)
+        let copy = try #require(backups.first { $0.lastPathComponent.hasPrefix("dynotch-") })
+        #expect(try String(contentsOf: copy, encoding: .utf8) == script + "# mine\n")
+    }
+
+    @Test func aLinkToTheScriptInACheckoutIsPutRight() throws {
+        let scratch = ScratchHome()
+        try scratch.write(script, to: "code/dynotch/scripts/dynotch")
+        try FileManager.default.createDirectory(at: scratch.setup.linkURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(atPath: scratch.setup.linkURL.path,
+                                                   withDestinationPath: scratch.home.appendingPathComponent("code/dynotch/scripts/dynotch").path)
+        #expect(scratch.setup.state(of: .command) == .outOfDate)
+        try scratch.install([.command])
+        #expect(scratch.setup.state(of: .command) == .installed)
+        #expect(scratch.read("code/dynotch/scripts/dynotch") == script)
+    }
+
+    @Test func aCopyIsntOursToTakeOut() throws {
+        let scratch = ScratchHome()
+        try scratch.write(script, to: ".local/bin/dynotch")
+        #expect(!scratch.setup.canUndo(.command))
+        #expect(scratch.setup.undoChanges(for: [.command]).isEmpty)
+        try scratch.undo()
+        #expect(scratch.read(".local/bin/dynotch") == script)
+    }
+
+    @Test func aCopyChangedAfterTheReviewStays() throws {
+        let scratch = ScratchHome()
+        try scratch.write(script, to: ".local/bin/dynotch")
+        let reviewed = scratch.setup.fingerprint
+        try scratch.write(script + "# mine\n", to: ".local/bin/dynotch")
+        #expect(throws: TerminalSetup.Failure.changedSinceReview) { try scratch.setup.install([.command], reviewed: reviewed) }
+        #expect(scratch.read(".local/bin/dynotch") == script + "# mine\n")
+    }
+
+    @Test func aFileSwappedInAfterTheReviewStays() throws {
+        let scratch = ScratchHome()
+        try scratch.write(script, to: ".local/bin/dynotch")
+        let reviewed = scratch.setup.fingerprint
+        try scratch.write("#!/bin/sh\n", to: ".local/bin/dynotch")
+        #expect(throws: TerminalSetup.Failure.changedSinceReview) { try scratch.setup.install([.command], reviewed: reviewed) }
         #expect(scratch.read(".local/bin/dynotch") == "#!/bin/sh\n")
     }
 
@@ -640,6 +729,23 @@ struct TerminalSetupModelTests {
     private func model() -> (ScratchHome, TerminalSetupModel) {
         let scratch = ScratchHome()
         return (scratch, TerminalSetupModel(setup: scratch.setup))
+    }
+
+    @Test func aFileInTheWayCanBeShown() throws {
+        let (scratch, model) = model()
+        try scratch.write("#!/bin/sh\n", to: ".local/bin/dynotch")
+        model.refresh()
+        #expect(model.fileInTheWay == scratch.setup.linkURL)
+    }
+
+    @Test func aCopyOfTheScriptNeedsNoFinder() throws {
+        let (scratch, model) = model()
+        try scratch.write(TerminalSetup.scriptStart + "\n", to: ".local/bin/dynotch")
+        model.refresh()
+        #expect(model.fileInTheWay == nil)
+        #expect(model.canInstall)
+        model.reviewInstall()
+        #expect(model.selection == Set(SetupItem.allCases))
     }
 
     @Test func aReviewStartsWithEverythingThatCanGoIn() {

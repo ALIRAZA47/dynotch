@@ -74,6 +74,8 @@ struct TerminalSetup {
 
     static let blockStart = "# >>> Dynotch >>>"
     static let blockEnd = "# <<< Dynotch <<<"
+    /// How every version of the `dynotch` script starts.
+    static let scriptStart = "#!/bin/bash\n# Sends commands to Dynotch"
 
     /// The home folder, the real one for the app.
     let home: URL
@@ -116,10 +118,24 @@ struct TerminalSetup {
     private var commandState: State {
         guard let target = try? manager.destinationOfSymbolicLink(atPath: linkURL.path) else {
             guard exists(linkURL) else { return .notInstalled }
-            return .blocked("~/.local/bin/dynotch is something else, so it stays.")
+            return strayScript ? .outOfDate : .blocked("Another file is at ~/.local/bin/dynotch. Move it away to set this up.")
         }
         if target == commandInApp.path { return .installed }
-        return Self.isDynotchCommand(target) ? .outOfDate : .blocked("~/.local/bin/dynotch points somewhere else, so it stays.")
+        return Self.isDynotchCommand(target) || strayScript
+            ? .outOfDate : .blocked("~/.local/bin/dynotch links to something else. Remove the link to set this up.")
+    }
+
+    /// The script itself at the link's path, rather than a link into the app: copied there, or linked
+    /// from a checkout. It can't work from there, since it finds its binary beside itself in the app.
+    private var strayScript: Bool {
+        if let target = try? manager.destinationOfSymbolicLink(atPath: linkURL.path), Self.isDynotchCommand(target) { return false }
+        var info = stat()
+        // Only a plain file: opening a pipe would wait for ever.
+        guard stat(linkURL.path, &info) == 0, info.st_mode & S_IFMT == S_IFREG,
+              let file = try? FileHandle(forReadingFrom: linkURL) else { return false }
+        defer { try? file.close() }
+        let start = Data(Self.scriptStart.utf8)
+        return (try? file.read(upToCount: start.count)) == start
     }
 
     private var longCommandsState: State {
@@ -155,7 +171,7 @@ struct TerminalSetup {
     /// installed can still come out.
     private var commandInTheWay: State? {
         guard case .blocked = commandState, !hasOurSettings else { return nil }
-        return .blocked("It needs ~/.local/bin/dynotch, which is something else.")
+        return .blocked("This needs the dynotch command first.")
     }
 
     private var hasOurSettings: Bool {
@@ -172,7 +188,9 @@ struct TerminalSetup {
         for item in Self.withNeeds(items, in: self) where canInstall(item) {
             switch item {
             case .command:
-                changes.append(Change(item: item, summary: "Link it into ~/.local/bin, which needs no password",
+                changes.append(Change(item: item,
+                                      summary: strayScript ? "Replace the old dynotch script in ~/.local/bin with a link"
+                                                           : "Link it into ~/.local/bin, which needs no password",
                                       text: "\(Self.tilde(linkURL.path, in: home)) → \(commandInApp.path)"))
             case .longCommands:
                 let text = read(zshrcURL) ?? ""
@@ -226,9 +244,11 @@ struct TerminalSetup {
     }
 
     func canUndo(_ item: SetupItem) -> Bool {
+        // This card didn't put it there, so there's nothing of its own to take out.
+        if item == .command, strayScript { return false }
         switch state(of: item) {
-        case .installed, .outOfDate: true
-        case .notInstalled, .blocked: false
+        case .installed, .outOfDate: return true
+        case .notInstalled, .blocked: return false
         }
     }
 
@@ -256,6 +276,7 @@ struct TerminalSetup {
     var fingerprint: String {
         [zshrcURL, settingsURL].map { read($0) ?? "" }.joined(separator: "\u{0}")
             + ((try? manager.destinationOfSymbolicLink(atPath: linkURL.path)) ?? "")
+            + (strayScript ? read(linkURL) ?? "" : "")
     }
 
     // MARK: Changing things
@@ -292,7 +313,11 @@ struct TerminalSetup {
     private func installLink() throws {
         do {
             try manager.createDirectory(at: linkURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if commandState == .outOfDate { try manager.removeItem(at: linkURL) }
+            if commandState == .outOfDate {
+                // A copy could have someone's edits in it. A link has nothing to keep.
+                if (try? manager.destinationOfSymbolicLink(atPath: linkURL.path)) == nil { try backUp(linkURL) }
+                try manager.removeItem(at: linkURL)
+            }
             try manager.createSymbolicLink(atPath: linkURL.path, withDestinationPath: commandInApp.path)
         } catch {
             throw Failure.couldNotWrite("~/.local/bin/dynotch")

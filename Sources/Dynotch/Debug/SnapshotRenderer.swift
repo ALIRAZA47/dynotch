@@ -671,6 +671,15 @@ enum SnapshotRenderer {
     /// the undo. It works on the scratch home `render` gave it, as the real thing would.
     private static func renderTerminalSetup(into folder: URL) {
         let model = TerminalSetupModel.shared
+        let home = FileManager.default.temporaryDirectory.appendingPathComponent("dynotch-snapshot-home-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: home) }
+        // A home with `text` where the link goes.
+        func inTheWay(_ text: String) {
+            let file = home.appendingPathComponent(".local/bin/dynotch")
+            try? FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? text.write(to: file, atomically: false, encoding: .utf8)
+            model.useSample(home: home)
+        }
         let stages: [(name: String, appearance: NSAppearance.Name, stage: @MainActor () -> Void)] = [
             ("setup-1-rest", .darkAqua, { model.cancel() }),
             ("setup-2-review", .darkAqua, { model.stageReview() }),
@@ -679,6 +688,9 @@ enum SnapshotRenderer {
                 model.applyForSample()
             }),
             ("setup-4-undo", .aqua, { model.stageReview(undo: true) }),
+            ("setup-5-old-script", .darkAqua, { inTheWay(TerminalSetup.scriptStart + "\n") }),
+            ("setup-6-old-script-review", .darkAqua, { model.stageReview() }),
+            ("setup-7-other-file", .darkAqua, { inTheWay("#!/bin/sh\n") }),
         ]
         var count = 0
         for (index, stage) in stages.enumerated() {
