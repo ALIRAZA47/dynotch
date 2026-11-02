@@ -5,9 +5,9 @@
 #
 # The identity goes in a keychain of its own, ~/Library/Keychains/dynotch-signing.keychain-db,
 # with a password you choose here. That keychain stays out of the search list and locks when
-# the Mac sleeps and an hour after it was last used, so another process on this Mac can't
-# quietly sign a changed Dynotch with the identity and inherit the permissions you gave the
-# app. build.sh asks for the password when the keychain is locked.
+# a build ends, when the Mac sleeps and an hour after it was last used, so another process on
+# this Mac can't quietly sign a changed Dynotch with the identity and inherit the permissions
+# you gave the app. build.sh asks for the password when the keychain is locked.
 #
 # An identity an earlier version of this script put in the login keychain is moved across,
 # so the permissions macOS tied to its certificate stay.
@@ -38,8 +38,13 @@ else
     [ "$PASS" = "$AGAIN" ] || { echo "The passwords differ." >&2; exit 1; }
     [ -n "$PASS" ] || { echo "The password can't be empty." >&2; exit 1; }
     mkdir -p "$(dirname "$KEYCHAIN")"
+    # create-keychain adds it to the search list, where a locked keychain can bring up password
+    # dialogs in other apps, so the list goes back. build.sh names this keychain when it signs.
+    SEARCH_LIST=()
+    while IFS= read -r entry; do SEARCH_LIST+=("$entry"); done < <(security list-keychains -d user | sed -E 's/^ *"//; s/" *$//')
     security create-keychain -p "$PASS" "$KEYCHAIN"
-    # Locks when the Mac sleeps and an hour after its last use. Never added to the search list.
+    security list-keychains -d user -s ${SEARCH_LIST[@]+"${SEARCH_LIST[@]}"}
+    # Locks when the Mac sleeps and an hour after its last use.
     security set-keychain-settings -l -u -t 3600 "$KEYCHAIN"
     echo "Created $KEYCHAIN."
 fi
@@ -97,5 +102,5 @@ printf 'int main(void) { return 0; }\n' > "$WORK/probe.c"
 clang -o "$WORK/probe" "$WORK/probe.c"
 codesign --force --sign "$NAME" --keychain "$KEYCHAIN" --timestamp=none "$WORK/probe"
 codesign --display --verbose=2 "$WORK/probe" 2>&1 | grep '^Authority'
-echo "build.sh signs with it. The keychain is open now; it locks when the Mac sleeps or after an hour,"
+echo "build.sh signs with it. The keychain is open now; it locks when a build ends, when the Mac sleeps or after an hour,"
 echo "and \"security lock-keychain '$KEYCHAIN'\" locks it sooner."

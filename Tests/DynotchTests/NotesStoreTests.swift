@@ -28,6 +28,23 @@ final class NotesStoreTests {
 
     private static let edited = "Groceries\n- eggs\n- milk"
 
+    /// The old scratchpad's text and a chosen folder both come from the defaults, which anything can write.
+    @Test func theScratchpadOnlyMovesIntoDynotchsOwnFolder() throws {
+        let key = "notes.text"
+        UserDefaults.dynotch.set("Left over", forKey: key)
+        defer { UserDefaults.dynotch.removeObject(forKey: key) }
+        let own = folder.appendingPathComponent("Own", isDirectory: true)
+        try FileManager.default.createDirectory(at: own, withIntermediateDirectories: true)
+
+        NotesStore(folder: folder, defaultFolder: own).migrateScratchpad()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path).sorted() == ["Groceries.md", "Own"])
+        #expect(UserDefaults.dynotch.string(forKey: key) == "Left over")
+
+        NotesStore(folder: own).migrateScratchpad()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: own.path) == ["Left over.md"])
+        #expect(UserDefaults.dynotch.string(forKey: key) == nil)
+    }
+
     private var onDisk: String? { try? String(contentsOf: file, encoding: .utf8) }
 
     private func edit() throws {

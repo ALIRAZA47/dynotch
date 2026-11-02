@@ -6,21 +6,24 @@ import SwiftUI
 @main
 enum DynotchApp {
     static func main() {
-        // The `dynotch` command, for anything that has to hear back from the notch. No app, no windows.
-        if CommandLine.arguments.dropFirst().first == "--cli" {
-            exit(CommandLineClient.run(Array(CommandLine.arguments.dropFirst(2))))
-        }
         MainActor.assumeIsolated {
             // Before anything reads a setting: a snapshot run works against scratch defaults with
             // sample values, never the real ones, and needs somewhere to put the images. The
             // capture self-test and the energy probe work against the scratch defaults too.
+            // Snapshots and the self-test write and delete in a folder they're told, with all the app
+            // has been allowed, so they're only in debug builds.
+            #if DEBUG
             if let index = CommandLine.arguments.firstIndex(of: "--snapshot") {
                 guard CommandLine.arguments.count > index + 1 else {
                     FileHandle.standardError.write(Data("Usage: Dynotch --snapshot <folder> [--only <prefix>,<prefix>…]\n".utf8))
                     exit(2)
                 }
                 SnapshotRenderer.useScratchDefaults()
-            } else if CommandLine.arguments.contains("--capture-self-test") || CommandLine.arguments.contains("--energy-probe") {
+            } else if CommandLine.arguments.contains("--capture-self-test") {
+                SnapshotRenderer.useScratchDefaults()
+            }
+            #endif
+            if CommandLine.arguments.contains("--energy-probe") {
                 SnapshotRenderer.useScratchDefaults()
             }
             let app = NSApplication.shared
@@ -46,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let arguments = CommandLine.arguments
+        #if DEBUG
         if let index = arguments.firstIndex(of: "--snapshot"), arguments.count > index + 1 {
             // `--only 10-open,settings-1` renders just the images whose names start with one of those.
             let only = arguments.firstIndex(of: "--only").flatMap { arguments.indices.contains($0 + 1) ? arguments[$0 + 1] : nil }
@@ -55,6 +59,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.terminate(nil)
             return
         }
+        #endif
         if let index = arguments.firstIndex(of: "--energy-probe") {
             // `--energy-probe notch` measures only the closed notch: seconds rather than minutes.
             EnergyProbe.run(notchOnly: arguments.dropFirst(index + 1).first == "notch")
@@ -65,6 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // `--capture-self-test <folder>` drives the capture tools with synthesized events, writes what
         // it made there, and quits. Like a snapshot it starts no services, so it never reads the real
         // Tray or the notes.
+        #if DEBUG
         if let index = arguments.firstIndex(of: "--capture-self-test") {
             let folder = arguments.count > index + 1 ? arguments[index + 1] : FileManager.default.temporaryDirectory.path
             Task { @MainActor in
@@ -74,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return
         }
+        #endif
 
         NSApp.mainMenu = Self.makeMainMenu()
         // Paces every service's polls, so it knows from the start whether anyone's looking.
@@ -106,8 +113,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AgentDeck.shared.start()
         UsageStore.shared.start()
         CIMonitor.shared.start()
-        // Not for the capture tests, which run the whole app beside the real one.
-        if !arguments.contains("--capture-self-test"), !arguments.contains("--capture-test") { SocketRouter.shared.start() }
+        // Not for the capture test, which runs the whole app beside the real one.
+        if !arguments.contains("--capture-test") { SocketRouter.shared.start() }
         // Asks GitHub for the newest release a little after launch, once a day.
         UpdateChecker.shared.start()
         NotchManager.shared.start()

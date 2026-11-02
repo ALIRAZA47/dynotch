@@ -1,4 +1,5 @@
 import Darwin
+import DynotchShared
 import Foundation
 
 /// The things the Terminal setup card can put in place. Each one needs the one before it to work,

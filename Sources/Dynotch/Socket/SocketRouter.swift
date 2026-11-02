@@ -1,3 +1,4 @@
+import DynotchShared
 import Foundation
 
 /// Hands each request from the socket to whoever deals with it, on the main actor. Each feature
@@ -17,7 +18,7 @@ final class SocketRouter {
     private var server: LocalSocketServer?
 
     /// Starts listening. Whoever has ops to register does that first, so no request finds them missing.
-    func start(path: String = SocketLocation.current()) {
+    func start(path: String = SocketLocation.standard) {
         guard server == nil else { return }
         let server = LocalSocketServer(path: path) { [weak self] request, connection in
             DispatchQueue.main.async {

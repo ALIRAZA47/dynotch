@@ -168,15 +168,15 @@ private struct UpdateRow: View {
             case .downloading(let fraction):
                 return fraction.map { "\(Int(($0 * 100).rounded()))% downloaded." } ?? "Starting the download."
             case .verifying:
-                return "Making sure it's Dynotch, signed with the same certificate as this copy."
+                return "Making sure it's Dynotch, signed with a certificate this copy trusts."
             case .installing:
-                return "Dynotch reopens in a moment. Settings, notes, the Tray and permissions stay."
+                return "Dynotch reopens in a moment. Settings, notes and the Tray stay."
             case .failed(let message):
                 return message
             case .idle:
                 let released = release.publishedAt.map { " Released \($0.formatted(date: .abbreviated, time: .omitted))." } ?? ""
                 if canInstall(release) {
-                    return "You have \(UpdateChecker.currentVersion).\(released) Install and Relaunch downloads it, checks it's signed like this copy, puts it in place and reopens Dynotch."
+                    return "You have \(UpdateChecker.currentVersion).\(released) Install and Relaunch downloads it, checks its signature, puts it in place and reopens Dynotch."
                 }
                 return "You have \(UpdateChecker.currentVersion).\(released) Download opens the disk image; then quit Dynotch and replace it in Applications."
             }

@@ -1,3 +1,4 @@
+import DynotchShared
 import SwiftUI
 
 extension SnapshotRenderer {

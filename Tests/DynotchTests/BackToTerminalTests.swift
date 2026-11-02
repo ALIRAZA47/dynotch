@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import Testing
 @testable import Dynotch
+import DynotchShared
 
 private let sessionUUID = "7E0D7E04-8FD6-4E87-A1F0-5B61A7A6AB7B"
 private let sessionID = "w0t1p2:\(sessionUUID)"

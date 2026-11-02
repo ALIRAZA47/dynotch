@@ -1,3 +1,4 @@
+import DynotchShared
 import SwiftUI
 
 /// The sessions, in a tab that's only there while there are some. A waiting session has Review,

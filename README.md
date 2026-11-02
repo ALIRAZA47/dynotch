@@ -83,10 +83,10 @@ To use the `dynotch` command from Terminal, see [Scripting](#scripting).
 after launch, and a new version is announced in the notch. The check is one request to
 `api.github.com` that carries nothing but the app's version. **Install and Relaunch** downloads the
 release's zip, checks that the app inside is Dynotch, the version announced and newer, and
-signed with the same certificate as the copy you have, puts it in place and reopens Dynotch,
-which says so in the notch. Only the key that signs Dynotch's releases can make an app that
-passes, so a tampered download is refused. Settings, notes, Tray files and the permissions you
-gave it stay, as macOS sees the same app. A copy that can't replace itself, like one run
+signed with a certificate your copy trusts, puts it in place and reopens Dynotch, which says
+so in the notch. Only Dynotch's own release keys can make an app that passes, so a tampered
+download is refused. Settings, notes and Tray files stay, and so do the permissions you gave
+it, unless a release says otherwise in its notes. A copy that can't replace itself, like one run
 straight from the disk image, offers **Download** instead: it opens the new disk image in your
 browser; then quit Dynotch from its menu bar icon and replace the app in Applications.
 
@@ -139,12 +139,13 @@ calendars and Apple events.
 
 For development, `swift build` and `.build/debug/Dynotch` also work, and `./scripts/test.sh` runs
 the tests.
-`Dynotch --snapshot <folder>` renders every notch state with sample data to PNGs,
+In a debug build, `Dynotch --snapshot <folder>` renders every notch state with sample data to PNGs,
 which is handy for reviewing UI changes. `Dynotch --energy-probe` counts how often the polls
 would run and wake the Mac in an hour, in each of the conditions under [Energy](#energy).
 `Dynotch --capture-test` opens the capture editor over a made-up picture of each display, so
-its tools can be tried without Screen Recording access, and `Dynotch --capture-self-test <folder>`
-drives them with synthesized events off screen, prints a line per check and leaves the result there.
+its tools can be tried without Screen Recording access, and in a debug build
+`Dynotch --capture-self-test <folder>` drives them with synthesized events off screen, prints a line
+per check and leaves the result there.
 
 ## Scripting
 
@@ -176,7 +177,9 @@ ln -s /Applications/Dynotch.app/Contents/Resources/dynotch ~/.local/bin/dynotch
 `progress` and `status` go over a Unix domain socket, since a link can't answer back. It sits in a
 folder only your user can open, never on a network port, and Dynotch checks who's on the other end
 of each connection. The socket can tell the notch something or ask what it's showing. It can't run
-anything. If Dynotch isn't running, these two say so and exit with 1.
+anything. If Dynotch isn't running, these two say so and exit with 1. They run in
+`Contents/Helpers/DynotchCommand`, a small binary signed apart from the app, so nothing the command
+starts can use the permissions you've given Dynotch.
 
 Other apps can open the same links, for example
 `dynotch://notify?text=Hello&tint=orange`, `dynotch://timer/start`, `dynotch://profile?name=Work` or
@@ -354,12 +357,14 @@ Sources/Dynotch/
   HUD/        volume (CoreAudio) and brightness monitors, media-key tap
   Notifications/  notification peeks: Notification Center reader, settings
   Activities/ microphone and camera, downloads, Focus
-  Socket/     the local socket, the dynotch command's side of it, and what scripts report
+  Socket/     the local socket and what scripts report
   Agents/     Claude Code's sessions and usage, CI, and going back to a terminal
   Profiles/   saved setups and the rules that switch them
   Settings/   settings window and permissions page
   Welcome/    the first-run welcome tour
   Debug/      snapshot renderer, energy probe, capture self-test
+Sources/DynotchCommand/  the dynotch command's own binary, which the app never links
+Sources/DynotchShared/   what the app and the command both need, with nothing that runs a command
 Tests/        the tests, run with scripts/test.sh
 Support/      Info.plist, entitlements, app icon
 scripts/      build and signing scripts, icon generator, the dynotch command and the zsh hook

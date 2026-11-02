@@ -1,68 +1,10 @@
+import DynotchShared
 import SwiftUI
 
-/// One of Claude's two limits.
-enum UsageLimit: String, CaseIterable {
-    case fiveHour, sevenDay
-
-    /// What Claude Code calls it in the status line's JSON.
-    var statusLineKey: String { self == .fiveHour ? "five_hour" : "seven_day" }
-    /// As in "62% of your 5 hours".
-    var name: String { self == .fiveHour ? "5 hours" : "7 days" }
-    /// As in "62% of 5 h".
-    var shortName: String { self == .fiveHour ? "5 h" : "7 d" }
-
-    /// "62% of 5 h", or "5 h reset" once the number means nothing.
-    func short(percent: Int, hasReset: Bool) -> String {
-        hasReset ? "\(shortName) reset" : "\(percent)% of \(shortName)"
-    }
-}
-
-/// How much of a limit has been used, and when it starts over.
-struct UsageWindow: Codable, Equatable {
-    /// Where the heads-up comes, and the ring turns orange.
-    static let warnsAt = 80
-    /// Where the ring turns red.
-    static let nearlyOutAt = 95
-    /// A limit lasts a week at most, so a reset this far from now, either way, isn't one.
-    static let furthestReset: TimeInterval = 30 * 24 * 3600
-
-    /// Whole percent, as shown, so the ring and the heads-up can't disagree.
-    var percent: Int
-    var resetsAt: Date
-
-    init(percent: Int, resetsAt: Date) {
-        self.percent = percent
-        self.resetsAt = resetsAt
-    }
-
-    /// Nil if either number makes no sense. `resetsAt` is in epoch seconds.
-    init?(used: Double?, resetsAt: Double?, now: Date) {
-        guard let percent = Self.percent(used), let resetsAt, resetsAt.isFinite else { return nil }
-        let date = Date(timeIntervalSince1970: resetsAt)
-        guard abs(date.timeIntervalSince(now)) <= Self.furthestReset else { return nil }
-        self.init(percent: percent, resetsAt: date)
-    }
-
-    var fraction: Double { Double(percent) / 100 }
-
-    /// Past this, its number no longer means anything.
-    func hasReset(at now: Date) -> Bool { resetsAt <= now }
-
+extension UsageWindow {
     /// `normal`, warming up toward the limit.
     func tint(_ normal: Color) -> Color {
         percent >= Self.nearlyOutAt ? .red : percent >= Self.warnsAt ? .orange : normal
-    }
-
-    /// 0 to 100, or nil for anything that isn't a number.
-    static func percent(_ used: Double?) -> Int? {
-        guard let used, used.isFinite else { return nil }
-        return Int(min(max(used, 0), 100).rounded())
-    }
-
-    /// A number from JSON. A boolean arrives as an NSNumber too, and it isn't one.
-    static func number(_ value: Any?) -> Double? {
-        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
-        return number.doubleValue
     }
 }
 

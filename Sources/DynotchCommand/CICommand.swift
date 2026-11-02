@@ -1,3 +1,4 @@
+import DynotchShared
 import Foundation
 
 /// `dynotch ci`: starts watching the runs for this branch. What's in the current folder is read here
@@ -103,7 +104,7 @@ enum CICommand {
         }
         var name = path.split(separator: "/").joined(separator: "/")
         if name.hasSuffix(".git") { name.removeLast(4) }
-        return CIMonitor.isRepository(name) ? name : nil
+        return GitHubName.isRepository(name) ? name : nil
     }
 
     /// Where SSH would really go for a host. `ssh -G` prints its settings and connects to nothing.

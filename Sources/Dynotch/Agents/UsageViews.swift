@@ -1,3 +1,4 @@
+import DynotchShared
 import SwiftUI
 
 /// The usage ring, and how old its numbers are. The ring shows the fuller of the two limits, so the

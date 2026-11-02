@@ -167,3 +167,5 @@ These two are for Claude Code to run, and read its JSON on their input. `statusl
 ## How it talks to the app
 
 `progress`, `status`, `ci`, `statusline` and `hook` go through a local socket, since a link can't answer back. It's a Unix domain socket in `~/Library/Application Support/Dynotch/run`, a folder only your user can open, and never a network port. Dynotch also checks who's on the other end of each connection. The socket can tell the notch something or ask what it's showing. It can't run anything, and nothing sent to it can answer a tool call.
+
+These commands run in a small binary of their own inside the app, signed apart from it. So nothing they start can use the permissions you've given Dynotch.

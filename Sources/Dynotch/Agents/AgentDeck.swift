@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import DynotchShared
 import SwiftUI
 
 /// A Claude Code session the hooks have told Dynotch about.

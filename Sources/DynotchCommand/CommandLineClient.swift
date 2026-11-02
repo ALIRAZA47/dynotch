@@ -1,8 +1,10 @@
+import DynotchShared
 import Foundation
 
-/// `Dynotch --cli …`: the part of the `dynotch` command that has to hear back from the notch.
-/// `scripts/dynotch` comes here for those and keeps to `dynotch://` links for the rest. This runs
-/// before anything of the app starts, and it never touches the app's settings.
+/// The part of the `dynotch` command that has to hear back from the notch. `scripts/dynotch` comes
+/// here for those and keeps to `dynotch://` links for the rest. It's a binary of its own, signed as
+/// itself: macOS gives permissions to a signed identity, so nothing this runs, like a status line's
+/// `--then`, can use what the user has allowed the app. It never touches the app's settings.
 enum CommandLineClient {
     /// What a command reads and writes, so tests can stand in for the terminal. These are the calls
     /// that throw: the older ones raise an exception that ends the process if either end is closed.
@@ -21,7 +23,7 @@ enum CommandLineClient {
     static func run(_ arguments: [String], io: IO = IO()) -> Int32 {
         guard let command = arguments.first else { return wrongUse(io) }
         let rest = Array(arguments.dropFirst())
-        let socket = SocketClient(path: SocketLocation.current(environment: io.environment))
+        let socket = SocketClient(path: SocketLocation.forCommand(environment: io.environment))
         switch command {
         case "progress": return progress(rest, socket, io)
         case "status": return status(rest, socket, io)

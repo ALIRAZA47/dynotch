@@ -2,6 +2,7 @@ import Darwin
 import Foundation
 import Testing
 @testable import Dynotch
+import DynotchShared
 
 struct OrderedJSONTests {
     private let claudeSettings = """
@@ -720,7 +721,7 @@ struct TerminalSetupModelTests {
 /// and the real binary, a scratch home, and a real zsh and bash.
 struct TerminalSetupInstalledTests {
     private static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    private static let binary = root.appendingPathComponent(".build/debug/Dynotch").path
+    private static let binary = root.appendingPathComponent(".build/debug/DynotchCommand").path
     private static var hasBinary: Bool { FileManager.default.isExecutableFile(atPath: binary) }
 
     /// Puts the app in place and installs everything.
@@ -730,9 +731,9 @@ struct TerminalSetupInstalledTests {
         for name in ["dynotch", "notify-long-commands.zsh"] {
             try manager.copyItem(at: Self.root.appendingPathComponent("scripts/\(name)"), to: scratch.resources.appendingPathComponent(name))
         }
-        let macOS = scratch.resources.deletingLastPathComponent().appendingPathComponent("MacOS")
-        try manager.createDirectory(at: macOS, withIntermediateDirectories: true)
-        try manager.createSymbolicLink(atPath: macOS.appendingPathComponent("Dynotch").path, withDestinationPath: Self.binary)
+        let helpers = scratch.resources.deletingLastPathComponent().appendingPathComponent("Helpers")
+        try manager.createDirectory(at: helpers, withIntermediateDirectories: true)
+        try manager.createSymbolicLink(atPath: helpers.appendingPathComponent("DynotchCommand").path, withDestinationPath: Self.binary)
         try scratch.install()
         return scratch
     }

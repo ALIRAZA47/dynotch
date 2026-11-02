@@ -45,6 +45,8 @@ ensure_unlocked() {
 if [ -f "$KEYCHAIN" ] && security find-identity -p codesigning "$KEYCHAIN" 2> /dev/null | grep -Fq "\"$IDENTITY\""; then
     SIGNING=keychain
     ensure_unlocked
+    # Only open while a build needs it.
+    trap 'security lock-keychain "$KEYCHAIN"' EXIT
 elif security find-identity -p codesigning | grep -Fq "\"$IDENTITY\""; then
     SIGNING=login
 else
@@ -62,16 +64,20 @@ if [ ! -f "$ROOT/Support/AppIcon.icns" ]; then
 fi
 
 rm -rf "$STAGE"
-mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Resources"
+mkdir -p "$STAGE/Contents/MacOS" "$STAGE/Contents/Helpers" "$STAGE/Contents/Resources"
 cp "$BIN_DIR/Dynotch" "$STAGE/Contents/MacOS/Dynotch"
+cp "$BIN_DIR/DynotchCommand" "$STAGE/Contents/Helpers/DynotchCommand"
 cp "$ROOT/Support/Info.plist" "$STAGE/Contents/Info.plist"
 cp "$ROOT/Support/AppIcon.icns" "$STAGE/Contents/Resources/AppIcon.icns"
 # The command-line tool travels with the app, so it can be linked onto PATH from wherever the app lives.
 cp "$ROOT/scripts/dynotch" "$ROOT/scripts/notify-long-commands.zsh" "$STAGE/Contents/Resources/"
 
 # The hardened runtime keeps other processes from loading code into Dynotch, which holds every
-# permission the user gave it. The entitlements list what it still needs to reach.
+# permission the user gave it. The entitlements list what it still needs to reach. macOS gives those
+# permissions to a signed identity, so the command, which runs what it's told to, is signed as
+# something else and goes first, since the app's signature covers it.
 sign() {
+    codesign --force --options runtime --identifier app.dynotch.command --timestamp=none "$@" "$STAGE/Contents/Helpers/DynotchCommand"
     codesign --force --options runtime --entitlements "$ROOT/Support/Dynotch.entitlements" --timestamp=none "$@" "$STAGE"
 }
 case $SIGNING in

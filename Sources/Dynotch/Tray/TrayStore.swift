@@ -41,7 +41,7 @@ final class TrayStore: ObservableObject {
     init(support: URL) {
         folder = support.appendingPathComponent("Tray", isDirectory: true)
         indexURL = support.appendingPathComponent("tray.json")
-        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        keepFolderReal()
     }
 
     var urls: [URL] { items.map(\.url) }
@@ -78,7 +78,9 @@ final class TrayStore: ObservableObject {
         if !automatically {
             for index in items.indices where urls.contains(items[index].url) { items[index].isAutomatic = false }
         }
-        let copies = AppSettings.shared.trayCopiesFiles
+        // Only what someone put here. What comes by itself comes from folders macOS keeps other apps
+        // out of, and a copy in the Tray's folder would be outside that.
+        let copies = AppSettings.shared.trayCopiesFiles && !automatically
         var added: [Item] = []
         for url in urls where !items.contains(where: { $0.url == url }) && !added.contains(where: { $0.url == url }) {
             if copies, !isInTrayFolder(url), let copy = try? copyIntoTray(url) {
@@ -99,6 +101,7 @@ final class TrayStore: ObservableObject {
     func addFromScript(_ urls: [URL]) {
         let library = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library", isDirectory: true)
             .standardizedFileURL.path + "/"
+        // Resolving also corrects a path's case and takes it off the Data volume, which this relies on.
         let allowed = urls.prefix(20).map { $0.resolvingSymlinksInPath().standardizedFileURL }
             .filter { FileManager.default.fileExists(atPath: $0.path) && !$0.path.hasPrefix(library) }
         let fresh = allowed.filter { url in !items.contains { $0.url == url } }
@@ -171,11 +174,21 @@ final class TrayStore: ObservableObject {
         selection = items[min(max(index + offset, 0), items.count - 1)].id
     }
 
+    /// By where a path really leads, since a link in the folder could point anywhere.
     private func isInTrayFolder(_ url: URL) -> Bool {
-        url.standardizedFileURL.path.hasPrefix(folder.standardizedFileURL.path + "/")
+        url.standardizedFileURL.resolvingSymlinksInPath().path.hasPrefix(folder.standardizedFileURL.resolvingSymlinksInPath().path + "/")
+    }
+
+    /// A link in the folder's place would send what's saved here to wherever it points, with all the
+    /// app has been allowed. Removing a link leaves what it points at alone.
+    private func keepFolderReal() {
+        var info = stat()
+        if lstat(folder.path, &info) == 0, info.st_mode & S_IFMT == S_IFLNK { try? FileManager.default.removeItem(at: folder) }
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     }
 
     private func copyIntoTray(_ url: URL) throws -> URL {
+        keepFolderReal()
         let target = FileActions.uniqueURL(for: folder.appendingPathComponent(url.lastPathComponent))
         try FileManager.default.copyItem(at: url, to: target)
         return target

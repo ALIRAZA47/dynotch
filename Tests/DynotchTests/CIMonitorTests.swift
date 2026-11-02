@@ -2,6 +2,8 @@ import Darwin
 import Foundation
 import Testing
 @testable import Dynotch
+import DynotchShared
+@testable import DynotchCommand
 
 /// Stands in for `gh`: answers each call with the next of what it's given, and remembers the calls.
 private final class FakeGitHub: @unchecked Sendable {
@@ -643,7 +645,7 @@ struct CIMonitorTests {
 
     @Test(arguments: ["acme/app", "ACME-co/app.js", "a_b/c-d.e", "ALIRAZA47/dynotch"])
     func aRepositoryIsTaken(repository: String) {
-        #expect(CIMonitor.isRepository(repository))
+        #expect(GitHubName.isRepository(repository))
     }
 
     @Test(arguments: ["", "-delete", "--repo", "a b", "a\nb", "a\u{0}b", "a\tb", "a\u{1B}[0m", "a..b", "a~1", "a^b", "a:b", "a?b", "a*b",

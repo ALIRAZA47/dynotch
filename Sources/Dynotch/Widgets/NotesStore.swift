@@ -55,8 +55,8 @@ final class NotesStore: ObservableObject {
     private init() {
         defaultFolder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Dynotch/Notes", isDirectory: true)
-        // Anything can write a path into the defaults; only a folder that's there is used, and never
-        // created, written to or watched on the strength of the setting alone.
+        // Anything can write a path into the defaults; only a folder that's there is used, and it's
+        // never created or written to on the strength of the setting alone.
         let path = AppSettings.shared.notesFolderPath
         var isDirectory: ObjCBool = false
         if !path.isEmpty, FileManager.default.fileExists(atPath: path, isDirectory: &isDirectory), isDirectory.boolValue {
@@ -70,8 +70,8 @@ final class NotesStore: ObservableObject {
     }
 
     /// A store that keeps to `folder`, for the tests, which must never reach the real notes.
-    init(folder: URL) {
-        defaultFolder = folder
+    init(folder: URL, defaultFolder: URL? = nil) {
+        self.defaultFolder = defaultFolder ?? folder
         self.folder = folder
         folderWasMissing = false
     }
@@ -358,10 +358,11 @@ final class NotesStore: ObservableObject {
         self.stream = stream
     }
 
-    /// The single scratchpad Dynotch had before becomes the first note.
-    private func migrateScratchpad() {
+    /// The single scratchpad Dynotch had before becomes the first note, in Dynotch's own folder: the
+    /// text and a chosen folder are both in the defaults, so a chosen one could be anywhere.
+    func migrateScratchpad() {
         let key = "notes.text"
-        guard let text = UserDefaults.dynotch.string(forKey: key) else { return }
+        guard isUsingDefaultFolder, let text = UserDefaults.dynotch.string(forKey: key) else { return }
         guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             UserDefaults.dynotch.removeObject(forKey: key)
             return

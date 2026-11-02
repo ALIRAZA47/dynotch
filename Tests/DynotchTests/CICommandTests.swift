@@ -2,6 +2,8 @@ import Darwin
 import Foundation
 import Testing
 @testable import Dynotch
+@testable import DynotchCommand
+import DynotchShared
 
 private final class Terminal {
     var output = ""
@@ -308,7 +310,7 @@ struct RemoteURLTests {
 /// The real `scripts/dynotch` and the real binary, in a scratch repository.
 struct CIScriptTests {
     private static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    private static let binary = root.appendingPathComponent(".build/debug/Dynotch").path
+    private static let binary = root.appendingPathComponent(".build/debug/DynotchCommand").path
     private static var hasBinary: Bool { FileManager.default.isExecutableFile(atPath: binary) }
 
     private func dynotch(_ arguments: [String], in scratch: Scratch) throws -> (code: Int32, output: String, error: String) {

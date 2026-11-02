@@ -22,8 +22,8 @@ that keychain is locked. Without it the app is signed ad hoc and looks like a ne
 macOS after every build. Builds are signed with the hardened runtime; what the app may
 reach is listed in `Support/Dynotch.entitlements`.
 
-For a quick loop, `swift build` and `.build/debug/Dynotch` also work. Reviewing UI?
-`Dynotch --snapshot <folder>` renders every notch state with sample data to PNGs.
+For a quick loop, `swift build` and `.build/debug/Dynotch` also work. Reviewing UI? In a debug
+build, `Dynotch --snapshot <folder>` renders every notch state with sample data to PNGs.
 
 `./scripts/test.sh` runs the tests, with Xcode or with the Command Line Tools, where plain
 `swift test` can't find Swift Testing's macros.

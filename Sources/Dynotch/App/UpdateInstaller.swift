@@ -2,10 +2,10 @@ import AppKit
 import Security
 
 /// Installs a release over this copy of Dynotch: downloads its zip, checks that the app inside is
-/// Dynotch, the version announced and newer, and signed with the same certificate as this copy,
-/// puts it in this copy's place and opens it. The certificate is what keeps anything else out:
-/// only the key that signed this copy can make an app that passes. Settings, notes, the Tray and
-/// the permissions given to Dynotch stay, as macOS sees the same app.
+/// Dynotch, the version announced and newer, and signed with this copy's certificate or one in
+/// `successors`, puts it in this copy's place and opens it. The certificate is what keeps anything
+/// else out: only the keys behind those can make an app that passes. Settings, notes and the Tray
+/// stay. So do the permissions given to Dynotch while the certificate does, as macOS sees the same app.
 @MainActor
 final class UpdateInstaller: ObservableObject {
     static let shared = UpdateInstaller()
@@ -21,11 +21,18 @@ final class UpdateInstaller: ObservableObject {
 
     @Published private(set) var state = State.idle
 
+    /// The designated requirements of a certificate releases are moving to, so copies can follow.
+    /// An update can't vouch for itself, so the next certificate has to be named here, in a release
+    /// signed with the one before it. Empty unless a move is under way.
+    static let successors: [String] = [
+        #"identifier "app.dynotch.Dynotch" and certificate leaf = H"51bc69a0e02197c508ee11c35039a607b4490db0""#
+    ]
+
     private init() {}
 
-    /// This copy can replace itself: it's signed with a certificate, which an update has to match (an
-    /// ad hoc build has none), and it isn't running from somewhere read-only, like a disk image or the
-    /// copy macOS runs a downloaded app from until it's moved (App Translocation).
+    /// This copy can replace itself: it's signed with a certificate, which is what an update is checked
+    /// against (an ad hoc build has none), and it isn't running from somewhere read-only, like a disk
+    /// image or the copy macOS runs a downloaded app from until it's moved (App Translocation).
     var canInstall: Bool {
         Self.ownRequirement() != nil && Self.canReplace(Bundle.main.bundleURL)
     }
@@ -47,7 +54,7 @@ final class UpdateInstaller: ObservableObject {
         var staging: URL?
         do {
             guard archive.scheme == "https" else { throw InstallError.insecure }
-            guard let requirement = Self.ownRequirement() else { throw InstallError.unsigned }
+            guard let own = Self.ownRequirement() else { throw InstallError.unsigned }
             // Next to the app, so the swap is a rename on the same volume.
             let folder = try FileManager.default.url(for: .itemReplacementDirectory, in: .userDomainMask,
                                                      appropriateFor: target, create: true)
@@ -60,7 +67,8 @@ final class UpdateInstaller: ObservableObject {
                 }
             }.download(archive)
             state = .verifying
-            let app = try await Self.prepare(zip, in: folder, version: release.version, requirement: requirement)
+            let app = try await Self.prepare(zip, in: folder, version: release.version,
+                                             requirements: [own] + Self.requirements(from: Self.successors))
             state = .installing
             try Self.swap(app, into: target)
             try? FileManager.default.removeItem(at: folder)
@@ -74,9 +82,9 @@ final class UpdateInstaller: ObservableObject {
     // MARK: Steps
 
     /// Unpacks `zip` in `folder` and checks the app inside: Dynotch, at `version` and newer than
-    /// `current`, signed to meet `requirement`. Returns the app, without the download mark, so its
-    /// first launch doesn't stop at Gatekeeper.
-    static func prepare(_ zip: URL, in folder: URL, version: String, requirement: SecRequirement,
+    /// `current`, signed to meet one of `requirements`. Returns the app, without the download mark,
+    /// so its first launch doesn't stop at Gatekeeper.
+    static func prepare(_ zip: URL, in folder: URL, version: String, requirements: [SecRequirement],
                         bundleID: String? = Bundle.main.bundleIdentifier,
                         current: String = UpdateChecker.currentVersion) async throws -> URL {
         let unpacked = folder.appendingPathComponent("unpacked", isDirectory: true)
@@ -95,7 +103,7 @@ final class UpdateInstaller: ObservableObject {
             throw InstallError.wrongVersion(found)
         }
         removeQuarantine(from: app)
-        guard isSigned(app, meeting: requirement) else { throw InstallError.badSignature }
+        guard requirements.contains(where: { isSigned(app, meeting: $0) }) else { throw InstallError.badSignature }
         return app
     }
 
@@ -117,8 +125,8 @@ final class UpdateInstaller: ObservableObject {
 
     // MARK: Signatures
 
-    /// What an update has to meet: this copy's designated requirement, which names its bundle
-    /// identifier and the certificate that signed it. Nil for an ad hoc or unsigned build.
+    /// This copy's designated requirement, which names its bundle identifier and the certificate
+    /// that signed it. Nil for an ad hoc or unsigned build, which also ignores `successors`.
     static func ownRequirement() -> SecRequirement? {
         var code: SecCode?
         var staticCode: SecStaticCode?
@@ -136,6 +144,15 @@ final class UpdateInstaller: ObservableObject {
         var requirement: SecRequirement?
         guard SecCodeCopyDesignatedRequirement(code, [], &requirement) == errSecSuccess else { return nil }
         return requirement
+    }
+
+    /// Requirements parsed from text. One that doesn't parse is left out, so it can only refuse more.
+    static func requirements(from strings: [String]) -> [SecRequirement] {
+        strings.compactMap { string in
+            var requirement: SecRequirement?
+            guard SecRequirementCreateWithString(string as CFString, [], &requirement) == errSecSuccess else { return nil }
+            return requirement
+        }
     }
 
     /// Whether every part of `app`, nested code included, is intact and signed to meet `requirement`.
@@ -172,7 +189,7 @@ final class UpdateInstaller: ObservableObject {
         case InstallError.notDynotch: "The download isn't Dynotch, so it wasn't installed."
         case InstallError.wrongVersion(let found):
             "The download is version \(found.isEmpty ? "unknown" : found), not the one announced, so it wasn't installed."
-        case InstallError.badSignature: "The download isn't signed with this copy's certificate, so it wasn't installed."
+        case InstallError.badSignature: "The download isn't signed with a certificate this copy trusts, so it wasn't installed."
         case let error as URLError where error.code == .notConnectedToInternet: "You're offline. Try again once you're connected."
         case is URLError: "The download didn't finish. Check your connection and try again."
         case let error as CocoaError where error.code == .fileWriteNoPermission:
@@ -182,7 +199,7 @@ final class UpdateInstaller: ObservableObject {
     }
 }
 
-private enum InstallError: Error {
+enum InstallError: Error, Equatable {
     case insecure, unsigned, status(Int), unpack, notDynotch, wrongVersion(String), badSignature
 }
 

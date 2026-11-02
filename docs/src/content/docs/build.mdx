@@ -12,7 +12,7 @@ cd dynotch
 open build/Dynotch.app
 ```
 
-`scripts/build.sh` builds a release binary, generates the app icon if it's missing, assembles `build/Dynotch.app` and signs it. Move the app to `/Applications` before turning on **Launch at login**.
+`scripts/build.sh` builds the release binaries, generates the app icon if it's missing, assembles `build/Dynotch.app` and signs it. Move the app to `/Applications` before turning on **Launch at login**.
 
 For a quick loop, `swift build` and `.build/debug/Dynotch` also work.
 
@@ -26,9 +26,11 @@ Run this once first:
 
 It creates a self-signed "Dynotch Local Signing" certificate in a keychain of its own, `~/Library/Keychains/dynotch-signing.keychain-db`, with a password you choose. `build.sh` signs with it, so macOS keeps Dynotch's permissions across rebuilds.
 
-That keychain stays out of the keychain search list and locks when the Mac sleeps or an hour after it was last used, so nothing else on the Mac can sign with the identity unnoticed. `build.sh` asks for the password when it's locked.
+That keychain stays out of the keychain search list and locks when a build ends, when the Mac sleeps, and an hour after it was last used, so nothing else on the Mac can sign with the identity unnoticed. `build.sh` asks for the password when it's locked, so each build asks.
 
 Without an identity, the app is signed ad hoc, which looks like a new app to macOS after every build.
+
+The `dynotch` command is a binary of its own, at `Contents/Helpers/DynotchCommand`. `build.sh` signs it first, as `app.dynotch.command` and with no entitlements, then signs the app around it. macOS gives permissions to a signed identity, so nothing the command runs can use what you've allowed the app.
 
 The app is signed with the hardened runtime. `Support/Dynotch.entitlements` lists what it may still reach: the camera, location, calendars and Apple events.
 
@@ -44,10 +46,10 @@ This builds and signs a release, puts `Dynotch-<version>.dmg` and a `.zip` of th
 
 | Flag | What it does |
 |---|---|
-| `--snapshot <folder>` | Renders every state of the notch with sample data to PNGs. Add `--only <prefix>,<prefix>` for some of them. It's how the screenshots in these docs are made |
+| `--snapshot <folder>` | Debug builds only. Renders every state of the notch with sample data to PNGs. Add `--only <prefix>,<prefix>` for some of them. It's how the screenshots in these docs are made |
 | `--energy-probe` | Counts how often the polls would run and wake the Mac in an hour. See [Energy](/energy/) |
 | `--capture-test` | Opens the capture editor over a made-up picture of each display, so its tools can be tried without Screen Recording |
-| `--capture-self-test <folder>` | Drives the capture tools with synthesized events off screen, and prints a line per check |
+| `--capture-self-test <folder>` | Debug builds only. Drives the capture tools with synthesized events off screen, and prints a line per check |
 
 ## How the code is laid out
 

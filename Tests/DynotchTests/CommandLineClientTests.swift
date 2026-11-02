@@ -2,6 +2,8 @@ import Darwin
 import Foundation
 import Testing
 @testable import Dynotch
+@testable import DynotchCommand
+import DynotchShared
 
 /// A terminal that keeps what's written to it.
 private final class Terminal {
@@ -148,7 +150,7 @@ struct CommandLineClientTests {
 /// The real `scripts/dynotch` and the real binary, against a server in this test.
 struct DynotchScriptTests {
     private static let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-    private static let binary = root.appendingPathComponent(".build/debug/Dynotch").path
+    private static let binary = root.appendingPathComponent(".build/debug/DynotchCommand").path
     private static var hasBinary: Bool { FileManager.default.isExecutableFile(atPath: binary) }
 
     private func dynotch(_ arguments: [String], socket: String) throws -> (code: Int32, output: String, error: String) {
@@ -192,7 +194,7 @@ struct DynotchScriptTests {
     }
 
     @Test func theScriptWontRunABinaryItFoundElsewhere() throws {
-        // Not beside it inside an app, and not named by DYNOTCH_BIN: an older Dynotch would start up as a second copy.
+        // Not beside it inside an app, and not named by DYNOTCH_BIN: it could be anything.
         let process = Process()
         process.executableURL = Self.root.appendingPathComponent("scripts/dynotch")
         process.arguments = ["status"]

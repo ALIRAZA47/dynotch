@@ -1,6 +1,6 @@
 #!/bin/bash
 # Sends commands to Dynotch. Most go through its dynotch:// URL scheme. Those that
-# have to hear back use the app's local socket, through the app's own binary.
+# have to hear back use the app's local socket, through a small binary of their own.
 #
 #   dynotch notify TEXT [--detail TEXT] [--symbol SF_SYMBOL] [--tint COLOR] [--seconds N]
 #                       [--button TITLE --url https://...] [--key NAME]
@@ -39,9 +39,8 @@ encode() { printf '%s' "$1" | od -An -tx1 -v | tr -d ' \n' | sed 's/../%&/g'; }
 # -g keeps whatever app you're in at the front.
 send() { open -g "dynotch://$1"; }
 
-# The app's binary, which sits one folder over from this script inside Dynotch.app. Called through a
-# link on your PATH, $0 is the link. Never a binary found anywhere else: an older Dynotch doesn't
-# know --cli, and would start up as a second copy of the app.
+# The command's binary, which sits one folder over from this script inside Dynotch.app. Called
+# through a link on your PATH, $0 is the link. Never a binary found anywhere else.
 binary() {
     if [ -n "${DYNOTCH_BIN:-}" ]; then
         printf '%s' "$DYNOTCH_BIN"
@@ -50,7 +49,7 @@ binary() {
     local self
     self="$(readlink -f "$0")"
     local beside
-    beside="$(dirname "$self")/../MacOS/Dynotch"
+    beside="$(dirname "$self")/../Helpers/DynotchCommand"
     if [ -x "$beside" ]; then
         printf '%s' "$beside"
     else
@@ -110,7 +109,7 @@ case "$command" in
         send "capture" ;;
     progress|status|statusline|hook|ci)
         program="$(binary)"
-        exec "$program" --cli "$command" "$@" ;;
+        exec "$program" "$command" "$@" ;;
     -h|--help|help)
         usage ;;
     *)

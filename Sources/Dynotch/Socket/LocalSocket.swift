@@ -1,29 +1,6 @@
 import Darwin
+import DynotchShared
 import Foundation
-
-/// Where the app and the `dynotch` command meet.
-enum SocketLocation {
-    /// The longest path `sockaddr_un` holds, leaving room for its terminator.
-    static let longestPath = MemoryLayout.size(ofValue: sockaddr_un().sun_path) - 1
-
-    /// A folder of its own inside Application Support, since the folder is what keeps others out.
-    /// `DYNOTCH_SOCKET` puts it somewhere else, which is how tests keep away from the real one.
-    static func current(environment: [String: String] = ProcessInfo.processInfo.environment) -> String {
-        if let path = environment["DYNOTCH_SOCKET"], !path.isEmpty { return path }
-        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return support.appendingPathComponent("Dynotch/run/dynotch.sock").path
-    }
-
-    static func address(for path: String) -> sockaddr_un? {
-        let bytes = Array(path.utf8)
-        guard !bytes.isEmpty, bytes.count <= longestPath else { return nil }
-        var address = sockaddr_un()
-        address.sun_family = sa_family_t(AF_UNIX)
-        address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
-        withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: bytes) }
-        return address
-    }
-}
 
 /// One request from the `dynotch` command: a line of JSON naming what it wants in `op`.
 struct SocketRequest: @unchecked Sendable {
@@ -57,8 +34,6 @@ final class LocalSocketServer: @unchecked Sendable {
 
     typealias Receiver = @Sendable (SocketRequest, SocketConnection) -> Void
 
-    /// Enough for an approval of a big file edit. Past this, a hook gets no answer and Claude Code asks itself.
-    static let longestRequest = 8 << 20
     static let mostConnections = 64
 
     private let path: String
@@ -120,9 +95,6 @@ final class LocalSocketServer: @unchecked Sendable {
         }
     }
 
-    /// Whether a client running as this user may talk to the notch.
-    static func accepts(peer: uid_t, owner: uid_t = geteuid()) -> Bool { peer == owner }
-
     /// Makes the folder if it isn't there, then insists it's this user's alone: a real folder, not a
     /// link, that they own and nobody else can enter.
     static func prepareFolder(_ folder: String) throws {
@@ -148,7 +120,7 @@ final class LocalSocketServer: @unchecked Sendable {
             }
             var user = uid_t(), group = gid_t()
             guard fcntl(client, F_SETFD, FD_CLOEXEC) == 0, getpeereid(client, &user, &group) == 0,
-                  Self.accepts(peer: user), connections.count < Self.mostConnections else {
+                  SocketLocation.accepts(peer: user), connections.count < Self.mostConnections else {
                 close(client)
                 continue
             }
@@ -254,7 +226,7 @@ final class SocketConnection: @unchecked Sendable {
             } else {
                 reply(["ok": false, "error": "That isn't a request"])
             }
-        } else if buffer.count > LocalSocketServer.longestRequest {
+        } else if buffer.count > SocketLocation.longestRequest {
             drop()
         }
     }

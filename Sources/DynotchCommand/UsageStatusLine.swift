@@ -1,4 +1,5 @@
 import Darwin
+import DynotchShared
 import Foundation
 
 /// `dynotch statusline`: Claude Code's status line. It passes the numbers on and prints a short line.
@@ -24,8 +25,8 @@ enum UsageStatusLine {
     }
 
     /// What `command` prints when fed `input`, or nil if it prints nothing, won't start or takes too
-    /// long. How it exits is its own business. This is someone's existing status line, so it runs
-    /// here in the client, never in the app.
+    /// long. How it exits is its own business. Whoever runs the command chooses this, so it has to
+    /// stay in a binary of its own: run from the app's, it would get every permission the app has.
     static func output(of command: String, given input: Data, environment: [String: String],
                        patience: TimeInterval = commandPatience) -> String? {
         let process = Process()
@@ -69,7 +70,7 @@ enum UsageStatusLine {
         }
         guard !parts.isEmpty else { return nil }
         if let seconds = report["secondsOld"] as? Int {
-            parts.append("updated " + Format.ago(now.addingTimeInterval(-Double(seconds)), from: now))
+            parts.append("updated " + timeAgo(now.addingTimeInterval(-Double(seconds)), from: now))
         }
         return "Claude usage: " + parts.joined(separator: " · ")
     }
