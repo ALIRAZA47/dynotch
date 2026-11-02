@@ -7,8 +7,14 @@ final class ShortcutsService: ObservableObject {
 
     @Published private(set) var all: [String] = []
     @Published private(set) var running: Set<String> = []
+    /// What `runInTurn` has yet to finish, the one running first.
+    private var queued: [String] = []
+    /// Runs a Shortcut and says whether it finished. A test stands in for it.
+    var runner: @MainActor (String) async -> Bool = { await Shell.run("/usr/bin/shortcuts", ["run", $0]).status == 0 }
 
     private init() {}
+
+    func loadSample(_ names: [String]) { all = names }
 
     func reload() async {
         let result = await Shell.run("/usr/bin/shortcuts", ["list"])
@@ -19,15 +25,33 @@ final class ShortcutsService: ObservableObject {
     func run(_ name: String) {
         guard running.insert(name).inserted else { return }
         Task {
-            let result = await Shell.run("/usr/bin/shortcuts", ["run", name])
+            let succeeded = await runner(name)
             running.remove(name)
-            let succeeded = result.status == 0
-            LiveActivityCenter.shared.post(LiveNotice(key: "shortcut",
-                                                      symbol: succeeded ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
-                                                      tint: succeeded ? .green : .orange,
-                                                      detail: succeeded ? "\(name) finished" : "\(name) didn't finish",
-                                                      recall: .whole), for: 2.5)
+            announce(name, succeeded: succeeded)
         }
+    }
+
+    /// For what runs by itself: one after another, in the order they were asked for, and none dropped,
+    /// so a quick skip can't leave a Focus on, or set two running against each other. It says nothing
+    /// unless one fails.
+    func runInTurn(_ name: String) {
+        queued.append(name)
+        guard queued.count == 1 else { return }
+        Task {
+            while let next = queued.first {
+                let succeeded = await runner(next)
+                queued.removeFirst()
+                if !succeeded { announce(next, succeeded: false) }
+            }
+        }
+    }
+
+    private func announce(_ name: String, succeeded: Bool) {
+        LiveActivityCenter.shared.post(LiveNotice(key: "shortcut",
+                                                  symbol: succeeded ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+                                                  tint: succeeded ? .green : .orange,
+                                                  detail: succeeded ? "\(name) finished" : "\(name) didn't finish",
+                                                  recall: .whole), for: 2.5)
     }
 }
 

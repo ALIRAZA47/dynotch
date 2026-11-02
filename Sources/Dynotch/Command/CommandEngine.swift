@@ -21,28 +21,36 @@ struct CommandResult: Identifiable {
     var hint: String?
     /// Nil for a row that only says something, like that nothing matched.
     var action: (@MainActor (NotchViewModel) -> CommandOutcome)?
+    /// On an empty field, here because it's been used rather than to show what can be typed.
+    var isLearned = false
 }
 
-/// Turns what's typed into the command field into things to do: timers, notes, reminders, toggles,
-/// the music, volume and brightness, outputs and Bluetooth devices, the next meeting, profiles, tabs,
-/// Settings pages, shortcuts, sums and conversions, and the notes and Tray files that match. Copied
-/// text only ever shows on a line that starts with `clip`.
+/// Turns what's typed into the command field into things to do: timers, notes, reminders, events,
+/// translations, toggles, the music, volume and brightness, outputs and Bluetooth devices, the next
+/// meeting, profiles, tabs, Settings pages, shortcuts, sums, conversions, times, dates and colors, and
+/// the notes and Tray files that match. Copied text only ever shows on a line that starts with `clip`.
 @MainActor
 enum CommandEngine {
     static let maximumResults = 6
 
     static func results(for query: String, in viewModel: NotchViewModel) -> [CommandResult] {
         let text = query.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else { return suggestions }
+        guard !text.isEmpty else { return suggestions() }
         let lower = text.lowercased()
         var results: [CommandResult] = []
 
-        // A sum or a conversion answers straight away.
-        if let answer = Calculator.answer(text) {
+        // An answer comes straight away. A date goes first: 2026-10-31 would read as a sum.
+        if let date = DateText.answer(text) {
+            results.append(copyable(id: "date", symbol: "calendar", value: date.value, title: date.text))
+        } else if let answer = Calculator.answer(text) {
             results.append(copyable(id: "sum", symbol: "equal", value: answer, title: "= \(answer)"))
         } else if let conversion = UnitConversion.convert(text) {
             results.append(copyable(id: "convert", symbol: "arrow.left.arrow.right", value: conversion.value,
                                     title: conversion.text))
+        } else if let time = WorldTime.answer(text) {
+            results.append(copyable(id: "time", symbol: "globe", value: time.value, title: time.text))
+        } else if let color = ColorText.convert(text) {
+            results.append(copyable(id: "color-value", symbol: "paintpalette.fill", tint: color.color, value: color.value, title: color.text))
         }
 
         // A first word that says what to do.
@@ -54,6 +62,22 @@ enum CommandEngine {
         if let body = remainder(of: text, after: ["remind me to", "remind me", "reminder", "remind"]) {
             results.append(reminder(body))
             saidWhat = true
+        }
+        // An event that can be read speaks for the line. One that can't still says so, last, so whatever
+        // else the line matches keeps its place and its Return, though it doesn't turn into a timer.
+        var unreadEvent: CommandResult?
+        if let body = remainder(of: text, after: ["calendar", "cal"]) {
+            let row = event(body)
+            if row.action == nil {
+                unreadEvent = row
+            } else {
+                results.append(row)
+                saidWhat = true
+            }
+        }
+        // "tr" on its own is still the start of "tray", and a Shortcut called Translate Clipboard still shows.
+        if let body = remainder(of: text, after: ["translate", "tr"]), !body.isEmpty || lower == "translate" {
+            results.append(translation(body))
         }
         // These only speak for the line if they found something, so a shortcut called Connect VPN or
         // a timer called Output still get their turn.
@@ -77,19 +101,17 @@ enum CommandEngine {
             results.append(contentsOf: clips(matching: words, in: .shared))
             saidWhat = true
         }
+        // These go before the timers: "run Water 8" is that Shortcut if there is one, and "run 30m" a timer.
+        var named: [CommandResult] = []
+        if let name = remainder(of: text, after: ["run", "shortcut"]) { named += shortcuts(matching: name.lowercased(), all: true) }
+        if let name = remainder(of: text, after: ["profile"]) { named += profiles(matching: name.lowercased()) }
+        results += named
+        saidWhat = saidWhat || !named.isEmpty
         if let spec = remainder(of: text, after: ["timer", "start timer"]) {
             results.append(timer(spec.isEmpty ? nil : spec))
             saidWhat = true
-        } else if !saidWhat, TimerText.parse(text) != nil {
+        } else if !saidWhat, unreadEvent == nil, TimerText.parse(text) != nil {
             results.append(timer(text))
-        }
-        if let name = remainder(of: text, after: ["run", "shortcut"]) {
-            results.append(contentsOf: shortcuts(matching: name.lowercased(), all: true))
-            saidWhat = true
-        }
-        if let name = remainder(of: text, after: ["profile"]) {
-            results.append(contentsOf: profiles(matching: name.lowercased()))
-            saidWhat = true
         }
 
         // Then anything whose name starts that way.
@@ -100,12 +122,7 @@ enum CommandEngine {
             results.append(contentsOf: profiles(matching: lower))
             results.append(contentsOf: shortcuts(matching: lower, all: false))
         }
-        if ["settings", "preferences"].contains(where: { $0.hasPrefix(lower) }) {
-            results.append(CommandResult(id: "settings", symbol: "gearshape.fill", tint: .gray, title: "Open Settings") { _ in
-                SettingsWindowController.shared.show()
-                return .close
-            })
-        }
+        if ["settings", "preferences"].contains(where: { $0.hasPrefix(lower) }) { results.append(openSettings) }
 
         // And the notes and files that mention it.
         if text.count >= 2 {
@@ -113,6 +130,7 @@ enum CommandEngine {
             results.append(contentsOf: files(matching: lower))
         }
 
+        if let unreadEvent { results.insert(unreadEvent, at: min(results.count, maximumResults - 1)) }
         if results.isEmpty {
             results.append(CommandResult(id: "nothing", symbol: "questionmark", tint: .gray,
                                          title: "Nothing for “\(text)”", hint: "tea 4m"))
@@ -122,35 +140,119 @@ enum CommandEngine {
 
     // MARK: Suggestions
 
-    /// With nothing typed: one of each kind of command, and what to type for it.
-    private static var suggestions: [CommandResult] {
+    /// One of each kind of command, and what to type for it.
+    private static var starters: [CommandResult] {
         let toggles = QuickToggles.shared
         return [
-            CommandResult(id: "try-timer", symbol: "timer", tint: .orange, title: "Start a timer", hint: "tea 4m") { _ in
+            CommandResult(id: "timer", symbol: "timer", tint: .orange, title: "Start a timer", hint: "tea 4m") { _ in
                 .fill("tea 4m")
             },
-            CommandResult(id: "try-note", symbol: "note.text", tint: .yellow, title: "New note", hint: "note Buy coffee") { _ in
+            CommandResult(id: "note", symbol: "note.text", tint: .yellow, title: "New note", hint: "note Buy coffee") { _ in
                 .fill("note ")
             },
-            CommandResult(id: "try-remind", symbol: "checklist", tint: .blue, title: "Remind me",
+            CommandResult(id: "remind", symbol: "checklist", tint: .blue, title: "Remind me",
                           hint: "remind Call Sam 5pm") { _ in
                 .fill("remind ")
             },
-            CommandResult(id: "try-dark", symbol: "moon.fill", tint: .indigo,
+            CommandResult(id: "dark", symbol: "moon.fill", tint: .indigo,
                           title: toggles.isDarkMode ? "Turn off Dark Mode" : "Turn on Dark Mode", hint: "dark") { _ in
                 toggles.toggleDarkMode()
                 return .close
             },
-            CommandResult(id: "try-profile", symbol: "person.crop.circle", tint: .green, title: "Switch profile",
+            CommandResult(id: "profile", symbol: "person.crop.circle", tint: .green, title: "Switch profile",
                           hint: "profile Work") { _ in
                 .fill("profile ")
             },
-            CommandResult(id: "try-sum", symbol: "plus.forwardslash.minus", tint: .gray, title: "Calculate or convert",
+            CommandResult(id: "sum", symbol: "plus.forwardslash.minus", tint: .gray, title: "Calculate or convert",
                           hint: "18% of 240") { _ in
                 .fill("18% of 240")
             },
         ]
     }
+
+    /// Commands that take a value, which come back asking for it.
+    private static var valueCommands: [CommandResult] {
+        [
+            CommandResult(id: "volume", symbol: "speaker.wave.2.fill", tint: .blue, title: "Set the volume", hint: "vol 30") { _ in
+                .fill("vol ")
+            },
+            CommandResult(id: "brightness", symbol: "sun.max.fill", tint: .yellow, title: "Set the brightness", hint: "bright 60") { _ in
+                .fill("bright ")
+            },
+            CommandResult(id: "cal", symbol: "calendar.badge.plus", tint: .red, title: "Add an event", hint: "cal Dentist fri 3pm") { _ in
+                .fill("cal ")
+            },
+        ] + (OnDeviceText.isAvailable ? [
+            CommandResult(id: "translate", symbol: "character.bubble", tint: .blue, title: "Translate", hint: "tr hola to english") { _ in
+                .fill("tr ")
+            },
+        ] : [])
+    }
+
+    /// With nothing typed: what's been used, then the starters, as far as there's room.
+    private static func suggestions() -> [CommandResult] {
+        let starters = starters
+        let learned = AppSettings.shared.learnsCommands ? learnedRows(CommandHistory.ranked(), starters: starters) : []
+        let others = starters.filter { starter in !learned.contains { $0.id == starter.id } }
+        return Array((learned + others).prefix(maximumResults))
+    }
+
+    /// The commands in the history that can still run: a shortcut that's been deleted doesn't come back.
+    /// The first row is one Return away with nothing typed, so what can't be taken back, or reaches
+    /// someone else, is typed out first, and a second Return runs it.
+    private static func learnedRows(_ ids: [String], starters: [CommandResult]) -> [CommandResult] {
+        let rows = toggles(matching: "") + starters + valueCommands + tabs(matching: "") + [openSettings]
+        let shown = ids.lazy.compactMap { id -> CommandResult? in
+            guard var row = rows.first(where: { $0.id == id }) ?? named(id) else { return nil }
+            row.isLearned = true
+            if let typed = typedOut(id) {
+                row.hint = typed
+                row.action = { _ in .fill(typed) }
+            }
+            return row
+        }
+        return Array(shown.prefix(maximumResults))
+    }
+
+    /// What to type to run this one, for those that shouldn't run on a single Return.
+    private static func typedOut(_ id: String) -> String? {
+        if ["join", "sleep"].contains(id) { return id }
+        if id.hasPrefix(shortcutPrefix) { return "run " + id.dropFirst(shortcutPrefix.count) }
+        return ProfileStore.shared.profiles.first { profileID($0) == id }.map { "profile \($0.name)" }
+    }
+
+    /// A row whose ID holds what it's for: a shortcut, a profile or a page of Settings.
+    private static func named(_ id: String) -> CommandResult? {
+        if id.hasPrefix(shortcutPrefix) {
+            let name = String(id.dropFirst(shortcutPrefix.count))
+            return ShortcutsService.shared.all.contains(name) ? shortcut(name) : nil
+        }
+        if let profile = ProfileStore.shared.profiles.first(where: { profileID($0) == id }) { return row(for: profile) }
+        return SettingsPage.allCases.first { settingsID($0) == id }.map(row(for:))
+    }
+
+    /// Counts a row that's been run, as the command it belongs to. What a clip, a note or a file is
+    /// was typed, or it's gone by the next look, so those aren't counted, and neither is a number an
+    /// output or a device goes by, which doesn't last. Nor is what loses something, like clearing the
+    /// Tray or disconnecting a device, which has no place on an empty field.
+    static func noteUse(of id: String, now: Date = .now) {
+        guard AppSettings.shared.learnsCommands, let command = learnedID(of: id) else { return }
+        CommandHistory.record(command, now: now)
+    }
+
+    private static let learnedCommands: Set<String> = [
+        "timer", "note", "remind", "dark", "awake", "mic", "pomodoro", "stopwatch", "color", "screenshot", "sleep",
+        "play", "next", "previous", "join", "volume", "brightness", "settings", "cal", "translate",
+    ]
+
+    /// What goes in the history for a row. Answers all count as the one row that offers them.
+    static func learnedID(of id: String) -> String? {
+        if answerIDs.contains(id) { return "sum" }
+        if learnedCommands.contains(id) { return id }
+        return ["tab-", "settings-", shortcutPrefix, "profile-"].contains { id.hasPrefix($0) } ? id : nil
+    }
+
+    private static let answerIDs: Set<String> = ["sum", "convert", "date", "time", "color-value"]
 
     // MARK: Commands
 
@@ -170,7 +272,7 @@ enum CommandEngine {
     private static func reminder(_ body: String) -> CommandResult {
         let calendar = CalendarService.shared
         guard calendar.hasReminderAccess else {
-            return CommandResult(id: "remind", symbol: "checklist", tint: .blue, title: "Allow Reminders first") { _ in
+            return CommandResult(id: "remind-access", symbol: "checklist", tint: .blue, title: "Allow Reminders first") { _ in
                 calendar.requestReminderAccess()
                 return .stay
             }
@@ -185,6 +287,71 @@ enum CommandEngine {
                 announce(symbol: "checklist", tint: .blue, text: "Reminder added",
                          detail: due.map { "\(title) · \(ReminderText.describe($0))" } ?? title)
             }
+            return .close
+        }
+    }
+
+    /// An event, once the row can say when. Whatever it can't read, it says, and Return does nothing.
+    static func event(_ body: String, calendar: EventAdding? = nil, now: Date = .now) -> CommandResult {
+        let calendar = calendar ?? CalendarService.shared
+        let symbol = "calendar.badge.plus"
+        guard calendar.hasEventAccess else {
+            return CommandResult(id: "cal-access", symbol: symbol, tint: .red, title: "Allow Calendar first") { _ in
+                calendar.requestEventAccess()
+                return .stay
+            }
+        }
+        guard !body.isEmpty else {
+            return CommandResult(id: "cal", symbol: symbol, tint: .red, title: "Add an event", hint: "what, and when")
+        }
+        func unread(_ title: String, _ hint: String?) -> CommandResult {
+            CommandResult(id: "cal", symbol: symbol, tint: .gray, title: title, hint: hint)
+        }
+        switch EventText.read(body, now: now) {
+        case .noTime: return unread("No time in that yet", "fri 3pm")
+        case .noDay: return unread("No day in that yet", "today 3pm")
+        case .needsAMOrPM: return unread("Add am or pm to the time", "3:30pm")
+        case .noStart: return unread("Say when it starts", "3pm to 5pm")
+        case .severalTimes: return unread("That reads as more than one time", "one at a time")
+        case .dayApart: return unread("Put the day beside the time", "dentist fri 3pm")
+        case .titleLast: return unread("Put the name first", "dentist fri 3pm")
+        case .unclearDay: return unread("Can't read the day in that", "fri 3pm")
+        case .unclearZone: return unread("Can't read the time zone in that", "fri 3pm est")
+        case .unclearLength: return unread("Can't read how long that is", "for 45 min")
+        case .noSuchDate: return unread("There's no such date", nil)
+        case .noTitle: return unread("An event needs a name", "dentist fri 3pm")
+        case .past(let date): return unread("That time has passed", ReminderText.describe(date))
+        case .event(let event):
+            let when = ReminderText.describe(event.start)
+            return CommandResult(id: "cal", symbol: symbol, tint: .red, title: "Add event: \(event.title)",
+                                 hint: "\(when) · \(length(event.end.timeIntervalSince(event.start)))") { _ in
+                if calendar.addEvent(event) {
+                    announce(symbol: symbol, tint: .red, text: "Event added", detail: "\(event.title) · \(when)")
+                } else {
+                    announce(symbol: "exclamationmark.triangle.fill", tint: .orange, text: "Not added", detail: "The calendar wouldn't take it")
+                }
+                return .close
+            }
+        }
+    }
+
+    /// `start` is what Return does, once there's something to translate. It closes the notch and the
+    /// answer arrives as a notice.
+    static func translation(_ body: String, isAvailable: Bool = OnDeviceText.isAvailable,
+                            start: @escaping @MainActor (TranslationRequest) -> Void = { request in
+                                Task { await TextActions.translate(request, showsResult: true) }
+                            }) -> CommandResult {
+        let symbol = "character.bubble"
+        guard isAvailable else {
+            return CommandResult(id: "translate", symbol: symbol, tint: .gray, title: "Translating needs macOS 26")
+        }
+        guard !body.isEmpty else {
+            return CommandResult(id: "translate", symbol: symbol, tint: .blue, title: "Translate", hint: "hola to english")
+        }
+        let request = TranslationRequest(body)
+        return CommandResult(id: "translate", symbol: symbol, tint: .blue, title: "Translate to \(request.targetName): \(request.text)",
+                             hint: "on this Mac") { _ in
+            start(request)
             return .close
         }
     }
@@ -356,16 +523,27 @@ enum CommandEngine {
             }
     }
 
+    private static var openSettings: CommandResult {
+        CommandResult(id: "settings", symbol: "gearshape.fill", tint: .gray, title: "Open Settings") { _ in
+            SettingsWindowController.shared.show()
+            return .close
+        }
+    }
+
     private static func settingsPages(matching text: String) -> [CommandResult] {
         SettingsPage.allCases
             .filter { $0.title.lowercased().contains(text) }
             .prefix(3)
-            .map { page in
-                CommandResult(id: "settings-\(page.rawValue)", symbol: page.symbol, tint: page.tint, title: "Open \(page.title) Settings") { _ in
-                    SettingsWindowController.shared.show(page: page)
-                    return .close
-                }
-            }
+            .map(row(for:))
+    }
+
+    private static func settingsID(_ page: SettingsPage) -> String { "settings-\(page.rawValue)" }
+
+    private static func row(for page: SettingsPage) -> CommandResult {
+        CommandResult(id: settingsID(page), symbol: page.symbol, tint: page.tint, title: "Open \(page.title) Settings") { _ in
+            SettingsWindowController.shared.show(page: page)
+            return .close
+        }
     }
 
     private static func tabs(matching text: String) -> [CommandResult] {
@@ -391,33 +569,45 @@ enum CommandEngine {
     }
 
     private static func profiles(matching text: String) -> [CommandResult] {
-        let store = ProfileStore.shared
-        return store.profiles
-            .filter { text.isEmpty || $0.name.lowercased().hasPrefix(text) }
+        exactFirst(ProfileStore.shared.profiles.filter { text.isEmpty || $0.name.lowercased().hasPrefix(text) }, name: text, of: \.name)
             .prefix(3)
-            .map { profile in
-                CommandResult(id: "profile-\(profile.id)", symbol: profile.symbol, tint: profile.tint,
-                              title: "Switch to \(profile.name)", hint: profile.id == store.activeID ? "on" : nil) { _ in
-                    store.switchTo(named: profile.name)
-                    return .close
-                }
-            }
+            .map(row(for:))
+    }
+
+    /// The one with exactly this name goes first, since that's what Return runs.
+    private static func exactFirst<Item>(_ items: [Item], name: String, of itemName: (Item) -> String) -> [Item] {
+        items.filter { itemName($0).lowercased() == name } + items.filter { itemName($0).lowercased() != name }
+    }
+
+    private static func profileID(_ profile: Profile) -> String { "profile-\(profile.id)" }
+
+    private static func row(for profile: Profile) -> CommandResult {
+        let store = ProfileStore.shared
+        return CommandResult(id: profileID(profile), symbol: profile.symbol, tint: profile.tint,
+                             title: "Switch to \(profile.name)", hint: profile.id == store.activeID ? "on" : nil) { _ in
+            store.switchTo(named: profile.name)
+            return .close
+        }
     }
 
     /// The user's shortcuts. `all` lists every one while nothing's typed after "run".
     private static func shortcuts(matching text: String, all: Bool) -> [CommandResult] {
         guard all || !text.isEmpty else { return [] }
-        let service = ShortcutsService.shared
-        return service.all
+        let matches = ShortcutsService.shared.all
             .filter { text.isEmpty || $0.lowercased().hasPrefix(text) || (text.count >= 3 && $0.lowercased().contains(text)) }
+        return exactFirst(matches, name: text) { $0 }
             .prefix(3)
-            .map { name in
-                CommandResult(id: "shortcut-\(name)", symbol: "square.stack.3d.up.fill", tint: .pink, title: "Run \(name)",
-                              hint: "shortcut") { _ in
-                    service.run(name)
-                    return .close
-                }
-            }
+            .map(shortcut)
+    }
+
+    private static let shortcutPrefix = "shortcut-"
+
+    private static func shortcut(_ name: String) -> CommandResult {
+        CommandResult(id: shortcutPrefix + name, symbol: "square.stack.3d.up.fill", tint: .pink, title: "Run \(name)",
+                      hint: "shortcut") { _ in
+            ShortcutsService.shared.run(name)
+            return .close
+        }
     }
 
     /// The clips with these words in them, pinned first. It never turns the history on: with that off
@@ -473,9 +663,9 @@ enum CommandEngine {
 
     // MARK: Helpers
 
-    /// A sum's or a conversion's answer, copied on Return.
-    private static func copyable(id: String, symbol: String, value: String, title: String) -> CommandResult {
-        CommandResult(id: id, symbol: symbol, tint: .gray, title: title, hint: "copy") { _ in
+    /// An answer, copied on Return.
+    private static func copyable(id: String, symbol: String, tint: Color = .gray, value: String, title: String) -> CommandResult {
+        CommandResult(id: id, symbol: symbol, tint: tint, title: title, hint: "copy") { _ in
             NSPasteboard.dynotch.clearContents()
             NSPasteboard.dynotch.setString(value, forType: .string)
             announce(symbol: "doc.on.clipboard.fill", tint: .white, text: value, detail: "Copied to the clipboard")
@@ -565,13 +755,15 @@ enum ReminderText {
         return (title.isEmpty ? text : title, date)
     }
 
-    /// "Today 5:00 PM", "Tomorrow 9:00 AM", "Fri 31 Oct 9:00 AM".
+    /// "Today 5:00 PM", "Tomorrow 9:00 AM", "Fri 31 Oct 9:00 AM", and the year when it isn't this one.
     static func describe(_ date: Date) -> String {
         let calendar = Calendar.current
         let time = date.formatted(date: .omitted, time: .shortened)
         if calendar.isDateInToday(date) { return "Today \(time)" }
         if calendar.isDateInTomorrow(date) { return "Tomorrow \(time)" }
-        return date.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)) + " " + time
+        let day = Date.FormatStyle.dateTime.weekday(.abbreviated).day().month(.abbreviated)
+        let isThisYear = calendar.isDate(date, equalTo: .now, toGranularity: .year)
+        return date.formatted(isThisYear ? day : day.year()) + " " + time
     }
 }
 
@@ -694,27 +886,50 @@ enum Calculator {
     }
 }
 
-/// "5 km to mi", "70 f in c", "2 cups in ml": length, mass, temperature, volume and speed.
+/// "5 km to mi", "70 f in c", "2 cups in ml", "1.5 gb to mb": length, mass, temperature, volume, speed
+/// and data sizes. Sizes go in thousands, as macOS counts them, and `mib` and `gib` in 1,024s.
 enum UnitConversion {
     static func convert(_ text: String) -> (text: String, value: String)? {
         let pattern = #"^\s*(-?\d+(?:\.\d+)?)\s*([a-z°/]+)\s+(?:to|in|as)\s+([a-z°/]+)\s*$"#
-        let lower = text.lowercased()
-        guard let regex = try? NSRegularExpression(pattern: pattern),
-              let match = regex.firstMatch(in: lower, range: NSRange(lower.startIndex..., in: lower)),
-              let numberRange = Range(match.range(at: 1), in: lower),
-              let fromRange = Range(match.range(at: 2), in: lower),
-              let toRange = Range(match.range(at: 3), in: lower),
-              let amount = Double(lower[numberRange]),
-              let from = units[String(lower[fromRange])],
-              let to = units[String(lower[toRange])],
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive),
+              let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let numberRange = Range(match.range(at: 1), in: text),
+              let fromRange = Range(match.range(at: 2), in: text),
+              let toRange = Range(match.range(at: 3), in: text),
+              let amount = Double(text[numberRange]),
+              let from = unit(named: text[fromRange], beside: text[toRange]),
+              let to = unit(named: text[toRange], beside: text[fromRange]),
               from.kind == to.kind else { return nil }
         let base = from.unit.converter.baseUnitValue(fromValue: amount)
         let result = to.unit.converter.value(fromBaseUnitValue: base)
-        let value = Calculator.format((result * 100).rounded() / 100)
+        // A size can be a tiny part of the next one up, which two places would round to nothing.
+        let value = from.kind == .information ? size(result) : Calculator.format((result * 100).rounded() / 100)
         return ("\(Calculator.format(amount)) \(from.unit.symbol) = \(value) \(to.unit.symbol)", value)
     }
 
-    private enum Kind { case length, mass, temperature, volume, speed }
+    /// Case only matters between bits and bytes, as "Gb" against "GB", or "b" beside "B" or "Gb". All in
+    /// lowercase means bytes.
+    private static func unit(named name: Substring, beside other: Substring) -> (unit: Dimension, kind: Kind)? {
+        if name == "b", other == "B" || isBits(other) { return units["bit"] }
+        if isBits(name), let first = name.first { return units["\(first.lowercased())bit"] }
+        return units[name.lowercased()]
+    }
+
+    private static func isBits(_ name: Substring) -> Bool {
+        name.count == 2 && name.last == "b" && name.first.map { "KMGTP".contains($0) } == true
+    }
+
+    /// To nine figures, however large or small.
+    private static func size(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.usesSignificantDigits = true
+        formatter.maximumSignificantDigits = 9
+        formatter.usesGroupingSeparator = false
+        return formatter.string(from: NSNumber(value: value)) ?? String(value)
+    }
+
+    private enum Kind { case length, mass, temperature, volume, speed, information }
 
     private static let units: [String: (unit: Dimension, kind: Kind)] = {
         var table: [String: (unit: Dimension, kind: Kind)] = [:]
@@ -747,6 +962,22 @@ enum UnitConversion {
         add(UnitSpeed.milesPerHour, .speed, "mph")
         add(UnitSpeed.metersPerSecond, .speed, "m/s", "mps")
         add(UnitSpeed.knots, .speed, "kn", "knot", "knots")
+        add(UnitInformationStorage.bits, .information, "bit", "bits")
+        add(UnitInformationStorage.bytes, .information, "b", "byte", "bytes")
+        add(UnitInformationStorage.kilobytes, .information, "kb", "kilobyte", "kilobytes")
+        add(UnitInformationStorage.megabytes, .information, "mb", "megabyte", "megabytes")
+        add(UnitInformationStorage.gigabytes, .information, "gb", "gigabyte", "gigabytes")
+        add(UnitInformationStorage.terabytes, .information, "tb", "terabyte", "terabytes")
+        add(UnitInformationStorage.petabytes, .information, "pb", "petabyte", "petabytes")
+        add(UnitInformationStorage.kibibytes, .information, "kib", "kibibyte", "kibibytes")
+        add(UnitInformationStorage.mebibytes, .information, "mib", "mebibyte", "mebibytes")
+        add(UnitInformationStorage.gibibytes, .information, "gib", "gibibyte", "gibibytes")
+        add(UnitInformationStorage.tebibytes, .information, "tib", "tebibyte", "tebibytes")
+        add(UnitInformationStorage.kilobits, .information, "kbit", "kilobit", "kilobits")
+        add(UnitInformationStorage.megabits, .information, "mbit", "megabit", "megabits")
+        add(UnitInformationStorage.gigabits, .information, "gbit", "gigabit", "gigabits")
+        add(UnitInformationStorage.terabits, .information, "tbit", "terabit", "terabits")
+        add(UnitInformationStorage.petabits, .information, "pbit", "petabit", "petabits")
         return table
     }()
 }

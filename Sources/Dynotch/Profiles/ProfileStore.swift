@@ -154,8 +154,10 @@ struct ProfileSetting {
         .choice("homeWidgetA", \.homeWidgetA),
         .choice("homeWidgetB", \.homeWidgetB),
         .list("pinnedShortcuts", \.pinnedShortcuts),
+        .list("worldClockCities", \.worldClockCities),
         // Live activities
         .bool("liveMusic", \.liveMusic),
+        .bool("lyricsInClosedNotch", \.lyricsInClosedNotch),
         .bool("trackPeek", \.trackPeek),
         .bool("liveTimer", \.liveTimer),
         .bool("liveCharging", \.liveCharging),

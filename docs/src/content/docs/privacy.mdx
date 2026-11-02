@@ -4,7 +4,7 @@ navTitle: Privacy and network
 description: What stays on your Mac, and the few things that leave it.
 ---
 
-Dynotch has no account, no analytics and no server of its own. It runs on your Mac, and it talks to the network for exactly four things.
+Dynotch has no account, no analytics and no server of its own. It runs on your Mac, and it only talks to the network for what's listed here.
 
 ## What leaves your Mac
 
@@ -18,14 +18,22 @@ Dynotch has no account, no analytics and no server of its own. It runs on your M
 | Artwork from Spotify | Spotify's image servers | Asks for the link Spotify gave it |
 | Artwork from Apple Music | `itunes.apple.com` and Apple's image servers | For a track with no artwork of its own: the artist and album, or the title if it has no album, to find it |
 | [CI](/ci/), once you've used `dynotch ci` | GitHub, through your own `gh` command and its login | The repository and branch being followed, and a search for pull requests waiting for your review |
+| Lyrics | `lrclib.net` | Only with **Show synced lyrics** on, which starts off: the title, artist, album and length of each song you play, a couple of seconds after it starts. It says it's Dynotch and its version, and there's no account or key, and no cookies |
 
 **Join** opens a meeting's link in the app that handles it.
+
+## Lyrics
+
+LRCLIB is run by someone else, so with **Show synced lyrics** on, it can see which songs you play from your IP address. A song that's skipped in its first couple of seconds, or that stays paused, isn't sent.
+
+Each song is asked about once while Dynotch runs. It's asked again if an answer didn't come through, if you turn this off and on, or after about 200 other songs. The lyrics stay in memory until Dynotch quits or you turn this off, so your Mac keeps no list of what you've played.
 
 ## What stays on your Mac
 
 | What | Where |
 |---|---|
 | Settings | The preferences domain `app.dynotch.Dynotch` |
+| Commands you use | The same preferences: which commands you've run, about how often and when last. Never what you typed. **Suggest what you use** in <Path to="Settings → General → Command field" /> turns it off and forgets it |
 | Notes | `~/Library/Application Support/Dynotch/Notes`, or the folder you chose. If that's iCloud Drive, they sync through it |
 | The Tray's list | `~/Library/Application Support/Dynotch/tray.json` |
 | Tray files | `~/Library/Application Support/Dynotch/Tray`, for copies with **Keep copies** on, and for files made from dropped images, links and text |
@@ -33,6 +41,7 @@ Dynotch has no account, no analytics and no server of its own. It runs on your M
 | Copies from Terminal setup | `~/Library/Application Support/Dynotch/setup-backups`: the last five of `~/.zshrc` and `~/.claude/settings.json`, from before each change |
 | Recordings | The folder the Screenshot app saves to, or the Tray's folder if that can't be written. While one is being made, it's a hidden file in the Tray's folder |
 | Pinned clips | `~/Library/Application Support/Dynotch/clipboard.json`, which only your user can read |
+| Focus history | `~/Library/Application Support/Dynotch/focus-history.jsonl`, which only your user can read: when each finished session ended and how many minutes it ran |
 
 ## Clipboard
 
@@ -48,6 +57,10 @@ macOS may ask before Dynotch reads what another app copied. See [If macOS asks](
 ## Images
 
 **Copy Text** and **Cut Out** run on your Mac, with Apple's Vision framework, and no image or text is sent anywhere. **Open** on a QR code opens its link in your browser, and only when you click it.
+
+## Translating and summarizing
+
+**Translate** and **Summarize** use macOS's own translation and Apple Intelligence's on-device model. They only use what's already on your Mac, and nothing is sent anywhere. The answer goes on the clipboard, and what's in a clip or a file doesn't show in the notch.
 
 ## Notifications
 

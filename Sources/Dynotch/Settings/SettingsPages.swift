@@ -137,6 +137,10 @@ struct GeneralSettings: View {
                 SettingsCard {
                     SwitchRow(title: "Open it with ⌃⌥K", detail: "From anywhere, ready to type", symbol: "magnifyingglass",
                               isOn: $settings.commandShortcut)
+                    CardDivider()
+                    SwitchRow(title: "Suggest what you use",
+                              detail: "An empty field lists your recent and frequent commands first. It counts the command, never what you type, and turning this off forgets the count.",
+                              symbol: "sparkles", isOn: $settings.learnsCommands)
                 }
             }
 
@@ -807,6 +811,18 @@ struct NookSettings: View {
                     WidgetSlotPicker(title: "Second widget", selection: $settings.homeWidgetB)
                 }
             }
+            SettingsSection(title: "Lyrics",
+                            footer: "Lyrics come from LRCLIB, a free online service. With this on, the title, artist, album and length of each song you play go to lrclib.net a moment after it starts. Nothing is sent while this is off.") {
+                SettingsCard {
+                    SwitchRow(title: "Show synced lyrics", detail: "The line being sung, under the song's title",
+                              symbol: "quote.bubble.fill", tint: .pink, isOn: $settings.showsLyrics)
+                    if settings.showsLyrics {
+                        CardDivider()
+                        SwitchRow(title: "In the closed notch", detail: "On a second row under the camera",
+                                  symbol: "rectangle.topthird.inset.filled", tint: .pink, isOn: $settings.lyricsInClosedNotch)
+                    }
+                }
+            }
             SettingsSection(title: "Calendar") {
                 SettingsCard {
                     SwitchRow(title: "Show all-day events", detail: "List them in the Calendar widget",
@@ -821,6 +837,10 @@ struct NookSettings: View {
             SettingsSection(title: "Weather",
                             footer: "Forecasts come from Open-Meteo. Rain alerts use its 15-minute forecast where there is one, and the hourly forecast elsewhere.") {
                 WeatherSettings()
+            }
+            SettingsSection(title: "World clock", trailing: "\(settings.worldClockCities.count) of \(WorldClockCities.limit)",
+                            footer: "Up to four cities in the World clock widget. Click one to take it off.") {
+                WorldClockCities()
             }
             SettingsSection(title: "Pinned shortcuts", trailing: "\(settings.pinnedShortcuts.count) of 4",
                             footer: "Pin up to four. They show in the Shortcuts widget.") {
@@ -1193,6 +1213,60 @@ private struct ShortcutPins: View {
     }
 }
 
+/// The cities in the World clock widget, and a field to add one by name. It's all on the Mac: a city
+/// is either in `WorldTime`'s table or it isn't.
+private struct WorldClockCities: View {
+    static let limit = 4
+
+    @ObservedObject private var settings = AppSettings.shared
+    @ViewState private var draft = ""
+    @ViewState private var isUnknown = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            FlowLayout(spacing: 7) {
+                ForEach(settings.worldClockCities, id: \.self) { city in
+                    PinChip(title: city, isPinned: true) { settings.worldClockCities.removeAll { $0 == city } }
+                }
+            }
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                TextField("Add a city", text: $draft, prompt: Text(""))
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12.5))
+                    .fieldPlaceholder("Add a city", isEmpty: draft.isEmpty, font: .system(size: 12.5), color: Palette.secondaryText)
+                    .onSubmit(add)
+                if isUnknown {
+                    Text("No such city here")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Palette.secondaryText)
+                }
+            }
+            .padding(.horizontal, 11)
+            .frame(height: 28)
+            .background(FieldWell())
+            .opacity(settings.worldClockCities.count < Self.limit ? 1 : 0.4)
+            .disabled(settings.worldClockCities.count >= Self.limit)
+            .onChange(of: draft) { isUnknown = false }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CardBackground())
+    }
+
+    private func add() {
+        guard let place = WorldTime.place(draft), !place.isInitials else {
+            isUnknown = !draft.isEmpty
+            return
+        }
+        draft = ""
+        if !settings.worldClockCities.contains(place.name) { settings.worldClockCities.append(place.name) }
+    }
+}
+
 private struct PinChip: View {
     let title: String
     let isPinned: Bool
@@ -1461,6 +1535,15 @@ struct FocusSettings: View {
             SettingsSection(title: "Behavior") {
                 SwitchGrid(options: behavior)
             }
+            SettingsSection(title: "Turn on a Focus",
+                            footer: "macOS doesn't let apps turn a Focus on, so use a Shortcut with a Set Focus action in it. "
+                                + "The end runs however a session ends, unless Dynotch quits first.") {
+                SettingsCard {
+                    SessionShortcutRow(title: "When a session starts", symbol: "play.fill", selection: $settings.focusStartShortcut)
+                    CardDivider()
+                    SessionShortcutRow(title: "When it ends", symbol: "stop.fill", selection: $settings.focusEndShortcut)
+                }
+            }
         }
     }
 
@@ -1471,6 +1554,39 @@ struct FocusSettings: View {
         let hours = minutes / 60, rest = minutes % 60
         if hours == 0 { return "\(rest) min" }
         return rest == 0 ? "\(hours) h" : "\(hours) h \(rest) min"
+    }
+}
+
+/// Picks the Shortcut for one end of a focus session.
+private struct SessionShortcutRow: View {
+    let title: String
+    let symbol: String
+    @Binding var selection: String
+    @ObservedObject private var shortcuts = ShortcutsService.shared
+    @Environment(\.isSnapshot) private var isSnapshot
+
+    var body: some View {
+        HStack(spacing: 12) {
+            SymbolBadge(symbol: symbol, tint: .pink, isActive: !selection.isEmpty, size: 26)
+            Text(title)
+                .font(.system(size: 13, weight: .medium))
+                .accessibilityHidden(true)
+            Spacer(minLength: 12)
+            Picker(title, selection: $selection) {
+                Text("None").tag("")
+                // One that's since been deleted stays listed, so it can be seen and changed.
+                ForEach(shortcuts.all + (selection.isEmpty || shortcuts.all.contains(selection) ? [] : [selection]), id: \.self) { name in
+                    Text(name).tag(name)
+                }
+            }
+            .labelsHidden()
+            .fixedSize()
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
+        .task {
+            if !isSnapshot { await shortcuts.reload() }
+        }
     }
 }
 

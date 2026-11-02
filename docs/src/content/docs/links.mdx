@@ -41,7 +41,7 @@ open -g 'dynotch://notify?text=Hello&tint=orange'
 
 ## timer
 
-The path after `timer/` is `start`, `pause`, `toggle`, `reset` or `skip`. `stop` means `pause`, and anything else means `toggle`.
+The path after `timer/` is `start`, `pause`, `toggle`, `reset` or `skip`. `stop` means `pause`, and anything else means `toggle`. Starting or ending a focus session this way runs the Shortcuts you chose for that, as it does from the notch. See [Turning on a Focus](/focus/#turning-on-a-focus).
 
 ## tray/add
 
@@ -58,4 +58,5 @@ Anything on the Mac can open these links, so they only do what you could see and
 - Notices carry a terminal badge, so a script can't pass one off as Dynotch's own.
 - Tray adds point at files without copying them, and skip `~/Library`. The notch says what was added.
 - A capture link only opens the editor over the screen. Nothing is copied or saved until you act, and <Keys k="Esc" /> closes it.
+- A timer link runs no Shortcut but the two you chose for a focus session. It can't name another.
 - Nothing reads a protected database on a link's behalf.

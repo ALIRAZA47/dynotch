@@ -31,13 +31,18 @@ enum SnapshotRenderer {
         for (key, value) in samples { defaults.set(value, forKey: key) }
         UserDefaults.dynotch = defaults
         NSPasteboard.dynotch = NSPasteboard(name: NSPasteboard.Name("app.dynotch.scratch.\(ProcessInfo.processInfo.processIdentifier)"))
+        URL.dynotchSupport = scratchSupport
+        try? FileManager.default.removeItem(at: scratchSupport)
     }
+
+    private static let scratchSupport = URL(fileURLWithPath: scratchDomain + ".support", isDirectory: true)
 
     static func discardScratchDefaults() {
         UserDefaults.dynotch.removePersistentDomain(forName: scratchDomain)
         // An emptied domain still leaves its file behind, and every run has its own.
         UserDefaults.dynotch.synchronize()
         try? FileManager.default.removeItem(atPath: scratchDomain + ".plist")
+        try? FileManager.default.removeItem(at: scratchSupport)
         NSPasteboard.dynotch.releaseGlobally()
     }
 
@@ -176,6 +181,8 @@ enum SnapshotRenderer {
         let cutOut = LiveNotice(key: "cutout", symbol: "scissors", tint: .white, text: "Cut out", detail: "Keynote draft (cut out).png",
                                 actions: [NoticeAction(title: "Open", kind: .openFile(keynote)), NoticeAction(title: "Show", kind: .reveal(keynote))],
                                 recall: .whole)
+        let notInstalled = TextActions.notice(for: .notInstalled("Spanish to English"), title: "Can't translate")
+        let appleIntelligenceOff = TextActions.notice(for: .appleIntelligenceOff, title: "Can't summarize")
         // As narrow as a virtual notch can be set, which is the least room a glance ever has.
         let narrowNotch = NotchGeometry(screenFrame: virtualNotch.screenFrame, closedSize: CGSize(width: 140, height: 24), hasHardwareNotch: false)
         let digest = NotificationPeek.digest(of: ["Slack": 8, "Mail": 3, "Messages": 1], during: "Work")
@@ -303,6 +310,22 @@ enum SnapshotRenderer {
             Scene(name: "command-9-settings", phase: .open, command: "settings tray"),
             Scene(name: "command-10-join", phase: .open, command: "join"),
             Scene(name: "command-11-music", phase: .open, command: "ne"),
+            Scene(name: "command-15-time", phase: .open, command: "5pm pst in lahore"),
+            Scene(name: "command-16-days", phase: .open, command: "days until 25 dec"),
+            Scene(name: "command-17-size", phase: .open, command: "1.5 gb to mb"),
+            Scene(name: "command-18-color", phase: .open, command: "#a894ff to rgb"),
+            Scene(name: "command-19-date", phase: .open, command: "2026-10-31"),
+            Scene(name: "command-21-event", phase: .open, command: "cal dentist fri 3pm"),
+            Scene(name: "command-24-translate", phase: .open, command: "tr hola to english"),
+            Scene(name: "command-22-event-length", phase: .open, command: "cal standup mon 9am 30m"),
+            Scene(name: "command-23-event-no-time", phase: .open, command: "cal dentist fri"),
+            Scene(name: "command-25-event-no-day", phase: .open, command: "cal dentist 3pm"),
+            // What's been used comes first, and the suggestions fill the rest.
+            Scene(name: "command-20-learned", phase: .open, command: "", setUp: {
+                for (id, uses) in [("stopwatch", 4), ("tab-tray", 3), ("awake", 2)] {
+                    for _ in 0..<uses { CommandHistory.record(id) }
+                }
+            }),
             // Glances: resting the pointer on the notch.
             Scene(name: "glance-1-music", phase: .glance, activity: .music),
             Scene(name: "glance-2-pomodoro", phase: .glance, activity: .timer),
@@ -373,6 +396,10 @@ enum SnapshotRenderer {
             Scene(name: "85-closed-copied-text", phase: .closed, activity: .notice(copiedText)),
             Scene(name: "86-closed-no-text", phase: .closed, activity: .notice(noText)),
             Scene(name: "87-closed-qr-code", phase: .closed, activity: .notice(qrCodeLongHost)),
+            Scene(name: "88-closed-translated", phase: .closed, activity: .notice(TextActions.copied("hello"))),
+            Scene(name: "88-closed-cant-summarize", phase: .closed, activity: .notice(appleIntelligenceOff)),
+            Scene(name: "glance-30-cant-translate", phase: .glance, activity: .notice(notInstalled)),
+            Scene(name: "glance-31-cant-summarize", phase: .glance, activity: .notice(appleIntelligenceOff)),
             // The recent list, and the two ways in.
             Scene(name: "glance-16-recent", phase: .glance, showingRecent: true, setUp: { loadRecents() }),
             Scene(name: "glance-17-today-recent-awake", phase: .glance, hasTrack: false, setUp: {
@@ -406,11 +433,16 @@ enum SnapshotRenderer {
                 (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.shortcuts, .calendar)
                 AppSettings.shared.pinnedShortcuts = ["Morning routine", "Log a glass of water", "Focus playlist"]
             }),
-            Scene(name: "99-open-focus-empty", phase: .open, tab: .focus, hasTimers: false, prepare: {
+            Scene(name: "99-open-focus-empty", phase: .open, tab: .focus, hasTimers: false, setUp: {
+                FocusHistory.shared.loadSample(days: [])
+            }, prepare: {
                 CalendarService.shared.loadSample(events: [], reminders: [])
                 NotesStore.shared.loadSample([""])
             }),
-        ] + clipboardScenes() + sizeScenes() + edgeScenes(virtualNotch: virtualNotch)
+            Scene(name: "99-open-focus-empty-notes", phase: .open, tab: .focus, hasTimers: false, focusShowsNotes: true, setUp: {
+                FocusHistory.shared.loadSample(days: [])
+            }),
+        ] + lyricsScenes() + clipboardScenes() + sizeScenes() + edgeScenes(virtualNotch: virtualNotch)
 
         let settings = AppSettings.shared
         let savedTheme = settings.theme
@@ -931,6 +963,9 @@ enum SnapshotRenderer {
         TrayStore.shared.loadSample(pinned: nil)
         ScreenRecorder.shared.loadSample(.idle)
         loadClips([], isOn: false)
+        CommandHistory.forget()
+        FocusHistory.shared.loadSample(days: sampleFocusDays)
+        LyricsService.shared.loadSample(nil)
     }
 
     /// A recording this long running, or its file being saved. It holds nothing.
@@ -1009,6 +1044,7 @@ enum SnapshotRenderer {
                 .init(id: "c", title: "Water the plants", dueDate: nil, color: .green),
             ])
         PomodoroTimer.shared.loadSample(remaining: 18 * 60 + 24, running: true)
+        FocusHistory.shared.loadSample(days: sampleFocusDays)
         TimerStore.shared.loadSample(at: sampleTime)
         SystemMonitor.shared.loadSample()
         DeviceBatteryMonitor.shared.loadSample([
@@ -1030,6 +1066,9 @@ enum SnapshotRenderer {
         }
         TrayStore.shared.loadSample(urls)
     }
+
+    /// A week of focus, whichever day of it the render lands on.
+    private static let sampleFocusDays = [50, 75, 25, 100, 50, 125, 25]
 
     /// A day with more events and reminders than the cards have room for, and a long title or two.
     private static func loadBusySamples() {
@@ -1112,7 +1151,7 @@ enum SnapshotRenderer {
     private static func widgetScenes() -> [Scene] {
         let stacks: [(name: String, first: HomeWidget, second: HomeWidget)] = [
             ("notes", .notes, .mirror), ("shortcuts", .shortcuts, .mirror),
-            ("mirror", .mirror, .notes), ("toggles", .toggles, .mirror),
+            ("mirror", .mirror, .notes), ("toggles", .toggles, .mirror), ("clock", .clock, .mirror),
         ]
         return stacks.flatMap { stack in
             [nil, NotchTheme(material: .glass)].map { theme in
@@ -1120,6 +1159,40 @@ enum SnapshotRenderer {
                       setUp: { (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (stack.first, stack.second) })
             }
         }
+    }
+
+    /// Made up, as a real song's words aren't Dynotch's to print.
+    private static let sampleLyrics = Lyrics(lrc: """
+    [00:21.00] The streetlights came on one by one
+    [01:12.00] We kept on driving past the last of the signs
+    [01:30.00]
+    [01:50.00] And nobody said a word about how far we'd come or what was waiting at the end of it all, not then, not for a long while after
+    """)
+
+    /// The line under the title, and on the closed notch's second row.
+    private static func lyricsScenes() -> [Scene] {
+        let lyrics = sampleLyrics
+        let width = lyrics?.rowWidth ?? 0
+        func at(_ elapsed: TimeInterval) -> @MainActor () -> Void {
+            {
+                LyricsService.shared.loadSample(lyrics)
+                NowPlayingService.shared.loadSample(NowPlayingService.Track(title: "Midnight City", artist: "M83", album: "Hurry Up, We're Dreaming", duration: 243),
+                                                    artwork: sampleArtwork(), playing: true, elapsed: elapsed)
+            }
+        }
+        return [
+            Scene(name: "lyrics-1-nook", phase: .open, tab: .home, setUp: at(81)),
+            Scene(name: "lyrics-2-nook-small", phase: .open, tab: .home, openSize: CGSize(width: 600, height: 196), setUp: at(81)),
+            Scene(name: "lyrics-3-nook-large", phase: .open, tab: .home, openSize: CGSize(width: 840, height: 260), setUp: at(81)),
+            Scene(name: "lyrics-4-nook-glass", phase: .open, tab: .home, theme: NotchTheme(material: .glass), setUp: at(81)),
+            Scene(name: "lyrics-5-nook-gap", phase: .open, tab: .home, setUp: at(95)),
+            Scene(name: "lyrics-6-nook-long-line", phase: .open, tab: .home, setUp: at(115)),
+            Scene(name: "lyrics-7-closed", phase: .closed, activity: .lyrics(rowWidth: width), setUp: at(81)),
+            Scene(name: "lyrics-8-closed-gap", phase: .closed, activity: .lyrics(rowWidth: width), setUp: at(95)),
+            Scene(name: "lyrics-9-closed-long-line", phase: .closed, activity: .lyrics(rowWidth: width), setUp: at(115)),
+            Scene(name: "lyrics-10-closed-and-keep-awake", phase: .closed, activity: .lyrics(rowWidth: width), secondary: .keepAwake, setUp: at(81)),
+            Scene(name: "lyrics-11-hover", phase: .hovering, activity: .lyrics(rowWidth: width), setUp: at(81)),
+        ]
     }
 
     /// The Tray's Clipboard side, at the usual size and the smallest and largest, with `clip` in the

@@ -354,7 +354,7 @@ private struct ClosedPreview: View {
         switch activity {
         case .idle:
             EmptyView()
-        case .music, .trackPeek:
+        case .music, .trackPeek, .lyrics:
             RoundedRectangle(cornerRadius: 6 * scale, style: .continuous)
                 .fill(Palette.sunset)
                 .frame(width: (layout.notchHeight - 12) * scale, height: (layout.notchHeight - 12) * scale)
@@ -404,7 +404,7 @@ private struct ClosedPreview: View {
         switch activity {
         case .idle:
             EmptyView()
-        case .music, .trackPeek:
+        case .music, .trackPeek, .lyrics:
             AudioBars(isPlaying: true, color: tintArtwork ? Color(red: 1, green: 0.45, blue: 0.55) : theme.accent)
                 .frame(width: 20 * scale, height: 14 * scale)
         case .timer:

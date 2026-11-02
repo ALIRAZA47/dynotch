@@ -38,7 +38,7 @@ With Focus, events, weather, Bluetooth and screenshots on, the polls run about 3
 
 Those numbers are with **Keep clipboard history** off, as it starts. Turning it on adds about 680 polls an hour on power, 340 on battery and 165 in Low Power Mode, for about 990, 510 and 285 in all, and still none while the displays sleep or the screen is locked. Each one compares a single number, and the clipboard is only read when something was copied.
 
-The equalizer's bars bounce in Core Animation, which the window server runs without waking the app. The closed notch with music playing wakes Dynotch about once every three seconds, the same as with nothing playing.
+The equalizer's bars bounce in Core Animation, which the window server runs without waking the app. The closed notch with music playing wakes Dynotch about once every three seconds, the same as with nothing playing. With lyrics on its second row, it also wakes once for each line, and not at all while the row isn't showing.
 
 A [recording](/capture/#recording) is the exception, for as long as it runs: it wakes the app for its frames, up to 60 times a second. Nothing is left running once it stops. The polls above don't count this, as the clock and the frames only exist while you're recording.
 

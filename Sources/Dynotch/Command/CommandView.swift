@@ -15,7 +15,7 @@ struct CommandView: View {
         let results = viewModel.commandResults
         VStack(alignment: .leading, spacing: 0) {
             field(results)
-            Text(viewModel.commandQuery.trimmingCharacters(in: .whitespaces).isEmpty ? "Try" : "Results")
+            Text(heading(results))
                 .font(NotchFont.label)
                 .foregroundStyle(theme.secondary)
                 .frame(height: 16)
@@ -40,6 +40,11 @@ struct CommandView: View {
             try? await Task.sleep(for: .milliseconds(60))
             isFocused = true
         }
+    }
+
+    private func heading(_ results: [CommandResult]) -> String {
+        guard viewModel.commandQuery.trimmingCharacters(in: .whitespaces).isEmpty else { return "Results" }
+        return results.contains(where: \.isLearned) ? "Suggestions" : "Try"
     }
 
     /// A capsule pressed into the glass, ringed with the accent's light, as it has the keyboard

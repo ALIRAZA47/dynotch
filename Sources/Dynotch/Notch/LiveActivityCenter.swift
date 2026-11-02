@@ -72,6 +72,8 @@ enum ClosedActivity: Equatable {
     case music
     case trackPeek
     case timer
+    /// Music, with the line being sung on a row underneath as wide as the song's longest.
+    case lyrics(rowWidth: CGFloat)
     case notice(LiveNotice)
     /// A named timer from the Focus tab.
     case countdown(Countdown)
@@ -89,7 +91,7 @@ enum ClosedActivity: Equatable {
     var statusName: String {
         switch self {
         case .idle: "idle"
-        case .music: "music"
+        case .music, .lyrics: "music"
         case .trackPeek: "trackPeek"
         case .timer: "timer"
         case .notice: "notice"
@@ -129,7 +131,7 @@ enum CompactActivity: Equatable {
     /// The main activity already shows this one.
     func isShown(by activity: ClosedActivity) -> Bool {
         switch (self, activity) {
-        case (.timer, .timer), (.music, .music), (.music, .trackPeek), (.stopwatch, .stopwatch), (.download, .download),
+        case (.timer, .timer), (.music, .music), (.music, .trackPeek), (.music, .lyrics), (.stopwatch, .stopwatch), (.download, .download),
              (.recording, .recording): true
         case (.micMuted, .notice(let notice)): notice.key == "mic"
         case (.focus, .notice(let notice)): notice.key == "focus"
@@ -189,26 +191,32 @@ final class LiveActivityCenter: ObservableObject {
     func start() {
         let media = NowPlayingService.shared
         let timer = PomodoroTimer.shared
-        Publishers.MergeMany(
-            media.$isPlaying.map { _ in () }.eraseToAnyPublisher(),
-            media.$track.map { _ in () }.eraseToAnyPublisher(),
-            timer.$isRunning.map { _ in () }.eraseToAnyPublisher(),
-            MicMonitor.shared.$isMuted.map { _ in () }.eraseToAnyPublisher(),
-            TimerStore.shared.$countdowns.map { _ in () }.eraseToAnyPublisher(),
-            TimerStore.shared.$stopwatch.map { _ in () }.eraseToAnyPublisher(),
-            DownloadMonitor.shared.$downloads.map(\.isEmpty).removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
-            ScreenRecorder.shared.$state.map { $0 == .idle }.removeDuplicates().map { _ in () }.eraseToAnyPublisher(),
-            FocusMonitor.shared.$mode.map { _ in () }.eraseToAnyPublisher(),
-            QuickToggles.shared.$isKeepingAwake.map { _ in () }.eraseToAnyPublisher(),
-            ScriptActivityStore.shared.$activities.map { _ in () }.eraseToAnyPublisher(),
-            AgentDeck.shared.$waitingCount.map { _ in () }.eraseToAnyPublisher(),
-            CIMonitor.shared.$run.map { _ in () }.eraseToAnyPublisher(),
-            AppSettings.shared.objectWillChange.map { _ in () }.eraseToAnyPublisher()
-        )
-        // @Published fires before the value changes; read it on the next turn.
-        .receive(on: RunLoop.main)
-        .sink { [weak self] in self?.recompute() }
-        .store(in: &cancellables)
+        let downloads = DownloadMonitor.shared.$downloads.map(\.isEmpty).removeDuplicates()
+        let recording = ScreenRecorder.shared.$state.map { $0 == .idle }.removeDuplicates()
+        // Plain calls in a typed list. As one call with a closure each, this was more than CI's compiler would check.
+        let changes: [AnyPublisher<Void, Never>] = [
+            anyChange(in: media.$isPlaying),
+            anyChange(in: media.$track),
+            anyChange(in: LyricsService.shared.$lyrics),
+            anyChange(in: timer.$isRunning),
+            anyChange(in: MicMonitor.shared.$isMuted),
+            anyChange(in: TimerStore.shared.$countdowns),
+            anyChange(in: TimerStore.shared.$stopwatch),
+            anyChange(in: downloads),
+            anyChange(in: recording),
+            anyChange(in: FocusMonitor.shared.$mode),
+            anyChange(in: QuickToggles.shared.$isKeepingAwake),
+            anyChange(in: QuietMonitor.shared.$reason),
+            anyChange(in: ScriptActivityStore.shared.$activities),
+            anyChange(in: AgentDeck.shared.$waitingCount),
+            anyChange(in: CIMonitor.shared.$run),
+            anyChange(in: AppSettings.shared.objectWillChange)
+        ]
+        Publishers.MergeMany(changes)
+            // @Published fires before the value changes; read it on the next turn.
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.recompute() }
+            .store(in: &cancellables)
         QuietMonitor.shared.$reason
             .map { $0 != nil }
             .removeDuplicates()
@@ -216,6 +224,10 @@ final class LiveActivityCenter: ObservableObject {
             .sink { [weak self] quiet in self?.quietChanged(quiet) }
             .store(in: &cancellables)
         SocketRouter.shared.reportsStatus("notch") { [weak self] in self?.statusReport ?? [:] }
+    }
+
+    private func anyChange<Source: Publisher>(in source: Source) -> AnyPublisher<Void, Never> where Source.Failure == Never {
+        source.map { _ in () }.eraseToAnyPublisher()
     }
 
     func post(_ notice: LiveNotice, for duration: TimeInterval = 2.6) {
@@ -323,6 +335,13 @@ final class LiveActivityCenter: ObservableObject {
         if recents.count > Self.mostRecents { recents.removeLast(recents.count - Self.mostRecents) }
     }
 
+    /// Music, with its words on a row underneath if they're wanted. They keep out of the way on a call
+    /// or a presentation, as song titles do.
+    static func music(with lyrics: Lyrics?, inClosedNotch: Bool, isQuiet: Bool) -> ClosedActivity {
+        guard inClosedNotch, !isQuiet, let lyrics else { return .music }
+        return .lyrics(rowWidth: lyrics.rowWidth)
+    }
+
     private func recompute() {
         let settings = AppSettings.shared
         let media = NowPlayingService.shared
@@ -362,7 +381,8 @@ final class LiveActivityCenter: ObservableObject {
         } else if downloading {
             activity = .download
         } else if musicPlaying {
-            activity = .music
+            activity = Self.music(with: LyricsService.shared.lyrics, inClosedNotch: settings.lyricsInClosedNotch,
+                                  isQuiet: QuietMonitor.shared.isQuiet)
         } else {
             activity = .idle
         }

@@ -180,7 +180,7 @@ struct ClosedNotchView: View {
         switch viewModel.activity {
         case .idle:
             EmptyView()
-        case .music, .trackPeek:
+        case .music, .trackPeek, .lyrics:
             ArtworkView(image: media.artwork, size: viewModel.geometry.closedSize.height - 12, cornerRadius: 6)
                 .transition(arrival(from: 0.6))
         case .timer:
@@ -217,7 +217,7 @@ struct ClosedNotchView: View {
         switch viewModel.activity {
         case .idle:
             EmptyView()
-        case .music, .trackPeek:
+        case .music, .trackPeek, .lyrics:
             AudioBars(isPlaying: media.isPlaying, color: tint)
                 .frame(width: 20, height: 14)
         case .timer:
@@ -254,6 +254,8 @@ struct ClosedNotchView: View {
             if let track = media.track {
                 TrackPeekLine(title: track.title, artist: track.artist)
             }
+        case .lyrics:
+            LyricRow()
         case .notice(let notice):
             if let detail = notice.detail {
                 // `ClosedLayout` widens the notch for this face, up to `maxRowWidth`.

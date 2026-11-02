@@ -51,9 +51,14 @@ struct ClosedLayout: Equatable {
 
     /// How wide each ear must be for a notice's second row to fit, measured in the row's font.
     private static func rowEarWidth(for activity: ClosedActivity, notch: CGSize) -> CGFloat {
-        guard case .notice(let notice) = activity, case .info = notice.kind, let detail = notice.detail else { return 0 }
-        let font = NSFont.systemFont(ofSize: 12, weight: .medium)
-        let text = (detail as NSString).size(withAttributes: [.font: font]).width
+        let text: CGFloat
+        if case .lyrics(let rowWidth) = activity {
+            text = rowWidth
+        } else if case .notice(let notice) = activity, case .info = notice.kind, let detail = notice.detail {
+            text = (detail as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .medium)]).width
+        } else {
+            return 0
+        }
         // The row's padding either side, and a little slack so the text never truncates early.
         let row = min(text.rounded(.up) + 36, maxRowWidth)
         return max(0, (row - notch.width) / 2)
@@ -70,6 +75,9 @@ struct ClosedLayout: Equatable {
         case .music:
             earWidth = notch.height + 8
             rowHeight = 0
+        case .lyrics:
+            earWidth = notch.height + 8
+            rowHeight = 26
         case .trackPeek:
             earWidth = 54
             rowHeight = 26
@@ -416,7 +424,11 @@ final class NotchViewModel: ObservableObject {
         isCommandMode = true
         // The shortcuts are commands too, and they're only listed once asked for.
         if ShortcutsService.shared.all.isEmpty {
-            Task { await ShortcutsService.shared.reload() }
+            Task {
+                await ShortcutsService.shared.reload()
+                // One of them may be among what's offered on an empty field.
+                if isCommandMode, commandQuery.isEmpty { commandResults = CommandEngine.results(for: "", in: self) }
+            }
         }
     }
 
@@ -441,10 +453,13 @@ final class NotchViewModel: ObservableObject {
         guard let action = result.action else { return }
         switch action(self) {
         case .close:
+            CommandEngine.noteUse(of: result.id)
             close()
         case .stay:
+            CommandEngine.noteUse(of: result.id)
             withAnimation(.notchTab) { endCommand() }
         case .fill(let text):
+            // It's only asked for more: what comes of that is what counts.
             commandQuery = text
         }
     }

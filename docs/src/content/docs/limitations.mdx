@@ -51,10 +51,17 @@ Vision hands back a cut-out's subject in sRGB, whatever the photo was in. Colors
 
 A [recording](/capture/#recording) has no sound of any kind, neither the Mac's nor the microphone's. Recording the microphone would need its entitlement, which Dynotch doesn't have, and that's a separate choice.
 
+## Translate and Summarize need macOS 26
+
+Both come from macOS, and neither sends anything off your Mac. On earlier versions they aren't offered, and `tr` in the command field says so.
+
+- **Translate** only uses languages already installed. Add them in <Path to="System Settings → General → Language & Region → Translation Languages" />. Asking for a download takes a window Dynotch doesn't have, so the notice has a button to that page instead. macOS can't translate every language: Urdu, for one, isn't among them yet. It takes the first 20,000 characters of a longer text, and the notice says so.
+- **Summarize** needs Apple Intelligence turned on, on a Mac that can run it. It can only read about 9,000 characters at a time, so a longer text gets a summary of its start, and the notice says so.
+
 ## Not notarized
 
 Dynotch isn't notarized by Apple, so the first launch needs [one extra step](/install/#get-past-the-first-launch).
 
 ## Left out on purpose
 
-Not included from MacNotch: AI translation, and Night Shift and True Tone toggles, which have no public API.
+Not included from MacNotch: Night Shift and True Tone toggles, which have no public API.
