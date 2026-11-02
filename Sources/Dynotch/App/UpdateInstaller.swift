@@ -24,7 +24,9 @@ final class UpdateInstaller: ObservableObject {
     /// The designated requirements of a certificate releases are moving to, so copies can follow.
     /// An update can't vouch for itself, so the next certificate has to be named here, in a release
     /// signed with the one before it. Empty unless a move is under way.
-    static let successors: [String] = []
+    static let successors: [String] = [
+        #"identifier "app.dynotch.Dynotch" and certificate leaf = H"51bc69a0e02197c508ee11c35039a607b4490db0""#
+    ]
 
     private init() {}
 
