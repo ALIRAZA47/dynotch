@@ -58,6 +58,9 @@ final class NowPlayingService: ObservableObject {
     /// nil when Music didn't say, and always for Spotify, which can't favorite tracks over AppleScript.
     @Published private(set) var isFavorite: Bool?
 
+    /// Goes up each time the position is reported or moved, for what's timed to it.
+    @Published private(set) var positionReports = 0
+
     /// Music favorites tracks over AppleScript; Spotify's `starred` can only be read, and always reads false.
     var canFavorite: Bool { player == .music }
 
@@ -238,6 +241,7 @@ final class NowPlayingService: ObservableObject {
     private func setPosition(_ seconds: TimeInterval) {
         position = seconds
         positionDate = .now
+        positionReports &+= 1
     }
 
     private func clear() {

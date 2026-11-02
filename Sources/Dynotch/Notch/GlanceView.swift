@@ -28,7 +28,7 @@ enum GlanceContent: Equatable {
     @MainActor
     init(activity: ClosedActivity) {
         switch activity {
-        case .music, .trackPeek:
+        case .music, .trackPeek, .lyrics:
             self = .music
             return
         case .timer:

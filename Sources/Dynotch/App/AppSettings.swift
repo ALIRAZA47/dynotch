@@ -27,6 +27,13 @@ enum DisplayMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// Where Dynotch keeps what isn't a setting, or a folder of its own while a snapshot, a self-test, the
+/// energy probe or a test runs. New files go through this, so none of those can write to the real ones.
+extension URL {
+    nonisolated(unsafe) static var dynotchSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("Dynotch", isDirectory: true)
+}
+
 /// How the closed notch looks on a display without a camera notch.
 enum VirtualNotchStyle: String, CaseIterable, Identifiable {
     /// A black notch hangs from the menu bar, as on a MacBook.
@@ -107,7 +114,7 @@ enum HoverShows: String, CaseIterable, Identifiable {
 
 /// Widgets that can sit next to the media player on the Nook tab.
 enum HomeWidget: String, CaseIterable, Identifiable {
-    case calendar, mirror, shortcuts, timer, devices, toggles, notes, weather, none
+    case calendar, mirror, shortcuts, timer, devices, toggles, notes, weather, clock, none
 
     var id: String { rawValue }
 
@@ -121,6 +128,7 @@ enum HomeWidget: String, CaseIterable, Identifiable {
         case .toggles: "Quick toggles"
         case .notes: "Notes"
         case .weather: "Weather"
+        case .clock: "World clock"
         case .none: "Nothing"
         }
     }
@@ -135,6 +143,7 @@ enum HomeWidget: String, CaseIterable, Identifiable {
         case .toggles: "switch.2"
         case .notes: "note.text"
         case .weather: "cloud.sun.fill"
+        case .clock: "globe"
         case .none: "minus.circle"
         }
     }
@@ -246,6 +255,13 @@ final class AppSettings: ObservableObject {
     /// ⌃⌥K opens the command field from anywhere.
     @Published var commandShortcut: Bool = AppSettings.value("commandShortcut", true) {
         didSet { save("commandShortcut", commandShortcut) }
+    }
+    /// An empty command field lists what's used most. Turning this off forgets what it's counted.
+    @Published var learnsCommands: Bool = AppSettings.value("learnsCommands", true) {
+        didSet {
+            save("learnsCommands", learnsCommands)
+            if !learnsCommands { CommandHistory.forget() }
+        }
     }
     @Published var swipeGestures: Bool = AppSettings.value("swipeGestures", true) {
         didSet { save("swipeGestures", swipeGestures) }
@@ -435,6 +451,19 @@ final class AppSettings: ObservableObject {
     @Published var pinnedShortcuts: [String] = AppSettings.value("pinnedShortcuts", [String]()) {
         didSet { save("pinnedShortcuts", pinnedShortcuts) }
     }
+    /// The line being sung, under the song's title. Off until asked for, as it sends the song's name
+    /// to LRCLIB.
+    @Published var showsLyrics: Bool = AppSettings.value("showsLyrics", false) {
+        didSet { save("showsLyrics", showsLyrics) }
+    }
+    /// That line on the closed notch's second row too.
+    @Published var lyricsInClosedNotch: Bool = AppSettings.value("lyricsInClosedNotch", false) {
+        didSet { save("lyricsInClosedNotch", lyricsInClosedNotch) }
+    }
+    /// The World clock widget's cities, as `WorldTime.place` knows them.
+    @Published var worldClockCities: [String] = AppSettings.value("worldClockCities", ["London", "New York", "Tokyo"]) {
+        didSet { save("worldClockCities", worldClockCities) }
+    }
     @Published var showAllDayEvents: Bool = AppSettings.value("showAllDayEvents", true) {
         didSet { save("showAllDayEvents", showAllDayEvents) }
     }
@@ -529,6 +558,15 @@ final class AppSettings: ObservableObject {
     }
     @Published var timerSound: Bool = AppSettings.value("timerSound", true) {
         didSet { save("timerSound", timerSound) }
+    }
+    /// The Shortcut to run as a focus session starts, by name. Empty for none. Apple has no way for an
+    /// app to turn a Focus on, so this is how a Pomodoro does it.
+    @Published var focusStartShortcut: String = AppSettings.value("focusStartShortcut", "") {
+        didSet { save("focusStartShortcut", focusStartShortcut) }
+    }
+    /// The Shortcut to run as one ends, however it ends.
+    @Published var focusEndShortcut: String = AppSettings.value("focusEndShortcut", "") {
+        didSet { save("focusEndShortcut", focusEndShortcut) }
     }
 
     // MARK: Updates

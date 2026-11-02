@@ -291,6 +291,7 @@ struct HomeWidgetView: View {
         case .toggles: QuickTogglesWidget()
         case .notes: NotesWidget()
         case .weather: WeatherWidget()
+        case .clock: WorldClockWidget()
         case .none: EmptyView()
         }
     }
@@ -345,9 +346,11 @@ private struct FocusListsCard: View {
                           count: calendar.hasReminderAccess && !calendar.reminders.isEmpty ? calendar.reminders.count : nil),
                     .init(value: true, title: "Notes"),
                 ])
-                Spacer(minLength: 0)
+                .fixedSize()
+                FocusStrip()
                 if settings.focusShowsNotes {
                     NotesActions(editor: editor)
+                        .fixedSize()
                 }
             }
             if settings.focusShowsNotes {

@@ -48,9 +48,9 @@
 	<key>NSAppleEventsUsageDescription</key>
 	<string>Dynotch controls Music and Spotify, reads the current track for the notch, switches Dark Mode from the quick toggles, and goes back to the tab a command ran in when you click its notice.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>
-	<string>Dynotch shows your upcoming events in the notch.</string>
+	<string>Dynotch shows your upcoming events in the notch, and adds the ones you type in the command field.</string>
 	<key>NSCalendarsUsageDescription</key>
-	<string>Dynotch shows your upcoming events in the notch.</string>
+	<string>Dynotch shows your upcoming events in the notch, and adds the ones you type in the command field.</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>Dynotch shows your reminders in the notch and lets you check them off.</string>
 	<key>NSRemindersUsageDescription</key>

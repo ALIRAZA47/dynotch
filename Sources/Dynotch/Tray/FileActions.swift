@@ -49,6 +49,34 @@ enum FileActions {
         UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) == true
     }
 
+    static func isText(_ url: URL) -> Bool {
+        UTType(filenameExtension: url.pathExtension)?.conforms(to: .text) == true
+    }
+
+    /// The text in a file, or nil past 4 MB, which isn't what Translate is for. Read on a thread that's
+    /// no task's, since a file in iCloud Drive or on a network volume can take its time.
+    nonisolated static func text(of url: URL) async -> String? {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                guard let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= 4_000_000 else {
+                    continuation.resume(returning: nil)
+                    return
+                }
+                continuation.resume(returning: text(in: url))
+            }
+        }
+    }
+
+    /// UTF-8, then whatever the file says or looks like: Latin-1 and Shift-JIS files don't say.
+    nonisolated private static func text(in url: URL) -> String? {
+        if let text = try? String(contentsOf: url, encoding: .utf8) { return text }
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        var text: NSString?
+        var isLossy: ObjCBool = false
+        let encoding = NSString.stringEncoding(for: data, encodingOptions: nil, convertedString: &text, usedLossyConversion: &isLossy)
+        return encoding != 0 && !isLossy.boolValue ? text as String? : nil
+    }
+
     static func isArchive(_ url: URL) -> Bool {
         url.pathExtension.lowercased() == "zip"
     }

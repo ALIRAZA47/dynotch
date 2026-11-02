@@ -7,6 +7,7 @@ struct MediaPlayerView: View {
     @ObservedObject private var media = NowPlayingService.shared
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var outputs = AudioOutputs.shared
+    @ObservedObject private var lyrics = LyricsService.shared
     @Environment(\.notchTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -82,15 +83,22 @@ struct MediaPlayerView: View {
                     .help(favorite ? "Remove from favorites" : "Favorite")
                 }
             }
-            Text(byline(track))
-                .font(NotchFont.subheadline)
-                .foregroundStyle(theme.secondary)
-                .lineLimit(1)
-                .help(byline(track))
+            // With lyrics the line takes the byline's place, and the byline where it's playing.
+            if let lyrics = lyrics.lyrics {
+                LyricLine(lyrics: lyrics)
+                    .font(NotchFont.subheadline)
+                    .foregroundStyle(theme.primary)
+            } else {
+                Text(byline(track))
+                    .font(NotchFont.subheadline)
+                    .foregroundStyle(theme.secondary)
+                    .lineLimit(1)
+                    .help(byline(track))
+            }
             HStack(spacing: 8) {
                 AudioBars(isPlaying: media.isPlaying, color: tint)
                     .frame(width: 16, height: 12)
-                Text(playingOn)
+                Text(lyrics.lyrics == nil ? playingOn : byline(track))
                     .font(NotchFont.caption)
                     .foregroundStyle(theme.tertiary)
                     .lineLimit(1)

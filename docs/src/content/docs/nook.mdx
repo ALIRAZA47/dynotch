@@ -24,6 +24,16 @@ With nothing playing, the player offers a button for each of the two that's inst
 
 Turn off **Artwork tint** in <Path to="Settings → Appearance → Style" /> to color the player with your accent instead of the album art.
 
+### Lyrics
+
+**Show synced lyrics** in <Path to="Settings → Nook & Widgets → Lyrics" /> puts the line being sung under the song's title, with the artist and album moving down a row.
+
+**In the closed notch** puts it on a second row under the camera as well, as wide as the song's longest line, up to 420 points. That row only shows while the music is what the closed notch is showing, with **Now playing** on, so a notice, a timer, a script, a CI run, a download or a recording takes its place. It also keeps away while **Quiet on calls** or **Quiet in full screen** applies.
+
+Lyrics come from [LRCLIB](https://lrclib.net), a free online database, for Apple Music and Spotify. This is off until you turn it on, because it sends the title, artist, album and length of each song you play to `lrclib.net`, a couple of seconds after the song starts. See [Privacy and network](/privacy/#lyrics).
+
+A song that isn't in LRCLIB, or has no timed lyrics there, shows as it always did. The lines follow the position the player last reported, so if you move around in the player itself, they can run off until it next reports. Opening the notch asks it.
+
 ## The stack
 
 Beside the player sits a stack of up to two widgets, one showing at a time. Choose them in <Path to="Settings → Nook & Widgets → Stacked beside the player" />.
@@ -38,6 +48,7 @@ Beside the player sits a stack of up to two widgets, one showing at a time. Choo
 | Quick toggles | The Control tab's toggles |
 | Notes | Your [notes](/focus/#notes), with their checklists |
 | Weather | Current conditions, and today's high and low |
+| World clock | The time in up to four cities, with the day where it isn't today here. Choose them in <Path to="Settings → Nook & Widgets → World clock" /> |
 
 The first widget starts as Calendar and the second as Mirror. Either can be **Nothing**.
 

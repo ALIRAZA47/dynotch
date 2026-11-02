@@ -33,7 +33,14 @@ final class PomodoroTimer: ObservableObject {
     private var ticker: Poll?
     /// The current phase has been started at least once, so new durations wait for the next one.
     private var phaseStarted = false
+    /// How long the current phase was when it was first started.
+    private var phaseLength: TimeInterval = 0
+    /// A focus session has started and hasn't finished, been skipped or been reset.
+    private var isInSession = false
     private var settingsObserver: AnyCancellable?
+
+    /// What runs the Shortcut chosen for a session's start or end. The tests count them instead.
+    var runShortcut: @MainActor (String) -> Void = { ShortcutsService.shared.runInTurn($0) }
 
     private init() {
         let settings = AppSettings.shared
@@ -58,6 +65,10 @@ final class PomodoroTimer: ObservableObject {
         guard !isRunning else { return }
         if remaining <= 0 { remaining = duration }
         endDate = Date.now.addingTimeInterval(remaining)
+        if !phaseStarted {
+            phaseLength = duration
+            if phase == .focus { beginSession() }
+        }
         phaseStarted = true
         isRunning = true
         // Counts down twice a second for the notch; while nobody's looking, only wakes at the end.
@@ -77,6 +88,7 @@ final class PomodoroTimer: ObservableObject {
 
     func reset() {
         pause()
+        endSession()
         phase = .focus
         completedSessions = 0
         phaseStarted = false
@@ -98,9 +110,11 @@ final class PomodoroTimer: ObservableObject {
 
     private func finish() {
         let finished = phase
+        let ended = endDate ?? .now
         // Cleared first: pause() ticks, and a tick that still sees the end date comes straight back here.
         endDate = nil
         pause()
+        if finished == .focus { FocusHistory.shared.add(minutes: Int((phaseLength / 60).rounded()), ended: ended) }
         if AppSettings.shared.timerSound { NSSound(named: "Glass")?.play() }
         advance()
         let message = finished == .focus ? "Focus done. Time for a \(phase == .longBreak ? "long " : "")break." : "Break's over. Back to it."
@@ -111,6 +125,7 @@ final class PomodoroTimer: ObservableObject {
 
     private func advance() {
         if phase == .focus {
+            endSession()
             completedSessions += 1
             phase = completedSessions >= AppSettings.shared.sessionsPerRound ? .longBreak : .shortBreak
         } else {
@@ -119,6 +134,20 @@ final class PomodoroTimer: ObservableObject {
         }
         phaseStarted = false
         remaining = duration
+    }
+
+    private func beginSession() {
+        isInSession = true
+        let shortcut = AppSettings.shared.focusStartShortcut
+        if !shortcut.isEmpty { runShortcut(shortcut) }
+    }
+
+    /// However a session ends, so a Focus its start turned on doesn't stay on.
+    private func endSession() {
+        guard isInSession else { return }
+        isInSession = false
+        let shortcut = AppSettings.shared.focusEndShortcut
+        if !shortcut.isEmpty { runShortcut(shortcut) }
     }
 
     private static func duration(of phase: Phase) -> TimeInterval {
