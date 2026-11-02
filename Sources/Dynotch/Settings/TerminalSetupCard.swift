@@ -45,6 +45,12 @@ final class TerminalSetupModel: ObservableObject {
     var canInstall: Bool { SetupItem.allCases.contains { setup?.canInstall($0) == true } }
     var canUndo: Bool { SetupItem.allCases.contains { setup?.canUndo($0) == true } }
 
+    /// What's in the command's way, for someone to look at and move.
+    var fileInTheWay: URL? {
+        guard case .blocked = states[.command] else { return nil }
+        return setup?.linkURL
+    }
+
     /// Whether an item is part of what the review would do, picked or brought along by another.
     func isIncluded(_ item: SetupItem) -> Bool {
         !changes(for: item).isEmpty
@@ -197,6 +203,10 @@ struct TerminalSetupSection: View {
                 reveal(with: proxy)
             }
             .onChange(of: model.revealRequested) { reveal(with: proxy) }
+            // Whatever was in the way may have gone while Finder or a terminal was in front.
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                model.refresh()
+            }
         }
     }
 
@@ -313,6 +323,11 @@ private struct SetupActions: View {
                 Spacer(minLength: 0)
                 switch model.step {
                 case .resting:
+                    if let file = model.fileInTheWay {
+                        CapsuleButton(title: "Show in Finder", kind: .plain) {
+                            NSWorkspace.shared.activateFileViewerSelecting([file])
+                        }
+                    }
                     if model.canUndo {
                         CapsuleButton(title: "Undo…", kind: .plain) { model.reviewUndo() }
                     }
