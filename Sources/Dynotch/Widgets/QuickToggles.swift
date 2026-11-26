@@ -2,7 +2,7 @@ import AppKit
 import IOKit.pwr_mgt
 import SwiftUI
 
-/// One-tap system actions for the Stats tab.
+/// One-tap system actions for the Control section.
 @MainActor
 final class QuickToggles: ObservableObject {
     static let shared = QuickToggles()
@@ -128,9 +128,9 @@ struct QuickTogglesWidget: View {
     }
 }
 
-/// Six tiles: Dark Mode, Keep Awake and the microphone, which stay on, then the color picker, a
-/// screenshot and sleeping the display, which happen once. A tile that's on turns into a solid
-/// jewel of the accent, with ink on it.
+/// Six tiles for the Widgets stack: Dark Mode, Keep Awake and the microphone, which stay on, then
+/// the color picker, a screenshot and sleeping the display, which happen once. A tile that's on is
+/// solid accent with ink on it. The Control section has its own, wider tiles (`ControlTileRow`).
 struct ControlToggleGrid: View {
     var spacing: CGFloat = 8
     @ObservedObject private var toggles = QuickToggles.shared
@@ -173,7 +173,7 @@ private extension ControlToggleGrid {
 }
 
 /// How long to keep the Mac awake, from the tile's right-click menu.
-private struct KeepAwakeMenu: View {
+struct KeepAwakeMenu: View {
     private let lengths: [(title: String, minutes: Int)] = [("30 Minutes", 30), ("1 Hour", 60), ("2 Hours", 120), ("4 Hours", 240)]
 
     var body: some View {
@@ -189,8 +189,8 @@ private struct KeepAwakeMenu: View {
     }
 }
 
-/// A pane of glass standing on the slab: a symbol at the top, its name and state at the bottom.
-/// One that's on is the accent's lens, with its words in ink.
+/// A tile in the widget's card: a symbol at the top, its name and state at the bottom, on a button
+/// fill. One that's on is solid accent, with its words in ink.
 private struct ControlTile: View {
     /// How a tile fits its room: a short one leaves out the state, a narrow one pulls its padding in.
     struct Fit {
@@ -214,7 +214,7 @@ private struct ControlTile: View {
     @ViewState private var hovering = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous)
+        let shape = theme.tileShape
         Button(action: action) {
             VStack(alignment: .leading, spacing: 0) {
                 Image(systemName: symbol)
@@ -241,7 +241,7 @@ private struct ControlTile: View {
             .foregroundStyle(isOn ? theme.onAccent : theme.primary)
             .padding(fit.padding)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .glass(isOn ? .lens(theme.accent) : .pane, in: shape, isLit: hovering)
+            .background(shape.fill(isOn ? theme.accent : hovering ? theme.controlHover : theme.hover))
             .contentShape(shape)
             .opacity(isEnabled ? 1 : 0.45)
         }

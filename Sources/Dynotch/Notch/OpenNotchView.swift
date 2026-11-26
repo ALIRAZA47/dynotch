@@ -58,7 +58,7 @@ struct OpenNotchView: View {
             case .focus: FocusTabView().orbitHeader("Focus")
             case .notes: NotesWidget().orbitHeader("Notes")
             case .calendar: CalendarWidget().orbitHeader("Calendar")
-            case .stats: ControlTabView().orbitHeader("Control")
+            case .stats: ControlSection()
             case .agents: AgentsTabView(viewModel: viewModel).orbitHeader("Agents")
             }
         }
@@ -294,21 +294,5 @@ private struct FocusListsCard: View {
         .padding(EdgeInsets(top: 10, leading: 12, bottom: 12, trailing: 12))
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(CardSurface())
-    }
-}
-
-/// Toggles, the display and sound levels, and the batteries with the system underneath.
-struct ControlTabView: View {
-    var body: some View {
-        GeometryReader { proxy in
-            HStack(spacing: NotchTheme.gap) {
-                ControlToggleGrid()
-                    .frame(width: (proxy.size.width * 0.34).rounded())
-                LevelControls()
-                    .frame(width: (proxy.size.width * 0.29).rounded())
-                DevicesWidget(showsSystem: true)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
     }
 }

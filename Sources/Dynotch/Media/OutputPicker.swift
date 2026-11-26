@@ -18,11 +18,11 @@ struct OutputButton: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(outputs.isPickerShown ? tint : hovering ? theme.primary : theme.tertiary)
                 .contentTransition(.symbolEffect(.replace))
-                // Under the pointer a disc of glass rises behind it, as behind the other buttons in the
-                // row. The disc reaches past the symbol instead of widening the row, which would move
+                // Under the pointer a button fill rises behind it, as behind the other buttons in the
+                // row. The fill reaches past the symbol instead of widening the row, which would move
                 // the play button.
                 .background {
-                    if hovering { GlassSurface(depth: .control, shape: Circle()).frame(width: 28, height: 26) }
+                    if hovering { GlassSurface(depth: .control, shape: theme.controlShape).frame(width: 28, height: 26) }
                 }
         }
         .buttonStyle(PressableButtonStyle())
@@ -107,11 +107,11 @@ private struct OutputRow: View {
             .padding(.horizontal, 9)
             .frame(height: 26)
             .background {
-                // The output in use stands on a pane, like the picked row in the command field.
+                // The output in use stands raised, like the picked row in the command field.
                 if isCurrent {
-                    GlassSurface(depth: .pane, shape: Capsule(), isLit: hovering)
+                    GlassSurface(depth: .pane, shape: theme.controlShape, isLit: hovering)
                 } else if hovering {
-                    Capsule().fill(theme.control)
+                    theme.controlShape.fill(theme.control)
                 }
             }
             .contentShape(Rectangle())
@@ -135,8 +135,8 @@ private struct CloseButton: View {
                 .font(.system(size: 9, weight: .bold))
                 .foregroundStyle(hovering ? theme.primary : theme.secondary)
                 .frame(width: 20, height: 20)
-                .glass(.control, in: Circle(), isLit: hovering)
-                .contentShape(Circle())
+                .glass(.control, in: theme.controlShape, isLit: hovering)
+                .contentShape(theme.controlShape)
         }
         .buttonStyle(PressableButtonStyle())
         .onHover { hovering = $0 }
@@ -174,14 +174,43 @@ private struct AirPlayButton: View {
         .padding(.leading, 2)
         .padding(.trailing, 9)
         .frame(height: 20)
-        .glass(.control, in: Capsule(), isLit: hovering)
-        .contentShape(Capsule())
+        .glass(.control, in: theme.controlShape, isLit: hovering)
+        .contentShape(theme.controlShape)
         .onTapGesture { handle.present() }
         .onHover { hovering = $0 }
         .animation(.notchHighlight, value: hovering)
         .help("Play through an AirPlay speaker or TV")
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("AirPlay")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction { handle.present() }
+    }
+}
+
+/// AirPlay among the Control section's actions: AVKit's route picker as its symbol, and the whole
+/// tile opening its list of speakers and TVs.
+struct AirPlayAction: View {
+    let metrics: ControlMetrics
+    @Environment(\.isSnapshot) private var isSnapshot
+    @Environment(\.notchTheme) private var theme
+    @ViewState private var handle = RoutePickerHandle()
+    @ViewState private var hovering = false
+
+    var body: some View {
+        ControlActionLabel(title: "AirPlay", metrics: metrics, hovering: hovering) {
+            if isSnapshot {
+                Image(systemName: "airplayaudio")
+                    .font(.system(size: 13, weight: .semibold))
+            } else {
+                RoutePicker(handle: handle, tint: NSColor(theme.accentText), idle: NSColor(theme.primary))
+            }
+        }
+        .onTapGesture { handle.present() }
+        .onHover { hovering = $0 }
+        .help("Play through an AirPlay speaker or TV")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("AirPlay")
+        .accessibilityHint("Play through an AirPlay speaker or TV")
         .accessibilityAddTraits(.isButton)
         .accessibilityAction { handle.present() }
     }

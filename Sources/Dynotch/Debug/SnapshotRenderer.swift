@@ -206,6 +206,22 @@ enum SnapshotRenderer {
             Scene(name: "09-closed-notification-other-app", phase: .closed, activity: .notice(otherAppMessage)),
             Scene(name: "o-live", phase: .open, tab: .live),
             Scene(name: "o-live-light", phase: .open, tab: .live, theme: NotchTheme(isDark: false)),
+            // Control: tiles, the thick sliders, actions and batteries, at the smallest and largest sizes.
+            Scene(name: "o-control", phase: .open, tab: .stats),
+            Scene(name: "o-control-light", phase: .open, tab: .stats, theme: NotchTheme(isDark: false)),
+            Scene(name: "o-control-small", phase: .open, tab: .stats, openSize: CGSize(width: 640, height: 300)),
+            Scene(name: "o-control-small-light", phase: .open, tab: .stats, theme: NotchTheme(isDark: false),
+                  openSize: CGSize(width: 640, height: 300)),
+            Scene(name: "o-control-large", phase: .open, tab: .stats, openSize: CGSize(width: 880, height: 460)),
+            Scene(name: "o-control-large-light", phase: .open, tab: .stats, theme: NotchTheme(isDark: false),
+                  openSize: CGSize(width: 880, height: 460)),
+            // The sound at nothing, with a mute: the speaker shows muted. Keep Awake on, the mic muted.
+            Scene(name: "o-control-muted", phase: .open, tab: .stats,
+                  setUp: { VolumeMonitor.shared.loadSample(volume: 0, changing: false, canMute: true) }),
+            Scene(name: "o-control-muted-light", phase: .open, tab: .stats, theme: NotchTheme(isDark: false),
+                  setUp: { VolumeMonitor.shared.loadSample(volume: 0, changing: false, canMute: true) }),
+            Scene(name: "o-control-awake", phase: .open, tab: .stats, micMuted: true,
+                  setUp: { QuickToggles.shared.loadSample(awakeUntil: sampleTime.addingTimeInterval(102 * 60)) }),
             Scene(name: "o-music", phase: .open, tab: .music),
             Scene(name: "o-clipboard", phase: .open, tab: .clipboard),
             Scene(name: "o-notes", phase: .open, tab: .notes),
@@ -1279,6 +1295,12 @@ enum SnapshotRenderer {
         let short = CGSize(width: 680, height: 218), small = CGSize(width: 600, height: 196)
         let glass = NotchTheme(material: .glass)
         let noBluetooth: @MainActor () -> Void = { DeviceBatteryMonitor.shared.loadSample([], isAuthorized: false) }
+        let lowKeyboard: @MainActor () -> Void = {
+            DeviceBatteryMonitor.shared.loadSample([
+                .init(id: "airpods", name: "AirPods Pro", kind: .earbuds, left: 60, right: 62, batteryCase: 40),
+                .init(id: "keyboard", name: "Magic Keyboard", kind: .keyboard, main: 9),
+            ])
+        }
         let mute: @MainActor () -> Void = { VolumeMonitor.shared.loadSample(volume: 0.62, changing: false, canMute: true) }
         let hours: @MainActor () -> Void = { PomodoroTimer.shared.loadSample(remaining: 2 * 3600 - 1, running: true) }
         let resting: @MainActor () -> Void = { PomodoroTimer.shared.loadSample(remaining: 25 * 60, running: false) }
@@ -1332,6 +1354,13 @@ enum SnapshotRenderer {
                 noBluetooth()
             }),
             Scene(name: "edge-no-bluetooth-control-small", phase: .open, tab: .stats, openSize: small),
+            Scene(name: "o-control-no-bluetooth", phase: .open, tab: .stats, prepare: noBluetooth),
+            Scene(name: "o-control-no-bluetooth-light", phase: .open, tab: .stats, theme: NotchTheme(isDark: false),
+                  openSize: CGSize(width: 640, height: 300), prepare: noBluetooth),
+            // A keyboard running out, in red, in both looks.
+            Scene(name: "o-control-low-battery", phase: .open, tab: .stats, prepare: lowKeyboard),
+            Scene(name: "o-control-low-battery-light", phase: .open, tab: .stats, theme: NotchTheme(isDark: false),
+                  prepare: lowKeyboard),
         ]
     }
 
