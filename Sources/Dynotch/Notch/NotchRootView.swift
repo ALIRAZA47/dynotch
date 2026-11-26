@@ -143,8 +143,63 @@ struct ClosedNotchView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        if viewModel.showsDots {
+            dotsBody
+        } else {
+            activitiesBody
+        }
+    }
+
+    /// Orbit's status dots either side of the camera.
+    private var dotsBody: some View {
         let layout = viewModel.closedLayout
-        VStack(spacing: 0) {
+        let dots = viewModel.closedDots
+        return HStack(spacing: 0) {
+            dotRow(dots.left)
+                .padding(.leading, 12)
+                .frame(width: layout.earWidth, height: layout.notchHeight, alignment: .leading)
+            Color.clear.frame(width: layout.notchWidth)
+            dotRow(dots.right)
+                .padding(.trailing, 12)
+                .frame(width: layout.earWidth, height: layout.notchHeight, alignment: .trailing)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .clipped()
+        .contentShape(Rectangle())
+        .onTapGesture { viewModel.activate() }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(dots.isEmpty ? "Notch" : "\(dots.left.count + dots.right.count) live")
+    }
+
+    private func dotRow(_ dots: [ClosedDots.Dot]) -> some View {
+        HStack(spacing: ClosedDots.spacing) {
+            ForEach(dots) { dot in
+                Circle()
+                    .fill(color(for: dot.tone))
+                    .frame(width: ClosedDots.size, height: ClosedDots.size)
+                    .background {
+                        if dot.tone == .needsYou {
+                            Circle().fill(theme.accent.opacity(0.35)).padding(-3)
+                        }
+                    }
+                    .transition(arrival(from: 0.3))
+            }
+        }
+        .animation(.notchActivity, value: dots)
+    }
+
+    private func color(for tone: ClosedDots.Tone) -> Color {
+        switch tone {
+        case .live: Color(red: 0.19, green: 0.82, blue: 0.35)
+        case .running: Color(white: 0.96)
+        case .needsYou: theme.accent
+        case .alert: Color(red: 1, green: 0.27, blue: 0.23)
+        }
+    }
+
+    private var activitiesBody: some View {
+        let layout = viewModel.closedLayout
+        return VStack(spacing: 0) {
             HStack(spacing: 0) {
                 leading
                     .padding(.leading, 10)

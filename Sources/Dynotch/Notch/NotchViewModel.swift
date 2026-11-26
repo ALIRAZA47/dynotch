@@ -49,6 +49,15 @@ struct ClosedLayout: Equatable {
         self.init(activity: activity, secondary: nil, notch: notch)
     }
 
+    /// Status dots: as many each side as the busier side has, so the camera stays centered.
+    init(dots: ClosedDots, notch: CGSize) {
+        notchWidth = notch.width
+        notchHeight = notch.height
+        let most = max(dots.left.count, dots.right.count)
+        earWidth = most == 0 ? 0 : 22 + CGFloat(most) * ClosedDots.size + CGFloat(most - 1) * ClosedDots.spacing
+        rowHeight = 0
+    }
+
     /// How wide each ear must be for a notice's second row to fit, measured in the row's font.
     private static func rowEarWidth(for activity: ClosedActivity, notch: CGSize) -> CGFloat {
         let text: CGFloat
@@ -121,6 +130,78 @@ struct ClosedLayout: Equatable {
                 rowHeight = notice.detail == nil ? 0 : 26
             }
         }
+    }
+}
+
+/// Orbit's closed notch: a dot for each live thing, beside the camera, in the order of the section
+/// buttons: those whose section sits left of the camera on the left, the rest on the right.
+struct ClosedDots: Equatable {
+    enum Tone: Equatable {
+        /// Green: playing.
+        case live
+        /// White: running, like a timer or a run.
+        case running
+        /// The accent with a halo: it waits on you.
+        case needsYou
+        /// Red: recording, or something failed.
+        case alert
+    }
+
+    struct Dot: Equatable, Identifiable {
+        let id: String
+        let tone: Tone
+        let tab: NotchTab
+    }
+
+    static let size: CGFloat = 6
+    static let spacing: CGFloat = 5
+
+    var left: [Dot] = []
+    var right: [Dot] = []
+
+    var isEmpty: Bool { left.isEmpty && right.isEmpty }
+
+    /// What's live now, as dots, from the same sources as the closed notch's activities.
+    @MainActor
+    static func current() -> ClosedDots {
+        let settings = AppSettings.shared
+        var dots: [Dot] = []
+        if ScreenRecorder.shared.isActive { dots.append(Dot(id: "recording", tone: .alert, tab: .live)) }
+        if settings.liveMusic, NowPlayingService.shared.isPlaying, NowPlayingService.shared.track != nil {
+            dots.append(Dot(id: "music", tone: .live, tab: .music))
+        }
+        if !DownloadMonitor.shared.downloads.isEmpty, settings.liveDownloads {
+            dots.append(Dot(id: "download", tone: .running, tab: .tray))
+        }
+        let timers = TimerStore.shared
+        if (settings.liveTimer && PomodoroTimer.shared.isRunning)
+            || (settings.liveCountdowns && (timers.countdowns.contains(where: \.isRunning) || timers.stopwatch.isRunning)) {
+            dots.append(Dot(id: "timer", tone: .running, tab: .focus))
+        }
+        if settings.liveAgents {
+            let deck = AgentDeck.shared
+            if !deck.approvals.isEmpty || deck.waitingCount > 0 {
+                dots.append(Dot(id: "agents", tone: .needsYou, tab: .agents))
+            } else if deck.sessions.contains(where: { if case .working = $0.state { true } else { false } }) {
+                dots.append(Dot(id: "agents", tone: .running, tab: .agents))
+            }
+        }
+        if settings.liveCI, CIMonitor.shared.run != nil { dots.append(Dot(id: "ci", tone: .running, tab: .agents)) }
+        if settings.liveScripts, !ScriptActivityStore.shared.activities.isEmpty {
+            dots.append(Dot(id: "script", tone: .running, tab: .agents))
+        }
+        if settings.liveKeepAwake, QuickToggles.shared.isKeepingAwake { dots.append(Dot(id: "awake", tone: .running, tab: .stats)) }
+        if settings.liveMicMuted, MicMonitor.shared.isMuted { dots.append(Dot(id: "mic", tone: .running, tab: .stats)) }
+        let now = Date.now
+        if let event = CalendarService.shared.events.first(where: { !$0.isAllDay && $0.end > now }),
+           event.start.timeIntervalSince(now) < 10 * 60 {
+            dots.append(Dot(id: "event", tone: event.meetingURL != nil ? .needsYou : .running, tab: .calendar))
+        }
+        // Strip order, split where the strip splits.
+        let order = NotchTab.allCases
+        dots.sort { (order.firstIndex(of: $0.tab) ?? 0) < (order.firstIndex(of: $1.tab) ?? 0) }
+        let leftTabs: Set<NotchTab> = [.live, .music, .tray, .focus, .agents]
+        return ClosedDots(left: dots.filter { leftTabs.contains($0.tab) }, right: dots.filter { !leftTabs.contains($0.tab) })
     }
 }
 
@@ -228,7 +309,8 @@ final class NotchViewModel: ObservableObject {
 
     /// The notch is drawn as a faint line: a virtual notch set to one, closed, with nothing to show.
     var isLine: Bool {
-        geometry.isLine && (phase == .closed || phase == .hovering) && activity == .idle && secondary == nil
+        geometry.isLine && (phase == .closed || phase == .hovering)
+            && (showsDots ? closedDots.isEmpty : activity == .idle && secondary == nil)
     }
 
     /// What the glance shows, from what's live right now.
@@ -326,8 +408,27 @@ final class NotchViewModel: ObservableObject {
         return AppSettings.shared.enabledTabs.contains(tab) ? tab : .live
     }
 
+    /// The closed notch shows status dots rather than the live activity: Orbit's default, unless
+    /// what's showing is a notice, which needs its words.
+    var showsDots: Bool {
+        switch AppSettings.shared.closedNotchShows {
+        case .activities: return false
+        case .dots, .nothing:
+            switch activity {
+            case .notice, .trackPeek: return false
+            default: return true
+            }
+        }
+    }
+
+    /// The dots, or none when the setting says Nothing.
+    var closedDots: ClosedDots {
+        AppSettings.shared.closedNotchShows == .dots ? ClosedDots.current() : ClosedDots()
+    }
+
     var closedLayout: ClosedLayout {
-        ClosedLayout(activity: activity, secondary: secondary, notch: geometry.closedSize)
+        if showsDots { return ClosedLayout(dots: closedDots, notch: geometry.closedSize) }
+        return ClosedLayout(activity: activity, secondary: secondary, notch: geometry.closedSize)
     }
 
     var metrics: NotchMetrics {
