@@ -1,8 +1,9 @@
 import AppKit
 import SwiftUI
 
-/// What's next on the calendar: the next event in full, with Join when it has a call link, and the
-/// rest of the day underneath. After the day's last event, tomorrow's first.
+/// What's next on the calendar, as a card for the Widgets stack: the next event in full, with Join
+/// when it has a call link, and the rest of the day underneath. After the day's last event,
+/// tomorrow's first. The Calendar section shows the same day at full size.
 struct CalendarWidget: View {
     @ObservedObject private var calendar = CalendarService.shared
 
@@ -68,10 +69,10 @@ private struct UpNextCard: View {
             VStack(alignment: .leading, spacing: 0) {
                 CardTitle(title: heading, symbol: "calendar") {
                     if let when {
-                        // Orange while it's soon, like the event's own glance; as bright as the label otherwise.
+                        // In the accent while it's soon; as bright as the label otherwise.
                         Text(when)
-                            .font(NotchFont.numeric(11))
-                            .foregroundStyle(agenda.isSoon(at: now) ? Color.orange : theme.secondary)
+                            .font(NotchFont.time(11))
+                            .foregroundStyle(agenda.isSoon(at: now) ? theme.accentText : theme.secondary)
                             .lineLimit(1)
                             .fixedSize()
                     }
@@ -83,7 +84,7 @@ private struct UpNextCard: View {
                             EventDetail(event: event)
                         } else {
                             Text("Nothing else today")
-                                .font(NotchFont.title)
+                                .font(NotchFont.headline)
                                 .foregroundStyle(theme.secondary)
                         }
                         if !agenda.later.isEmpty {
@@ -126,21 +127,20 @@ private struct EventDetail: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(event.title)
-                .font(NotchFont.title)
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(theme.primary)
                 .lineLimit(1)
                 .help(event.title)
             Text(details)
-                .font(NotchFont.body)
+                .font(NotchFont.subheadline)
                 .foregroundStyle(theme.secondary)
                 .lineLimit(1)
             HStack(spacing: 6) {
                 if let url = event.meetingURL {
-                    JoinButton(url: url)
+                    PillButton(title: "Join", height: 24) { NSWorkspace.shared.open(url) }
+                        .help(url.absoluteString)
                 }
-                UpNextAction(title: "Open in Calendar") {
-                    NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Calendar.app"))
-                }
+                OrbitButton(title: "Open in Calendar", height: 24, action: CalendarSection.openCalendar)
             }
             .padding(.top, 8)
         }
@@ -149,49 +149,13 @@ private struct EventDetail: View {
     private var details: String {
         let times = event.isAllDay ? "All day" : event.start.formatted(date: .omitted, time: .shortened)
             + " – " + event.end.formatted(date: .omitted, time: .shortened)
-        guard let service = event.meetingURL.flatMap(Self.service(for:)) else { return times }
-        return times + " · " + service
-    }
-
-    /// The call service, from its link.
-    private static func service(for url: URL) -> String? {
-        let host = url.host()?.lowercased() ?? ""
-        if host.hasSuffix("zoom.us") { return "Zoom" }
-        if host == "meet.google.com" { return "Google Meet" }
-        if host.hasSuffix("teams.microsoft.com") || host.hasSuffix("teams.live.com") { return "Teams" }
-        if host.hasSuffix("webex.com") { return "Webex" }
-        if url.scheme == "facetime" || host == "facetime.apple.com" { return "FaceTime" }
-        return nil
-    }
-}
-
-/// A plain action beside Join, like Open in Calendar: a capsule of the notch's neutral glass with a
-/// white label. The accent is kept for what's selected or on.
-private struct UpNextAction: View {
-    let title: String
-    let action: () -> Void
-    @Environment(\.notchTheme) private var theme
-    @ViewState private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(NotchFont.bodyStrong)
-                .foregroundStyle(theme.primary)
-                .lineLimit(1)
-                .padding(.horizontal, 11)
-                .frame(height: 24)
-                .glass(.control, in: Capsule(), isLit: hovering)
-                .contentShape(Capsule())
-        }
-        .buttonStyle(PressableButtonStyle(scale: 0.94))
-        .onHover { hovering = $0 }
-        .animation(.notchHighlight, value: hovering)
+        guard let place = CalendarSection.place(of: event) else { return times }
+        return times + " · " + place
     }
 }
 
 /// Joins the call, in green like the call buttons in FaceTime: a capsule of green glass, lit from
-/// above, with dark ink on it.
+/// above, with dark ink on it. The glance, on black, keeps it; the open panel uses the focus button.
 struct JoinButton: View {
     let url: URL
     var height: CGFloat = 24
@@ -230,7 +194,7 @@ struct JoinButton: View {
     }
 }
 
-/// The rest of the day under an etched line, each event its time, calendar color and title.
+/// The rest of the day under a hairline, each event its time, calendar color and title.
 private struct LaterEvents: View {
     let events: [CalendarService.Event]
     @Environment(\.notchTheme) private var theme
@@ -242,15 +206,15 @@ private struct LaterEvents: View {
             ForEach(events) { event in
                 HStack(spacing: 8) {
                     Text(event.isAllDay ? "All day" : event.start.formatted(date: .omitted, time: .shortened))
-                        .font(NotchFont.numeric(10.5))
-                        .foregroundStyle(theme.tertiary)
+                        .font(NotchFont.time(10.5, .medium))
+                        .foregroundStyle(theme.secondary)
                         .lineLimit(1)
                         // A 12-hour clock's 10:05 PM keeps its PM.
                         .minimumScaleFactor(0.85)
                         .frame(width: 46, alignment: .leading)
-                    Capsule()
+                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
                         .fill(event.color)
-                        .frame(width: 3, height: 11)
+                        .frame(width: 3, height: 12)
                     Text(event.title)
                         .font(NotchFont.body)
                         .foregroundStyle(theme.primary)

@@ -379,16 +379,23 @@ final class NotesStore: ObservableObject {
 
     // MARK: Snapshots
 
-    func loadSample(_ texts: [String]) {
+    /// `created` dates the notes, oldest first; without it they're as old as the reference date.
+    /// `current` is the one open.
+    func loadSample(_ texts: [String], created: [Date]? = nil, current: Int = 0) {
         notes = texts.enumerated().map { index, text in
             Note(id: UUID(), url: URL(fileURLWithPath: "/tmp/\(index).md"), text: text, savedText: text, isOnDisk: true,
-                 created: Date(timeIntervalSinceReferenceDate: Double(index)))
+                 created: created.flatMap { $0.indices.contains(index) ? $0[index] : nil }
+                    ?? Date(timeIntervalSinceReferenceDate: Double(index)))
         }
-        currentID = notes.first?.id
+        currentID = notes.indices.contains(current) ? notes[current].id : notes.first?.id
     }
 
     func loadSample(leftBehind: LeftBehind?) {
         self.leftBehind = leftBehind
+    }
+
+    func loadSample(saveFailed: Bool) {
+        self.saveFailed = saveFailed
     }
 }
 

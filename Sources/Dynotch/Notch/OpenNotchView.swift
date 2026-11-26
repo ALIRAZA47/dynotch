@@ -54,9 +54,9 @@ struct OpenNotchView: View {
             case .home: WidgetsSection()
             case .tray: TrayTabView(viewModel: viewModel).orbitHeader("Tray")
             case .clipboard: ClipboardShelf(viewModel: viewModel).orbitHeader("Clipboard")
-            case .focus: FocusTabView().orbitHeader("Focus")
-            case .notes: NotesWidget().orbitHeader("Notes")
-            case .calendar: CalendarWidget().orbitHeader("Calendar")
+            case .focus: FocusSection(viewModel: viewModel)
+            case .notes: NotesSection()
+            case .calendar: CalendarSection(viewModel: viewModel)
             case .stats: ControlSection()
             case .agents: AgentsSectionView(viewModel: viewModel)
             }
@@ -192,75 +192,5 @@ private struct MoreMenu: View {
             }
         }
         return entries
-    }
-}
-
-// MARK: Tabs
-
-/// The timers on the left, the reminders or the notes on the right.
-struct FocusTabView: View {
-    var body: some View {
-        GeometryReader { proxy in
-            HStack(spacing: NotchTheme.gap) {
-                TimersCard()
-                    .frame(width: (proxy.size.width * 0.49).rounded())
-                FocusListsCard()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-        }
-    }
-}
-
-/// The Pomodoro's dial with its controls under it, and the named timers beside it.
-private struct TimersCard: View {
-    var body: some View {
-        GeometryReader { proxy in
-            // As large as the room left under it for the controls allows.
-            let dial = min(116, max(72, proxy.size.height - NotchTheme.cardPadding.top * 2 - 42))
-            HStack(alignment: .top, spacing: 14) {
-                VStack(spacing: 8) {
-                    PomodoroDial(side: dial)
-                    PomodoroControls()
-                }
-                .frame(width: max(dial, 104))
-                TimersList()
-            }
-            .padding(12)
-            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
-        }
-        .background(CardSurface())
-    }
-}
-
-/// The reminders or the notes, one at a time, under a switch between them.
-private struct FocusListsCard: View {
-    @ObservedObject private var settings = AppSettings.shared
-    @ObservedObject private var calendar = CalendarService.shared
-    @ViewState private var editor = NoteEditorHandle()
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 6) {
-                CardSegments(selection: $settings.focusShowsNotes, segments: [
-                    .init(value: false, title: "Reminders",
-                          count: calendar.hasReminderAccess && !calendar.reminders.isEmpty ? calendar.reminders.count : nil),
-                    .init(value: true, title: "Notes"),
-                ])
-                .fixedSize()
-                FocusStrip()
-                if settings.focusShowsNotes {
-                    NotesActions(editor: editor)
-                        .fixedSize()
-                }
-            }
-            if settings.focusShowsNotes {
-                NoteBody(editor: editor)
-            } else {
-                RemindersList()
-            }
-        }
-        .padding(EdgeInsets(top: 10, leading: 12, bottom: 12, trailing: 12))
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(CardSurface())
     }
 }

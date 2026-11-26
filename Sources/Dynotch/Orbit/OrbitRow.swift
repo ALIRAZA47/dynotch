@@ -125,6 +125,10 @@ struct OrbitRow: View {
     let id: String
     /// The left column: "Now", "2:41", "10:30". Empty leaves the column out.
     var time: String = ""
+    /// How wide the time column is: wider for "10:05 PM" or "All day".
+    var timeWidth: CGFloat = 52
+    /// A thin bar of color after the time, like a calendar's.
+    var mark: Color?
     /// An SF Symbol in a small square, or nothing.
     var symbol: String?
     var title: String
@@ -154,7 +158,13 @@ struct OrbitRow: View {
                     .font(NotchFont.time(14))
                     .foregroundStyle(needsYou ? theme.accentText : theme.primary)
                     .lineLimit(1)
-                    .frame(width: 52, alignment: .leading)
+                    .frame(width: timeWidth, alignment: .leading)
+            }
+            if let mark {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(mark)
+                    .frame(width: 4, height: 28)
+                    .accessibilityHidden(true)
             }
             if let symbol {
                 Image(systemName: symbol)

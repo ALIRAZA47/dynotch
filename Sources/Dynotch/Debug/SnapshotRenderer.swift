@@ -1,4 +1,5 @@
 import AppKit
+import EventKit
 import SwiftUI
 
 /// `Dynotch --snapshot <folder>` renders the notch in each state with sample data,
@@ -467,6 +468,7 @@ enum SnapshotRenderer {
             }),
         ] + lyricsScenes() + clipboardScenes() + sizeScenes() + edgeScenes(virtualNotch: virtualNotch)
             + orbitMusicScenes() + orbitWidgetsScenes()
+            + orbitFocusNotesCalendarScenes(focusMode: work)
 
         let settings = AppSettings.shared
         let savedTheme = NotchTheme()
@@ -1004,6 +1006,9 @@ enum SnapshotRenderer {
         CommandHistory.forget()
         FocusHistory.shared.loadSample(days: sampleFocusDays)
         LyricsService.shared.loadSample(nil)
+        NotesStore.shared.loadSample(leftBehind: nil)
+        NotesStore.shared.loadSample(saveFailed: false)
+        CalendarService.shared.loadSample(eventAccess: .fullAccess, reminderAccess: .fullAccess)
     }
 
     /// A recording this long running, or its file being saved. It holds nothing.
@@ -1130,6 +1135,153 @@ enum SnapshotRenderer {
                 .init(id: "c", title: "Water the plants", dueDate: nil, color: .green),
                 .init(id: "e", title: "Renew the passport", dueDate: nil, color: .purple),
             ])
+    }
+
+    // MARK: Orbit Focus, Notes and Calendar
+
+    /// Focus, Notes and Calendar in Orbit: dark and light, at the smallest and the largest open size,
+    /// empty, without permission and busy. Each scene loads its own day, notes and reminders.
+    private static func orbitFocusNotesCalendarScenes(focusMode: FocusMode) -> [Scene] {
+        let light = NotchTheme(isDark: false)
+        let small = CGSize(width: 640, height: 300), large = CGSize(width: 880, height: 460)
+        let day: @MainActor () -> Void = { loadOrbitDay(); loadOrbitNotes() }
+        let empty: @MainActor () -> Void = {
+            CalendarService.shared.loadSample(events: [], reminders: [])
+            FocusHistory.shared.loadSample(days: [])
+            NotesStore.shared.loadSample([""], created: [.now])
+        }
+        let busy: @MainActor () -> Void = {
+            loadOrbitDay(busy: true)
+            loadOrbitNotes()
+            TimerStore.shared.start("pizza 12m")
+            TimerStore.shared.start("eggs 90s")
+        }
+        let resting: @MainActor () -> Void = { PomodoroTimer.shared.loadSample(remaining: 25 * 60, running: false) }
+        let running: @MainActor () -> Void = { PomodoroTimer.shared.loadSample(remaining: 14 * 60 + 12, running: true) }
+        func both(_ first: @escaping @MainActor () -> Void, _ second: @escaping @MainActor () -> Void) -> @MainActor () -> Void {
+            { first(); second() }
+        }
+        return [
+            Scene(name: "o-focus-1-dark", phase: .open, tab: .focus, setUp: both(day, running)),
+            Scene(name: "o-focus-1-light", phase: .open, tab: .focus, theme: light, setUp: both(day, running)),
+            Scene(name: "o-focus-2-small", phase: .open, tab: .focus, openSize: small, setUp: both(day, running)),
+            Scene(name: "o-focus-2-small-light", phase: .open, tab: .focus, theme: light, openSize: small, setUp: both(day, running)),
+            Scene(name: "o-focus-3-large", phase: .open, tab: .focus, openSize: large, setUp: both(day, running)),
+            Scene(name: "o-focus-4-empty", phase: .open, tab: .focus, hasTimers: false, setUp: both(empty, resting)),
+            Scene(name: "o-focus-4-empty-light", phase: .open, tab: .focus, hasTimers: false, theme: light,
+                  setUp: both(empty, resting)),
+            Scene(name: "o-focus-5-no-permission", phase: .open, tab: .focus, setUp: both(day) {
+                CalendarService.shared.loadSample(eventAccess: .fullAccess, reminderAccess: .denied)
+            }),
+            Scene(name: "o-focus-6-busy", phase: .open, tab: .focus, focus: focusMode, setUp: both(busy, running)),
+            Scene(name: "o-focus-6-busy-light-small", phase: .open, tab: .focus, focus: focusMode, theme: light, openSize: small,
+                  setUp: both(busy, running)),
+            Scene(name: "o-focus-7-hours", phase: .open, tab: .focus, openSize: small, setUp: both(day) {
+                PomodoroTimer.shared.loadSample(remaining: 2 * 3600 - 1, running: true)
+            }),
+
+            Scene(name: "o-notes-1-dark", phase: .open, tab: .notes, setUp: day),
+            Scene(name: "o-notes-1-light", phase: .open, tab: .notes, theme: light, setUp: day),
+            Scene(name: "o-notes-2-small", phase: .open, tab: .notes, openSize: small, setUp: day),
+            Scene(name: "o-notes-3-large-light", phase: .open, tab: .notes, theme: light, openSize: large, setUp: day),
+            Scene(name: "o-notes-4-empty", phase: .open, tab: .notes, setUp: empty),
+            Scene(name: "o-notes-4-empty-light", phase: .open, tab: .notes, theme: light, setUp: empty),
+            Scene(name: "o-notes-5-left-behind", phase: .open, tab: .notes, setUp: both(day) {
+                NotesStore.shared.loadSample(leftBehind: .init(
+                    folder: URL(fileURLWithPath: "/Users/sample/Documents/Obsidian Vault"), count: 3))
+            }),
+            Scene(name: "o-notes-6-save-failed-light", phase: .open, tab: .notes, theme: light, setUp: both(day) {
+                NotesStore.shared.loadSample(saveFailed: true)
+            }),
+
+            Scene(name: "o-calendar-1-dark", phase: .open, tab: .calendar, setUp: day),
+            Scene(name: "o-calendar-1-light", phase: .open, tab: .calendar, theme: light, setUp: day),
+            Scene(name: "o-calendar-2-small", phase: .open, tab: .calendar, openSize: small, setUp: day),
+            Scene(name: "o-calendar-3-large", phase: .open, tab: .calendar, openSize: large, setUp: { loadOrbitDay(busy: true) }),
+            Scene(name: "o-calendar-4-empty", phase: .open, tab: .calendar, setUp: empty),
+            Scene(name: "o-calendar-4-empty-light", phase: .open, tab: .calendar, theme: light, setUp: empty),
+            Scene(name: "o-calendar-5-no-permission", phase: .open, tab: .calendar, setUp: {
+                CalendarService.shared.loadSample(eventAccess: .notDetermined, reminderAccess: .fullAccess)
+            }),
+            Scene(name: "o-calendar-5-no-permission-light", phase: .open, tab: .calendar, theme: light, setUp: {
+                CalendarService.shared.loadSample(eventAccess: .notDetermined, reminderAccess: .fullAccess)
+            }),
+            Scene(name: "o-calendar-6-busy", phase: .open, tab: .calendar, setUp: { loadOrbitDay(busy: true, meetingNow: true) }),
+            Scene(name: "o-calendar-6-busy-light-small", phase: .open, tab: .calendar, theme: light, openSize: small,
+                  setUp: { loadOrbitDay(busy: true, meetingNow: true) }),
+            Scene(name: "o-calendar-7-tomorrow", phase: .open, tab: .calendar, setUp: { loadOrbitDay(tomorrowOnly: true) }),
+
+            // The compact cards the Widgets section stacks.
+            Scene(name: "o-calendar-8-widgets", phase: .open, tab: .home, setUp: both(both(day, running)) {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.calendar, .timer)
+            }),
+            Scene(name: "o-calendar-8-widgets-light", phase: .open, tab: .home, theme: light, setUp: both(both(day, running)) {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.calendar, .timer)
+            }),
+            Scene(name: "o-notes-7-widget-light", phase: .open, tab: .home, theme: light, setUp: both(day) {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.notes, .timer)
+            }),
+        ]
+    }
+
+    /// A day like the board's: a standup soon with a call, lunch somewhere, a review on Zoom, a
+    /// reminder to call; busy adds an all-day event and a crowded afternoon.
+    private static func loadOrbitDay(busy: Bool = false, meetingNow: Bool = false, tomorrowOnly: Bool = false) {
+        let now = Date.now
+        let calendar = Calendar.current
+        func at(_ minutes: Double) -> Date { now.addingTimeInterval(minutes * 60) }
+        let meet = URL(string: "https://meet.google.com/abc-defg-hij"), zoom = URL(string: "https://acme.zoom.us/j/123456")
+        let blue = Color(red: 0.18, green: 0.42, blue: 1), green = Color(red: 0.2, green: 0.78, blue: 0.35)
+        let orange = Color(red: 1, green: 0.62, blue: 0.04), purple = Color(red: 0.69, green: 0.32, blue: 0.87)
+        var events: [CalendarService.Event] = []
+        if tomorrowOnly {
+            let morning = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!.addingTimeInterval(9.5 * 3600)
+            events = [.init(id: "t", title: "Standup", start: morning, end: morning.addingTimeInterval(900), isAllDay: false,
+                            color: blue, meetingURL: meet)]
+        } else {
+            events = [
+                .init(id: "1", title: "Standup", start: at(meetingNow ? -5 : 12), end: at(meetingNow ? 10 : 27), isAllDay: false,
+                      color: blue, meetingURL: meet),
+                .init(id: "2", title: "Lunch with Sara", start: at(90), end: at(150), isAllDay: false, color: green,
+                      meetingURL: nil, location: "Café Aylanto"),
+                .init(id: "3", title: "Design review: Orbit", start: at(270), end: at(300), isAllDay: false, color: blue,
+                      meetingURL: zoom, location: "https://acme.zoom.us/j/123456"),
+                .init(id: "4", title: "Call Sam", start: at(390), end: at(405), isAllDay: false, color: orange, meetingURL: nil),
+            ]
+            if busy {
+                events.insert(.init(id: "0", title: "Mum's birthday", start: calendar.startOfDay(for: now),
+                                    end: calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!,
+                                    isAllDay: true, color: purple, meetingURL: nil), at: 0)
+                events.append(.init(id: "5", title: "Quarterly planning with the whole product team", start: at(420), end: at(480),
+                                    isAllDay: false, color: purple, meetingURL: nil, location: "Room 4.12, second floor"))
+                events.append(.init(id: "6", title: "Yoga", start: at(500), end: at(560), isAllDay: false, color: green,
+                                    meetingURL: nil))
+            }
+        }
+        var reminders: [CalendarService.Reminder] = [
+            .init(id: "a", title: "Send the invoice", dueDate: at(90), color: .orange),
+            .init(id: "b", title: "Book flights for March", dueDate: calendar.date(byAdding: .day, value: 1, to: now), color: .blue),
+            .init(id: "c", title: "Water the plants", dueDate: nil, color: .green),
+        ]
+        if busy {
+            reminders.insert(.init(id: "d", title: "Call the landlord about the leaking kitchen tap before the weekend",
+                                   dueDate: at(-1500), color: .red), at: 1)
+            reminders.append(.init(id: "e", title: "Renew the passport", dueDate: nil, color: .purple))
+        }
+        CalendarService.shared.loadSample(events: events, reminders: reminders)
+    }
+
+    /// The board's notes: a checklist part way done, opened, and three older ones. Nothing is saved.
+    private static func loadOrbitNotes() {
+        let now = Date.now
+        func daysAgo(_ days: Double) -> Date { now.addingTimeInterval(-days * 24 * 3600) }
+        NotesStore.shared.loadSample([
+            "Gift ideas\n- A good pen\n- Hojicha from the market",
+            "Teas to try\n- [x] Sencha\n- [ ] Hojicha\n- [ ] Genmaicha",
+            "Standup\nShip the board, then the glance.",
+            "Ship list\n- [x] Side strips stuck to the panel\n- [x] Button roundness setting\n- [x] Light and dark tokens\n"
+                + "- [ ] Hover actions on every row\n- [ ] Springy open animation",
+        ], created: [daysAgo(9), daysAgo(4), daysAgo(3), now.addingTimeInterval(-600)], current: 3)
     }
 
     /// Ink on each accent: the Control tab, its jewel and the Mute mic tile, which is on in every

@@ -30,6 +30,8 @@ final class CalendarService: ObservableObject, EventAdding {
         let isAllDay: Bool
         let color: Color
         let meetingURL: URL?
+        /// Where it is, as the event says.
+        var location: String? = nil
 
         func isHappening(at date: Date = .now) -> Bool { start <= date && date < end }
     }
@@ -183,7 +185,8 @@ final class CalendarService: ObservableObject, EventAdding {
                       end: event.endDate,
                       isAllDay: event.isAllDay,
                       color: Color(cgColor: event.calendar.cgColor),
-                      meetingURL: Self.meetingURL(in: event))
+                      meetingURL: Self.meetingURL(in: event),
+                      location: event.location.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 })
             }
     }
 
@@ -258,5 +261,11 @@ final class CalendarService: ObservableObject, EventAdding {
         reminderAccess = .fullAccess
         self.events = events
         self.reminders = reminders
+    }
+
+    /// Calendar or Reminders access as a scene needs it, leaving the events alone.
+    func loadSample(eventAccess: EKAuthorizationStatus, reminderAccess: EKAuthorizationStatus) {
+        self.eventAccess = eventAccess
+        self.reminderAccess = reminderAccess
     }
 }
