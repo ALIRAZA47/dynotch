@@ -49,7 +49,7 @@ struct RecordingGlance: View {
     var body: some View {
         GlanceLayout(band: band) {
             ZStack {
-                Circle().fill(Color.red.opacity(0.16))
+                theme.controlShape.fill(theme.alert.opacity(0.16))
                 RecordingDot(size: 18)
             }
         } trailing: {
@@ -74,23 +74,16 @@ struct RecordingGlance: View {
     }
 }
 
-/// Stop: big, one size, and red, a jewel on the black.
+/// Stop: big, one size, a red focus button on the black.
 private struct StopRecordingButton: View {
     let action: () -> Void
+    @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                Image(systemName: "stop.fill")
-                    .font(.system(size: 11, weight: .bold))
-                Text("Stop")
-                    .font(NotchFont.bodyStrong)
-            }
-            .foregroundStyle(Color.red)
-            .frame(width: 92, height: 36)
-            .glass(.tint(.red), in: Capsule(), isLit: hovering)
-            .contentShape(Capsule())
+            FocusButtonLabel(title: "Stop", symbol: "stop.fill", tint: theme.alert, height: 36, hovering: hovering)
+                .frame(minWidth: 92)
         }
         .buttonStyle(PressableButtonStyle(scale: 0.95))
         .onHover { hovering = $0 }
