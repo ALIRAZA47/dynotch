@@ -155,20 +155,36 @@ struct ClosedNotchView: View {
         let layout = viewModel.closedLayout
         let dots = viewModel.closedDots
         return HStack(spacing: 0) {
-            dotRow(dots.left)
-                .padding(.leading, 12)
-                .frame(width: layout.earWidth, height: layout.notchHeight, alignment: .leading)
+            HStack(spacing: ClosedDots.musicGap) {
+                if dots.music {
+                    ArtworkView(image: media.artwork, size: viewModel.geometry.closedSize.height - 12, cornerRadius: 5)
+                        .transition(arrival(from: 0.6))
+                }
+                dotRow(dots.left)
+            }
+            .padding(.leading, 11)
+            .frame(width: layout.earWidth, height: layout.notchHeight, alignment: .leading)
             Color.clear.frame(width: layout.notchWidth)
-            dotRow(dots.right)
-                .padding(.trailing, 12)
-                .frame(width: layout.earWidth, height: layout.notchHeight, alignment: .trailing)
+            HStack(spacing: ClosedDots.musicGap) {
+                dotRow(dots.right)
+                if dots.music {
+                    AudioBars(isPlaying: media.isPlaying, color: tint)
+                        .frame(width: ClosedDots.barsWidth, height: 13)
+                        .transition(arrival(from: 0.5))
+                }
+            }
+            .padding(.trailing, 11)
+            .frame(width: layout.earWidth, height: layout.notchHeight, alignment: .trailing)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .clipped()
         .contentShape(Rectangle())
         .onTapGesture { viewModel.activate() }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(dots.isEmpty ? "Notch" : "\(dots.left.count + dots.right.count) live")
+        .accessibilityLabel(dots.isEmpty ? "Notch"
+            : [dots.music ? "Music playing" : nil,
+               dots.left.count + dots.right.count > 0 ? "\(dots.left.count + dots.right.count) more live" : nil]
+                .compactMap { $0 }.joined(separator: ", "))
     }
 
     private func dotRow(_ dots: [ClosedDots.Dot]) -> some View {

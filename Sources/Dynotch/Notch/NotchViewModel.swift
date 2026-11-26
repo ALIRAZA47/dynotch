@@ -53,8 +53,15 @@ struct ClosedLayout: Equatable {
     init(dots: ClosedDots, notch: CGSize) {
         notchWidth = notch.width
         notchHeight = notch.height
-        let most = max(dots.left.count, dots.right.count)
-        earWidth = most == 0 ? 0 : 22 + CGFloat(most) * ClosedDots.size + CGFloat(most - 1) * ClosedDots.spacing
+        // Each side: its dots, plus the artwork on the left or the bars on the right while music plays.
+        func side(_ count: Int, music: CGFloat) -> CGFloat {
+            let dotsWidth = count == 0 ? 0 : CGFloat(count) * ClosedDots.size + CGFloat(count - 1) * ClosedDots.spacing
+            let item = dots.music ? music : 0
+            let gap = dotsWidth > 0 && item > 0 ? ClosedDots.musicGap : 0
+            return dotsWidth + item + gap
+        }
+        let widest = max(side(dots.left.count, music: notch.height - 12), side(dots.right.count, music: ClosedDots.barsWidth))
+        earWidth = widest == 0 ? 0 : 22 + widest
         rowHeight = 0
     }
 
@@ -165,11 +172,17 @@ struct ClosedDots: Equatable {
 
     static let size: CGFloat = 6
     static let spacing: CGFloat = 5
+    /// Between the artwork or the bars and the dots beside them.
+    static let musicGap: CGFloat = 8
+    static let barsWidth: CGFloat = 18
 
     var left: [Dot] = []
     var right: [Dot] = []
+    /// Music from Music or Spotify is playing: it shows as its artwork on the left and moving bars
+    /// on the right, rather than as a dot.
+    var music = false
 
-    var isEmpty: Bool { left.isEmpty && right.isEmpty }
+    var isEmpty: Bool { left.isEmpty && right.isEmpty && !music }
 
     /// What's live now, as dots, from the same sources as the closed notch's activities.
     @MainActor
@@ -177,9 +190,7 @@ struct ClosedDots: Equatable {
         let settings = AppSettings.shared
         var dots: [Dot] = []
         if ScreenRecorder.shared.isActive { dots.append(Dot(id: "recording", tone: .alert, tab: .live)) }
-        if settings.liveMusic, NowPlayingService.shared.isPlaying, NowPlayingService.shared.track != nil {
-            dots.append(Dot(id: "music", tone: .live, tab: .music))
-        }
+        let music = settings.liveMusic && NowPlayingService.shared.isPlaying && NowPlayingService.shared.track != nil
         if !DownloadMonitor.shared.downloads.isEmpty, settings.liveDownloads {
             dots.append(Dot(id: "download", tone: .running, tab: .tray))
         }
@@ -211,7 +222,8 @@ struct ClosedDots: Equatable {
         let order = NotchTab.allCases
         dots.sort { (order.firstIndex(of: $0.tab) ?? 0) < (order.firstIndex(of: $1.tab) ?? 0) }
         let leftTabs: Set<NotchTab> = [.live, .music, .tray, .focus, .agents]
-        return ClosedDots(left: dots.filter { leftTabs.contains($0.tab) }, right: dots.filter { !leftTabs.contains($0.tab) })
+        return ClosedDots(left: dots.filter { leftTabs.contains($0.tab) }, right: dots.filter { !leftTabs.contains($0.tab) },
+                          music: music)
     }
 }
 
