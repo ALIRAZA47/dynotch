@@ -81,18 +81,14 @@ private struct SliderRow: View {
 private func points(_ value: Double) -> String { "\(Int(value)) pt" }
 private func spokenPoints(_ value: Double) -> String { "\(Int(value)) points" }
 
-/// Behind a text field on a page: a capsule pressed into the card. Its rim is a control's turned
-/// over, shaded along the top and catching the light on its lower lip.
+/// Behind a text field on a page: Orbit's field, at the button roundness, with a hairline round it.
 struct FieldWell: View {
-    var body: some View {
-        Capsule().fill(Palette.wash)
-            .overlay(Capsule().strokeBorder(Self.rim))
-    }
+    @Environment(\.notchTheme) private var theme
 
-    private static let rim = LinearGradient(stops: [.init(color: Palette.rimShade, location: 0),
-                                                    .init(color: Palette.rimShade, location: 0.5),
-                                                    .init(color: Palette.rimLit, location: 1)],
-                                            startPoint: .top, endPoint: .bottom)
+    var body: some View {
+        theme.controlShape.fill(Palette.field)
+            .overlay(theme.controlShape.strokeBorder(Palette.stroke))
+    }
 }
 
 // MARK: General
@@ -104,7 +100,7 @@ struct GeneralSettings: View {
     private let openers = [
         SwitchOption(title: "Hover", detail: "A glance, or the whole notch, when the pointer rests on it",
                      symbol: "cursorarrow.rays", setting: \.openOnHover),
-        SwitchOption(title: "Swipe", detail: "Swipe down on the trackpad to open, up to close, sideways to skip a track or, once it's open, to change tabs",
+        SwitchOption(title: "Swipe", detail: "Swipe down on the trackpad to open, up to close, sideways to skip a track or, once it's open, to change sections",
                      symbol: "rectangle.and.hand.point.up.left.fill",
                      setting: \.swipeGestures),
         SwitchOption(title: "Keyboard shortcut", detail: "Toggle the notch with ⌃⌥N", symbol: "command",
@@ -263,33 +259,85 @@ private struct DisplaysArt: View {
 
 // MARK: Appearance
 
+/// Orbit's look: theme and accent, button roundness, where the section buttons and row buttons go,
+/// how it moves, what the closed notch shows, the open size, and the virtual notch.
 struct AppearanceSettings: View {
     @ObservedObject private var settings = AppSettings.shared
 
-    private let style = [
-        SwitchOption(title: "Artwork tint", detail: "Color the player with the album art instead of the accent",
-                     symbol: "paintpalette.fill", tint: Palette.magenta, setting: \.artworkTint),
-        SwitchOption(title: "Shadow", detail: "A soft shadow under the open notch", symbol: "square.2.layers.3d.bottom.filled",
-                     tint: Palette.indigo, setting: \.showOpenShadow),
-    ]
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 26) {
-            SettingsSection(title: "Open notch") {
+        VStack(alignment: .leading, spacing: 22) {
+            SettingsCard {
+                SettingRow(title: "Theme", detail: "Light, dark, or whatever macOS is using.") {
+                    SettingSegments(title: "Theme", selection: $settings.notchAppearance,
+                                    options: NotchAppearance.allCases.map { ($0, $0.title) })
+                }
+                CardDivider()
+                SettingRow(title: "Accent", detail: "Means “needs you” and marks what’s selected.") {
+                    AccentPicker(selection: $settings.notchAccent)
+                }
+            }
+
+            SettingsCard {
+                SettingRow(title: "Button roundness", detail: "Buttons, switches, rows and fields. 0 is square.") {
+                    HStack(spacing: 12) {
+                        TrackSlider(title: "Button roundness", value: $settings.buttonRadius,
+                                    range: Double(NotchTheme.radiusRange.lowerBound)...Double(NotchTheme.radiusRange.upperBound),
+                                    step: 1, spokenValue: spokenPoints(settings.buttonRadius))
+                            .frame(width: 180)
+                        Text(points(settings.buttonRadius))
+                            .font(.system(size: 12, weight: .medium, design: .monospaced))
+                            .foregroundStyle(Palette.secondaryText)
+                            .frame(width: 40, alignment: .leading)
+                            .accessibilityHidden(true)
+                    }
+                }
+                CardDivider()
+                RoundnessPreview()
+            }
+
+            SettingsCard {
+                PlacementPicker(title: "Section buttons",
+                                detail: "Where Live, Music, Tray and the other sections sit around the open notch.",
+                                selection: $settings.sectionPlacement, columns: 7) { placement, isSelected in
+                    SectionPlacementThumb(placement: placement, isSelected: isSelected)
+                }
+                CardDivider()
+                PlacementPicker(title: "Row actions",
+                                detail: "Where Allow, Pause, Join and the other buttons on a row appear.",
+                                selection: $settings.rowActionMode, columns: 6) { mode, isSelected in
+                    RowActionThumb(mode: mode, isSelected: isSelected)
+                }
+                CardDivider()
+                SettingRow(title: "Motion", detail: "How the panel opens and the strips slide out.") {
+                    SettingSegments(title: "Motion", selection: $settings.notchMotion,
+                                    options: NotchMotion.allCases.map { ($0, $0.title) })
+                }
+                CardDivider()
+                SettingRow(title: "Closed notch shows", detail: "What sits beside the camera when nothing is open.") {
+                    SettingSegments(title: "Closed notch shows", selection: $settings.closedNotchShows,
+                                    options: ClosedNotchShows.allCases.map { ($0, $0.title) })
+                }
+            }
+
+            SettingsSection(title: "Open notch",
+                            footer: "The closed notch stays black whatever the theme, so it blends with the camera housing.") {
                 SettingsCard {
                     SliderRow(title: "Width", spokenTitle: "Open notch width", value: $settings.openWidth,
-                              range: 600...840, step: 10,
+                              range: AppSettings.openWidthRange, step: 10,
                               format: points, spoken: spokenPoints)
                     CardDivider()
                     SliderRow(title: "Height", spokenTitle: "Open notch height", value: $settings.openHeight,
-                              range: 196...260, step: 2,
+                              range: AppSettings.openHeightRange, step: 10,
                               format: points, spoken: spokenPoints)
+                    CardDivider()
+                    SwitchRow(title: "Shadow", detail: "A soft shadow under the open notch",
+                              symbol: "square.2.layers.3d.bottom.filled", tint: Palette.indigo, isOn: $settings.showOpenShadow)
+                    CardDivider()
+                    SwitchRow(title: "Artwork tint", detail: "Color the player with the album art instead of the accent",
+                              symbol: "paintpalette.fill", tint: Palette.magenta, isOn: $settings.artworkTint)
                 }
             }
-            ThemeSettings()
-            SettingsSection(title: "Style") {
-                SwitchGrid(options: style)
-            }
+
             SettingsSection(title: "Virtual notch", footer: virtualNotchFooter) {
                 HStack(spacing: 10) {
                     ForEach(VirtualNotchStyle.allCases) { style in
@@ -322,7 +370,32 @@ struct AppearanceSettings: View {
     }
 }
 
-/// A monitor with the virtual notch, or just the line, along its top edge.
+/// The roundness at work: a plain button, a focus button and a symbol button, as the notch draws them.
+private struct RoundnessPreview: View {
+    @Environment(\.notchTheme) private var theme
+
+    var body: some View {
+        HStack(spacing: 16) {
+            Text("Preview")
+                .font(.system(size: 13))
+                .foregroundStyle(Palette.secondaryText)
+            Spacer(minLength: 12)
+            HStack(spacing: 6) {
+                OrbitButton(title: "Deny", height: 28) {}
+                PillButton(title: "Allow once", tint: theme.alert, height: 28) {}
+                OrbitButton(symbol: "pause.fill", height: 28, help: "Pause") {}
+            }
+            // A picture of the buttons, not buttons to press.
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .frame(minHeight: 48)
+    }
+}
+
+/// A virtual notch's monitor, with the notch, or just the line, along its top edge.
 private struct VirtualNotchArt: View {
     let style: VirtualNotchStyle
     let isSelected: Bool
@@ -339,122 +412,39 @@ private struct VirtualNotchArt: View {
                         NotchShape(topRadius: 1.5, bottomRadius: 2.5)
                             .frame(width: 16, height: 5.5)
                     case .line:
-                        Capsule()
+                        RoundedRectangle(cornerRadius: 1)
                             .frame(width: 14, height: 2)
                             .padding(.top, 2.6)
                     }
                 }
             Rectangle().frame(width: 2, height: 4)
-            Capsule().frame(width: 15, height: 2)
+            RoundedRectangle(cornerRadius: 1).frame(width: 15, height: 2)
         }
-        .foregroundStyle(isSelected ? accent.color : Color.secondary)
+        .foregroundStyle(isSelected ? accent.color : Palette.secondaryText)
     }
 }
 
-/// The open notch's material, accent color and corners. The header above shows each change.
-private struct ThemeSettings: View {
-    @ObservedObject private var settings = AppSettings.shared
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 26) {
-            SettingsSection(title: "Material",
-                            footer: "The closed notch stays black either way, so it blends with the camera housing."
-                                + (reduceTransparency ? " With Reduce Transparency on in System Settings, so does the open one." : "")) {
-                HStack(spacing: 10) {
-                    ForEach(NotchMaterial.allCases) { material in
-                        let isAvailable = material != .glass || NotchMaterial.isGlassAvailable
-                        ChoiceTile(title: material.title, detail: detail(for: material, isAvailable: isAvailable),
-                                   isSelected: settings.notchMaterial == material) {
-                            settings.notchMaterial = material
-                        } art: {
-                            MaterialArt(material: material)
-                        }
-                        .disabled(!isAvailable)
-                        .opacity(isAvailable ? 1 : 0.5)
-                    }
-                }
-            }
-            SettingsSection(title: "Accent color", trailing: settings.notchAccent.title,
-                            footer: "For the selected tab, selections and buttons, and for the player while Artwork tint is off.") {
-                AccentPicker(selection: $settings.notchAccent)
-            }
-            SettingsSection(title: "Corners", footer: "The cards inside the open notch round off with its bottom corners.") {
-                SettingsCard {
-                    SliderRow(title: "Top", spokenTitle: "Top corners", value: $settings.notchTopRadius,
-                              range: Double(NotchTheme.topRadiusRange.lowerBound)...Double(NotchTheme.topRadiusRange.upperBound),
-                              step: 1, format: points, spoken: spokenPoints)
-                    CardDivider()
-                    SliderRow(title: "Bottom", spokenTitle: "Bottom corners", value: $settings.notchBottomRadius,
-                              range: Double(NotchTheme.bottomRadiusRange.lowerBound)...Double(NotchTheme.bottomRadiusRange.upperBound),
-                              step: 1, format: points, spoken: spokenPoints)
-                }
-            }
-        }
-    }
-
-    private func detail(for material: NotchMaterial, isAvailable: Bool) -> String {
-        switch material {
-        case .black: "Like the camera housing"
-        case .glass: isAvailable ? "See the desktop through it" : "Needs macOS 26 or later"
-        }
-    }
-}
-
-/// A strip of desktop with an open notch hanging from it, black or glass.
-private struct MaterialArt: View {
-    let material: NotchMaterial
-
-    var body: some View {
-        let shape = NotchShape(topRadius: 3, bottomRadius: 9)
-        ZStack(alignment: .top) {
-            LinearGradient(colors: [Color(red: 0.36, green: 0.52, blue: 0.86), Color(red: 0.86, green: 0.55, blue: 0.62)],
-                           startPoint: .leading, endPoint: .trailing)
-            Rectangle().fill(.white.opacity(0.5)).frame(height: 7)
-            Group {
-                if material == .glass, !NotchMaterial.isGlassAvailable {
-                    shape.fill(.white.opacity(0.3))
-                } else {
-                    NotchSurface(isGlass: material == .glass, topRadius: 3, bottomRadius: 9, bandHeight: 7)
-                }
-            }
-            .clipShape(shape)
-            .overlay(alignment: .top) {
-                // A tab and a card, so the material reads as the notch.
-                HStack(spacing: 3) {
-                    Capsule().fill(.white.opacity(0.85)).frame(width: 9, height: 3)
-                    Capsule().fill(.white.opacity(0.3)).frame(width: 5, height: 3)
-                }
-                .padding(.top, 5)
-            }
-            .frame(width: 58, height: 26)
-        }
-        .frame(width: 86, height: 34)
-        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
-        .accessibilityHidden(true)
-    }
-}
-
-/// The accent colors as a row of swatches, as in System Settings.
+/// The accents as a row of swatches at the button roundness, and the name of the one picked.
 private struct AccentPicker: View {
     @Binding var selection: NotchAccent
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        HStack(spacing: 10) {
-            ForEach(NotchAccent.allCases) { accent in
-                AccentSwatch(accent: accent, isSelected: selection == accent) {
-                    withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.75)) {
-                        selection = accent
+        VStack(alignment: .trailing, spacing: 6) {
+            HStack(spacing: 6) {
+                ForEach(NotchAccent.allCases) { accent in
+                    AccentSwatch(accent: accent, isSelected: selection == accent) {
+                        withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .snappy(duration: 0.2)) {
+                            selection = accent
+                        }
                     }
                 }
             }
-            Spacer(minLength: 0)
+            Text(selection.title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Palette.secondaryText)
+                .accessibilityHidden(true)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 11)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(CardBackground())
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Accent color")
     }
@@ -464,25 +454,20 @@ private struct AccentSwatch: View {
     let accent: NotchAccent
     let isSelected: Bool
     let action: () -> Void
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.notchTheme) private var theme
+    @Environment(\.windowAccent) private var windowAccent
     @ViewState private var hovering = false
 
     var body: some View {
+        let radius = theme.radius
         Button(action: action) {
-            Circle()
-                .fill(accent.color.gradient)
-                .overlay(Circle().strokeBorder(.black.opacity(0.12)))
-                .overlay {
-                    if isSelected {
-                        Circle().fill(.white).frame(width: 7, height: 7)
-                            .shadow(color: .black.opacity(0.25), radius: 1)
-                            .transition(reduceMotion ? AnyTransition.opacity : .scale.combined(with: .opacity))
-                    }
-                }
-                .frame(width: 22, height: 22)
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(accent.color)
+                .frame(width: 18, height: 18)
                 .padding(3)
-                .overlay(Circle().strokeBorder(accent.color.opacity(isSelected ? 0.9 : hovering ? 0.35 : 0), lineWidth: 2))
-                .contentShape(Circle())
+                .overlay(RoundedRectangle(cornerRadius: radius + 2, style: .continuous)
+                    .strokeBorder(isSelected ? windowAccent.color : Palette.track.opacity(hovering ? 1 : 0), lineWidth: 2))
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressableButtonStyle(scale: 0.9))
         .onHover { hovering = $0 }
@@ -502,20 +487,239 @@ private struct VirtualNotchSketch: View {
     var body: some View {
         let isLine = style == .line
         ZStack(alignment: .top) {
-            LinearGradient(colors: [Color(red: 0.36, green: 0.52, blue: 0.86), Color(red: 0.86, green: 0.55, blue: 0.62)],
-                           startPoint: .leading, endPoint: .trailing)
-                .opacity(0.85)
-            Rectangle().fill(.white.opacity(0.5)).frame(height: 12)
+            Palette.wall
+            Palette.menuBar.frame(height: 12)
             NotchShape(topRadius: isLine ? 0 : 3, bottomRadius: isLine ? 1 : 6)
-                .fill(.black.opacity(isLine ? 0.4 : 1))
+                .fill(.black.opacity(isLine ? 0.45 : 1))
                 .frame(width: width / 2 + (isLine ? 0 : 6), height: isLine ? 2 : 14)
                 .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.8), value: width)
                 .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.35, dampingFraction: 0.85), value: style)
         }
         .frame(height: 44)
-        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 13, topTrailingRadius: 13, style: .continuous))
+        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 9, topTrailingRadius: 9, style: .continuous))
         .padding([.horizontal, .top], 1)
         .accessibilityHidden(true)
+    }
+}
+
+// MARK: Placement pickers
+
+/// A setting whose choices are drawn as small pictures of the open notch, in a row under its name.
+private struct PlacementPicker<Choice: Hashable & Identifiable, Thumb: View>: View where Choice: CaseIterable,
+    Choice.AllCases: RandomAccessCollection {
+    let title: String
+    let detail: String
+    @Binding var selection: Choice
+    let columns: Int
+    @ViewBuilder let thumb: (Choice, Bool) -> Thumb
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.system(size: 13))
+                Text(detail).font(.system(size: 11.5)).foregroundStyle(Palette.secondaryText)
+            }
+            .accessibilityElement(children: .combine)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8, alignment: .top), count: columns), spacing: 8) {
+                ForEach(Array(Choice.allCases)) { choice in
+                    PlacementChoice(title: name(of: choice), isSelected: choice == selection) {
+                        withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .snappy(duration: 0.2)) { selection = choice }
+                    } thumb: {
+                        thumb(choice, choice == selection)
+                    }
+                }
+            }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(title)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+    }
+
+    private func name(of choice: Choice) -> String {
+        switch choice {
+        case let placement as SectionPlacement: placement.title
+        case let mode as RowActionMode: mode.title
+        default: "\(choice)"
+        }
+    }
+}
+
+private struct PlacementChoice<Thumb: View>: View {
+    let title: String
+    let isSelected: Bool
+    let action: () -> Void
+    @ViewBuilder let thumb: Thumb
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                thumb
+                Text(title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PressableButtonStyle(scale: 0.97))
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+}
+
+/// A picture 84 by 46 points, as the design draws them, scaled to the width it's given: a strip of
+/// desk, ringed in the accent when it's the one picked.
+private struct Thumbnail<Content: View>: View {
+    let isSelected: Bool
+    @ViewBuilder var content: Content
+    @Environment(\.windowAccent) private var accent
+
+    static var size: CGSize { CGSize(width: 84, height: 46) }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: 6, style: .continuous)
+        GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                Palette.wall
+                content
+            }
+            .frame(width: Self.size.width, height: Self.size.height, alignment: .topLeading)
+            .clipped()
+            .scaleEffect(proxy.size.width / Self.size.width, anchor: .topLeading)
+        }
+        .aspectRatio(Self.size.width / Self.size.height, contentMode: .fit)
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(isSelected ? accent.color : Palette.stroke, lineWidth: isSelected ? 2 : 1))
+        .accessibilityHidden(true)
+    }
+}
+
+/// A shape placed in a thumbnail's 84 by 46 points.
+private struct Mark: View {
+    let x: CGFloat
+    let y: CGFloat
+    let width: CGFloat
+    let height: CGFloat
+    var fill: Color
+    var radius: CGFloat = 1
+    var line = false
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: radius, style: .continuous)
+            .fill(fill)
+            .overlay {
+                if line { RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Palette.stroke) }
+            }
+            .frame(width: width, height: height)
+            .offset(x: x, y: y)
+    }
+}
+
+/// Where the section buttons go, drawn round a little open panel.
+private struct SectionPlacementThumb: View {
+    let placement: SectionPlacement
+    let isSelected: Bool
+    @Environment(\.windowAccent) private var accent
+
+    var body: some View {
+        Thumbnail(isSelected: isSelected) {
+            UnevenRoundedRectangle(bottomLeadingRadius: 5, bottomTrailingRadius: 5, style: .continuous)
+                .fill(Palette.window)
+                .overlay(UnevenRoundedRectangle(bottomLeadingRadius: 5, bottomTrailingRadius: 5, style: .continuous)
+                    .strokeBorder(Palette.stroke))
+                .frame(width: 48, height: 28)
+                .offset(x: 18)
+            marks
+        }
+    }
+
+    @ViewBuilder
+    private var marks: some View {
+        let a = accent.fill
+        switch placement {
+        case .under:
+            Mark(x: 22, y: 30, width: 40, height: 6, fill: a)
+        case .sides:
+            Mark(x: 10, y: 12, width: 5, height: 16, fill: a)
+            Mark(x: 69, y: 12, width: 5, height: 16, fill: a)
+        case .left:
+            Mark(x: 10, y: 8, width: 5, height: 26, fill: a)
+        case .right:
+            Mark(x: 69, y: 8, width: 5, height: 26, fill: a)
+        case .band:
+            Mark(x: 18, y: 4, width: 14, height: 4, fill: a)
+            Mark(x: 52, y: 4, width: 14, height: 4, fill: a)
+            UnevenRoundedRectangle(bottomLeadingRadius: 2, bottomTrailingRadius: 2).fill(.black)
+                .frame(width: 16, height: 6).offset(x: 34)
+        case .arc:
+            ForEach([(10.0, 30.0), (22, 35), (38, 37), (54, 35), (66, 30)], id: \.0) { point in
+                Circle().fill(a).frame(width: 6, height: 6).offset(x: point.0, y: point.1)
+            }
+        case .hidden:
+            Mark(x: 26, y: 21, width: 32, height: 3, fill: Palette.secondaryText.opacity(0.6))
+        }
+    }
+}
+
+/// Where a row's buttons show, drawn as three rows and their buttons.
+private struct RowActionThumb: View {
+    let mode: RowActionMode
+    let isSelected: Bool
+    @Environment(\.windowAccent) private var accent
+
+    var body: some View {
+        Thumbnail(isSelected: isSelected) {
+            switch mode {
+            case .hover:
+                row(8)
+                row(19, raised: true, action: .full)
+                row(30)
+            case .always:
+                row(8, action: .full)
+                row(19, action: .full)
+                row(30, action: .full)
+            case .primary:
+                row(8, action: .short)
+                row(19, action: .short)
+                row(30, action: .short)
+            case .bar:
+                row(6)
+                row(15, raised: true)
+                row(24)
+                row(35, raised: true, action: .full)
+            case .band:
+                UnevenRoundedRectangle(bottomLeadingRadius: 2, bottomTrailingRadius: 2).fill(.black)
+                    .frame(width: 16, height: 6).offset(x: 34)
+                Mark(x: 58, y: 1, width: 16, height: 5, fill: accent.fill)
+                row(14, raised: true)
+                row(25)
+                row(36)
+            case .menu:
+                row(8)
+                row(19, raised: true)
+                Mark(x: 65, y: 21, width: 6, height: 3, fill: Palette.secondaryText)
+                Mark(x: 54, y: 25, width: 22, height: 16, fill: Palette.sidebar, radius: 2, line: true)
+            }
+        }
+    }
+
+    private enum Action {
+        case none, full, short
+    }
+
+    @ViewBuilder
+    private func row(_ y: CGFloat, raised: Bool = false, action: Action = .none) -> some View {
+        Mark(x: 8, y: y, width: 68, height: 7, fill: raised ? Palette.sidebar : Palette.window, line: true)
+        switch action {
+        case .none: EmptyView()
+        case .full: Mark(x: 56, y: y + 1, width: 16, height: 5, fill: accent.fill)
+        case .short: Mark(x: 64, y: y + 1, width: 8, height: 5, fill: accent.fill)
+        }
     }
 }
 
@@ -564,7 +768,7 @@ enum LiveActivityKind: String, CaseIterable, Identifiable {
         case .events: "Five minutes before they start"
         case .devices: "When one connects, with its battery"
         case .micMuted: "A red badge while the mic is muted"
-        case .countdowns: "Named timers and the stopwatch from the Focus tab"
+        case .countdowns: "Named timers and the stopwatch from the Focus section"
         case .downloads: "Progress as a file downloads, and a notice when it's done"
         case .focusMode: "Your Focus's symbol while one is on, and a notice when it changes"
         case .notifications: "Messages, Mail, Slack and more as they arrive"
@@ -783,33 +987,56 @@ struct ActivitySettings: View {
     }
 }
 
-// MARK: Nook
+// MARK: Sections
 
+/// The Sections page: a switch for each section under the open notch, in the order of their
+/// buttons, the widgets in the Widgets section, and the settings of the things sections show.
 struct NookSettings: View {
     @ObservedObject private var settings = AppSettings.shared
-
-    private let tabs = [
-        SwitchOption(title: "Tray", detail: "Files you're working with", symbol: NotchTab.tray.symbol,
-                     tint: .teal, spokenTitle: "Tray tab", setting: \.showTrayTab),
-        SwitchOption(title: "Focus", detail: "Timer, reminders and notes", symbol: NotchTab.focus.symbol,
-                     tint: PomodoroTimer.Phase.focus.color, spokenTitle: "Focus tab", setting: \.showFocusTab),
-        SwitchOption(title: "Control", detail: "Toggles, sliders and batteries", symbol: NotchTab.stats.symbol,
-                     tint: Color(red: 0.36, green: 0.56, blue: 1.0), spokenTitle: "Control tab", setting: \.showStatsTab),
-    ]
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 26) {
-            SettingsSection(title: "Tabs",
-                            footer: "The Nook tab, with the player, is always there. The player follows Apple Music and Spotify. macOS keeps other players' Now Playing info private to Apple's own apps.") {
-                SwitchGrid(options: tabs, columns: 3)
-            }
-            SettingsSection(title: "Stacked beside the player",
-                            footer: "One shows at a time. The stack turns by itself to whichever matters now: the calendar "
-                                + "shortly before an event, the weather before rain, the batteries when one runs low.") {
-                HStack(alignment: .top, spacing: 10) {
-                    WidgetSlotPicker(title: "First widget", selection: $settings.homeWidgetA)
-                    WidgetSlotPicker(title: "Second widget", selection: $settings.homeWidgetB)
+        VStack(alignment: .leading, spacing: 22) {
+            SettingsSection(title: "Sections",
+                            footer: "Live is always there. Agents shows while Claude Code or another agent is working. The player follows Apple Music and Spotify; macOS keeps other players' Now Playing info private to Apple's own apps.") {
+                SettingsCard {
+                    SectionRow(tab: .live, detail: "What's going on now, most urgent first")
+                    CardDivider()
+                    SectionRow(tab: .music, detail: "The player, and lyrics when they're on", isOn: $settings.showMusicTab)
+                    CardDivider()
+                    SectionRow(tab: .tray, detail: "Files you're working with", isOn: $settings.showTrayTab)
+                    CardDivider()
+                    SectionRow(tab: .focus, detail: "Timer, reminders and notes", isOn: $settings.showFocusTab)
+                    CardDivider()
+                    SectionRow(tab: .agents, detail: "Claude Code and your scripts, while they run", isOn: $settings.liveAgents)
+                    CardDivider()
+                    SectionRow(tab: .stats, detail: "Toggles, sliders and batteries", isOn: $settings.showStatsTab)
+                    CardDivider()
+                    SectionRow(tab: .clipboard, detail: "What you've copied", isOn: $settings.showClipboardTab)
+                    CardDivider()
+                    SectionRow(tab: .notes, detail: "Notes in Markdown files", isOn: $settings.showNotesTab)
+                    CardDivider()
+                    SectionRow(tab: .calendar, detail: "Today's events and reminders", isOn: $settings.showCalendarTab)
+                    CardDivider()
+                    SectionRow(tab: .home, detail: "A stack of the widgets you pick", isOn: $settings.showWidgetsTab)
+                    if settings.showWidgetsTab {
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(alignment: .top, spacing: 10) {
+                                WidgetSlotPicker(title: "First widget", selection: $settings.homeWidgetA)
+                                WidgetSlotPicker(title: "Second widget", selection: $settings.homeWidgetB)
+                            }
+                            Text("One shows at a time. The stack turns by itself to whichever matters now: the calendar "
+                                + "shortly before an event, the weather before rain, the batteries when one runs low.")
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(Palette.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 14)
+                        .transition(.opacity)
+                    }
                 }
+                .animation(reduceMotion ? .easeOut(duration: 0.15) : .snappy(duration: 0.25), value: settings.showWidgetsTab)
             }
             SettingsSection(title: "Lyrics",
                             footer: "Lyrics come from LRCLIB, a free online service. With this on, the title, artist, album and length of each song you play go to lrclib.net a moment after it starts. Nothing is sent while this is off.") {
@@ -846,6 +1073,51 @@ struct NookSettings: View {
                             footer: "Pin up to four. They show in the Shortcuts widget.") {
                 ShortcutPins()
             }
+        }
+    }
+}
+
+/// A section's switch, with its button's symbol in a badge. Without a binding it's always on.
+private struct SectionRow: View {
+    let tab: NotchTab
+    let detail: String
+    var isOn: Binding<Bool>?
+
+    var body: some View {
+        if let isOn {
+            SwitchRow(title: tab.title, detail: detail, symbol: tab.symbol, tint: Self.tint(tab), isOn: isOn)
+        } else {
+            HStack(spacing: 12) {
+                SymbolBadge(symbol: tab.symbol, tint: Self.tint(tab), size: 24)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(tab.title).font(.system(size: 13))
+                    Text(detail).font(.system(size: 11.5)).foregroundStyle(Palette.secondaryText)
+                }
+                Spacer(minLength: 12)
+                Text("Always on")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Palette.secondaryText)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .frame(minHeight: 48)
+            .accessibilityElement(children: .combine)
+        }
+    }
+
+    /// Each section's badge color, as the sidebar's tell its pages apart.
+    static func tint(_ tab: NotchTab) -> Color {
+        switch tab {
+        case .live: NotchTheme.hex(0x30B158)
+        case .music: NotchTheme.hex(0xFF375F)
+        case .tray: NotchTheme.hex(0x0FA5B5)
+        case .focus: NotchTheme.hex(0xFF453A)
+        case .agents: NotchTheme.hex(0xD97757)
+        case .stats: NotchTheme.hex(0x2E6BFF)
+        case .clipboard: NotchTheme.hex(0x8E8E93)
+        case .notes: NotchTheme.hex(0xE0A100)
+        case .calendar: NotchTheme.hex(0xFF9F0A)
+        case .home: NotchTheme.hex(0x5E5CE6)
         }
     }
 }
@@ -1171,7 +1443,9 @@ private struct WidgetSlotPicker: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(CardBackground())
+        // It sits in the Widgets row's card, so it's set into it rather than raised from it.
+        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Palette.window)
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).strokeBorder(Palette.stroke)))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
     }
@@ -1273,12 +1547,10 @@ private struct PinChip: View {
     let action: () -> Void
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.windowAccent) private var accent
-
-    /// A pinned chip is filled with the accent and lit along its top, like a prominent button.
-    private static let pinnedRim = LinearGradient(colors: [.white.opacity(0.45), .white.opacity(0.05)],
-                                                  startPoint: .top, endPoint: .bottom)
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
+        let shape = theme.controlShape
         Button(action: action) {
             HStack(spacing: 5) {
                 Image(systemName: isPinned ? "pin.fill" : "pin")
@@ -1287,20 +1559,13 @@ private struct PinChip: View {
                     .font(.system(size: 12, weight: isPinned ? .semibold : .medium))
                     .lineLimit(1)
             }
-            .foregroundStyle(isPinned ? accent.onFill : Color.primary.opacity(0.78))
+            .foregroundStyle(isPinned ? accent.onFill : Color.primary)
             .padding(.horizontal, 10)
             .frame(height: 26)
-            .background {
-                if isPinned {
-                    Capsule().fill(accent.gradient)
-                        .overlay(Capsule().strokeBorder(Self.pinnedRim))
-                } else {
-                    Capsule().fill(Palette.wash)
-                }
-            }
-            .contentShape(Capsule())
+            .background(shape.fill(isPinned ? accent.fill : Palette.wash))
+            .contentShape(shape)
         }
-        .buttonStyle(TileButtonStyle(cornerRadius: 13))
+        .buttonStyle(TileButtonStyle(cornerRadius: theme.radius))
         .opacity(isEnabled ? 1 : 0.4)
         .accessibilityLabel(title)
         .accessibilityValue(isPinned ? "Pinned" : "Not pinned")
@@ -1600,7 +1865,6 @@ struct AboutSettings: View {
         VStack(alignment: .leading, spacing: 26) {
             VStack(spacing: 14) {
                 DynotchLogo(size: 96)
-                    .shadow(color: Palette.lavender.opacity(0.45), radius: 18, y: 6)
                 VStack(spacing: 3) {
                     Text("Dynotch")
                         .font(.system(size: 26, weight: .bold))

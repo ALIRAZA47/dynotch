@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 enum SettingsPage: String, CaseIterable, Identifiable {
+    // `nook` keeps its name for links, the command field's history and snapshots; it's the Sections page.
     case general, appearance, activities, nook, tray, focus, permissions, about
 
     var id: String { rawValue }
@@ -11,7 +12,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .general: "General"
         case .appearance: "Appearance"
         case .activities: "Live Activities"
-        case .nook: "Nook & Widgets"
+        case .nook: "Sections"
         case .tray: "Tray"
         case .focus: "Focus Timer"
         case .permissions: "Permissions"
@@ -22,9 +23,9 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .general: "How the notch opens, and where it shows up."
-        case .appearance: "The size and finish of the open notch."
+        case .appearance: "Theme, accent, size, and where the buttons go."
         case .activities: "What the closed notch shows beside the camera."
-        case .nook: "Tabs, widgets and music in the open notch."
+        case .nook: "The sections under the open notch, and their widgets."
         case .tray: "A shelf in the notch for the files you're using."
         case .focus: "The rhythm of the Pomodoro timer."
         case .permissions: "Each one is asked for when a feature first needs it."
@@ -35,8 +36,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .general: "gearshape.fill"
-        case .appearance: "paintbrush.pointed.fill"
-        case .activities: "waveform"
+        case .appearance: "circle.lefthalf.filled"
+        case .activities: "waveform.path.ecg"
         case .nook: "square.grid.2x2.fill"
         case .tray: "tray.full.fill"
         case .focus: "timer"
@@ -49,14 +50,14 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     /// pages apart.
     var tint: Color {
         switch self {
-        case .general: Color(red: 0.44, green: 0.53, blue: 0.7)
-        case .appearance: Color(red: 1.0, green: 0.4, blue: 0.58)
-        case .activities: Color(red: 1.0, green: 0.56, blue: 0.24)
-        case .nook: Color(red: 0.6, green: 0.46, blue: 1.0)
-        case .tray: Color(red: 0.2, green: 0.72, blue: 0.78)
-        case .focus: Color(red: 1.0, green: 0.4, blue: 0.36)
-        case .permissions: Color(red: 0.26, green: 0.74, blue: 0.45)
-        case .about: Color(red: 0.32, green: 0.56, blue: 1.0)
+        case .general: NotchTheme.hex(0x8E8E93)
+        case .appearance: NotchTheme.hex(0xFF375F)
+        case .activities: NotchTheme.hex(0xFF9F0A)
+        case .nook: NotchTheme.hex(0x2E6BFF)
+        case .tray: NotchTheme.hex(0x34C759)
+        case .focus: NotchTheme.hex(0xFF453A)
+        case .permissions: NotchTheme.hex(0x5E5CE6)
+        case .about: NotchTheme.hex(0x8E8E93)
         }
     }
 
@@ -115,23 +116,22 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 }
 
-/// A sidebar of pages beside the selected page: a header with a model notch that acts out
-/// the page's settings, and the settings themselves underneath.
+/// A sidebar of pages beside the selected page: a header with a model notch that acts out the
+/// page's settings, and the settings themselves underneath. Flat Orbit surfaces, light or dark with
+/// macOS.
 struct SettingsView: View {
     @ObservedObject var navigation: SettingsNavigation
     @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
         HStack(spacing: 0) {
-            // Above the stage, so its shadow falls on it.
             SettingsSidebar(navigation: navigation)
-                .zIndex(1)
             VStack(spacing: 0) {
                 SettingsStage(navigation: navigation)
                 ScrollView {
                     page
-                        .padding(.horizontal, 26)
-                        .padding(.top, 22)
+                        .padding(.horizontal, 28)
+                        .padding(.top, 18)
                         .padding(.bottom, 30)
                         .frame(maxWidth: .infinity, alignment: .topLeading)
                 }
@@ -140,14 +140,10 @@ struct SettingsView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        // Behind the sidebar too, which floats above it on macOS 26: the stage runs to the window's edge.
-        .background(alignment: .top) {
-            Palette.stageGradient.frame(height: SettingsStage.height)
-        }
         .background(Palette.window)
         .ignoresSafeArea()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .windowAccent(WindowAccent(choice: settings.notchAccent))
+        .orbitWindow(settings)
     }
 
     @ViewBuilder
@@ -167,57 +163,42 @@ struct SettingsView: View {
 
 // MARK: Sidebar
 
+/// The pages down a raised strip along the window's left edge, with a hairline where it meets the
+/// page. The selected page is a solid face of the accent.
 private struct SettingsSidebar: View {
     @ObservedObject var navigation: SettingsNavigation
-    @Namespace private var selection
-    @Environment(\.isSnapshot) private var isSnapshot
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    /// macOS 26 floats the sidebar in the window as a pane of glass, with the window's buttons inside
-    /// it. Earlier versions set it flush against the window's edge.
-    private static var floats: Bool {
-        if #available(macOS 26, *) { return true }
-        return false
-    }
-
-    /// How far the floating pane sits in from the window's edges, so its corners follow the window's.
-    private static let floatInset: CGFloat = 5
-
     var body: some View {
-        let floats = Self.floats
-        let inset = floats ? Self.floatInset : 0
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 10) {
-                DynotchLogo(size: 34)
-                    .shadow(color: Palette.lavender.opacity(0.35), radius: 7, y: 2)
-                VStack(alignment: .leading, spacing: 0) {
-                    Text("Dynotch")
-                        .font(.system(size: 15, weight: .bold))
-                    Text("Settings")
-                        .font(.system(size: 11.5, weight: .medium))
-                        .foregroundStyle(Palette.secondaryText)
-                }
+            HStack(spacing: 8) {
+                DynotchLogo(size: 22)
+                Text("Dynotch")
+                    .font(.system(size: 13, weight: .semibold))
             }
-            .padding(.horizontal, 8)
-            // In the same spot in the window, floating or not.
-            .padding(.top, 58 - inset)
-            .padding(.bottom, 22)
+            .padding(.horizontal, 10)
+            // Under the window's buttons.
+            .padding(.top, 46)
+            .padding(.bottom, 14)
             .accessibilityElement(children: .combine)
+            .accessibilityLabel("Dynotch Settings")
 
             VStack(spacing: 2) {
                 ForEach(SettingsPage.allCases) { page in
-                    SidebarRow(page: page, isSelected: navigation.page == page, selection: selection) {
+                    SidebarRow(page: page, isSelected: navigation.page == page) {
                         select(page)
                     }
                 }
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, floats ? 8 : 12)
+        .padding(.horizontal, 10)
         .frame(maxHeight: .infinity, alignment: .top)
-        .background { background(floats: floats) }
-        .padding(inset)
-        .frame(width: 214)
+        .frame(width: 220)
+        .background(Palette.sidebar)
+        .overlay(alignment: .trailing) {
+            Rectangle().fill(Palette.stroke).frame(width: 1)
+        }
         // Like a list: once clicked or tabbed into, the arrow keys move between pages.
         .focusable()
         .focusEffectDisabled()
@@ -237,95 +218,50 @@ private struct SettingsSidebar: View {
     private func select(_ page: SettingsPage) {
         guard page != navigation.page else { return }
         navigation.spotlight = nil
-        // The selection slides to the page, or with Reduce Motion eases there without overshooting.
-        withAnimation(reduceMotion ? .easeOut(duration: 0.2) : .spring(response: 0.42, dampingFraction: 0.82)) {
+        withAnimation(reduceMotion ? .easeOut(duration: 0.15) : .snappy(duration: 0.22)) {
             navigation.page = page
         }
     }
-
-    @ViewBuilder
-    private func background(floats: Bool) -> some View {
-        if floats {
-            // A pane of glass, as macOS 26 draws a sidebar: tinted toward the window so it doesn't take
-            // over, lit from above, and its rim catches the light.
-            let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
-            ZStack {
-                material
-                LinearGradient(colors: [Palette.cardTop.opacity(0.5), .clear], startPoint: .top, endPoint: .center)
-            }
-            .clipShape(shape)
-            .overlay(shape.strokeBorder(Palette.rimGradient))
-            .shadow(color: .black.opacity(0.18), radius: 12, y: 4)
-        } else {
-            material.overlay(alignment: .trailing) {
-                Rectangle().fill(Palette.stroke).frame(width: 1)
-            }
-        }
-    }
-
-    /// The window's own translucent material, tinted with the sidebar's color. Snapshots can't draw
-    /// the material, so they get the color alone.
-    @ViewBuilder
-    private var material: some View {
-        if isSnapshot {
-            Palette.sidebar
-        } else {
-            ZStack {
-                SidebarMaterial()
-                Palette.sidebar.opacity(0.55)
-            }
-        }
-    }
-}
-
-/// The material under a Finder sidebar: the desktop shows through, blurred. Always active, so the
-/// sidebar stays glass while another app is in front.
-private struct SidebarMaterial: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = .sidebar
-        view.blendingMode = .behindWindow
-        view.state = .active
-        return view
-    }
-
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
 
 private struct SidebarRow: View {
     let page: SettingsPage
     let isSelected: Bool
-    let selection: Namespace.ID
     let action: () -> Void
+    @Environment(\.windowAccent) private var accent
+    @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                SymbolBadge(symbol: page.symbol, tint: page.tint, size: 24)
+                Image(systemName: page.symbol)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 20, height: 20)
+                    // On the accent's face the badge turns to a lighter square of it, as in the board.
+                    .background(RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(isSelected ? Color.white.opacity(0.25) : page.tint))
                 Text(page.title)
-                    .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(Color.primary.opacity(isSelected ? 1 : 0.82))
+                    .font(.system(size: 13, weight: isSelected ? .medium : .regular))
+                    .foregroundStyle(isSelected ? accent.onFill : Color.primary)
                 Spacer(minLength: 0)
                 if hovering, !isSelected {
                     Text("⌘\(page.number)")
-                        .font(.system(size: 10.5, weight: .medium))
+                        .font(.system(size: 10.5, weight: .medium, design: .monospaced))
                         .foregroundStyle(Palette.secondaryText)
                 }
             }
             .padding(.horizontal, 6)
-            .frame(height: 36)
+            .frame(height: 30)
             .background {
-                let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
-                // The selected page stands on a pane of glass that slides from page to page.
                 if isSelected {
-                    CardBackground(cornerRadius: 10)
-                        .matchedGeometryEffect(id: "selection", in: selection)
+                    theme.controlShape.fill(accent.fill)
                 } else if hovering {
-                    shape.fill(Palette.wash)
+                    theme.controlShape.fill(Palette.wash)
                 }
             }
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .contentShape(theme.controlShape)
         }
         .buttonStyle(.plain)
         .focusable(false)

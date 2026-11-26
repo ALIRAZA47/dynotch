@@ -108,6 +108,17 @@ struct ProfileSetting {
         }
     }
 
+    /// A number that's kept within `range` as it's put back, so a hand-edited or damaged profile
+    /// can't make the notch too big, too small or too round.
+    static func number(_ key: String, _ path: ReferenceWritableKeyPath<AppSettings, Double>,
+                       in range: ClosedRange<Double>) -> ProfileSetting {
+        ProfileSetting(key: key, read: { .number($0[keyPath: path]) }) { settings, value in
+            guard case .number(let new) = value, new.isFinite else { return }
+            let clamped = min(max(new, range.lowerBound), range.upperBound)
+            if settings[keyPath: path] != clamped { settings[keyPath: path] = clamped }
+        }
+    }
+
     static func choice<Choice: RawRepresentable & Equatable>(_ key: String,
                                                               _ path: ReferenceWritableKeyPath<AppSettings, Choice>) -> ProfileSetting
         where Choice.RawValue == String {
@@ -124,10 +135,15 @@ struct ProfileSetting {
         }
     }
 
-    /// Everything a profile switches: what the notch shows and how it opens. App-wide settings stay
-    /// out (launch at login, the menu bar icon, keyboard shortcuts), as do settings that ask for a
-    /// permission when turned on (Replace system HUD, Live equalizer), where things are kept, and the
-    /// weather's place.
+    /// Everything a profile switches: what the notch shows, how it looks and how it opens. App-wide
+    /// settings stay out (launch at login, the menu bar icon, keyboard shortcuts), as do settings that
+    /// ask for a permission when turned on (Replace system HUD, Live equalizer), where things are kept,
+    /// and the weather's place.
+    ///
+    /// The look and the open size go by Orbit's names, the ones `AppSettings` saves them under. A
+    /// profile saved before Orbit has `openWidth`, `openHeight` and `notchAccent` for sizes and an
+    /// accent picked for the old notch, and `notchMaterial` and the corner radii, which Orbit has no
+    /// use for: those are left alone when it's switched on, and dropped the next time it's saved.
     @MainActor static let all: [ProfileSetting] = [
         // Opening the notch, and where it shows up
         .bool("openOnHover", \.openOnHover),
@@ -136,21 +152,30 @@ struct ProfileSetting {
         .bool("haptics", \.haptics),
         .bool("trayOpensOnDrag", \.trayOpensOnDrag),
         .choice("displayMode", \.displayMode),
-        // Size and finish
-        .number("openWidth", \.openWidth),
-        .number("openHeight", \.openHeight),
+        // Size and look
+        .number("orbitOpenWidth", \.openWidth, in: AppSettings.openWidthRange),
+        .number("orbitOpenHeight", \.openHeight, in: AppSettings.openHeightRange),
         .number("virtualNotchWidth", \.virtualNotchWidth),
         .choice("virtualNotchStyle", \.virtualNotchStyle),
         .bool("artworkTint", \.artworkTint),
         .bool("showOpenShadow", \.showOpenShadow),
-        .choice("notchMaterial", \.notchMaterial),
-        .choice("notchAccent", \.notchAccent),
-        .number("notchTopRadius", \.notchTopRadius),
-        .number("notchBottomRadius", \.notchBottomRadius),
-        // Tabs and widgets
+        .choice("notchAppearance", \.notchAppearance),
+        .choice("orbitAccent", \.notchAccent),
+        .number("buttonRadius", \.buttonRadius,
+                in: Double(NotchTheme.radiusRange.lowerBound)...Double(NotchTheme.radiusRange.upperBound)),
+        .choice("sectionPlacement", \.sectionPlacement),
+        .choice("rowActionMode", \.rowActionMode),
+        .choice("notchMotion", \.notchMotion),
+        .choice("closedNotchShows", \.closedNotchShows),
+        // Sections and widgets
+        .bool("showMusicTab", \.showMusicTab),
         .bool("showTrayTab", \.showTrayTab),
         .bool("showFocusTab", \.showFocusTab),
         .bool("showStatsTab", \.showStatsTab),
+        .bool("showClipboardTab", \.showClipboardTab),
+        .bool("showNotesTab", \.showNotesTab),
+        .bool("showCalendarTab", \.showCalendarTab),
+        .bool("showWidgetsTab", \.showWidgetsTab),
         .choice("homeWidgetA", \.homeWidgetA),
         .choice("homeWidgetB", \.homeWidgetB),
         .list("pinnedShortcuts", \.pinnedShortcuts),
@@ -186,6 +211,19 @@ struct ProfileSetting {
         .list("notificationMutedApps", \.notificationMutedApps),
         .bool("notificationOtherApps", \.notificationOtherApps),
     ]
+
+    /// The settings a profile keeps, as they are now.
+    @MainActor static func values(of settings: AppSettings) -> [String: ProfileValue] {
+        Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0.read(settings)) })
+    }
+
+    /// Puts back what a profile keeps. Keys it doesn't know, like those of earlier versions, are
+    /// passed over, and settings the profile doesn't mention stay as they are.
+    @MainActor static func apply(_ values: [String: ProfileValue], to settings: AppSettings) {
+        for setting in all {
+            if let value = values[setting.key] { setting.write(settings, value) }
+        }
+    }
 }
 
 /// Saved profiles, the one that's on, and the rules that switch them.
@@ -402,15 +440,11 @@ final class ProfileStore: ObservableObject {
     }
 
     private func applyValues(_ values: [String: ProfileValue]) {
-        let settings = AppSettings.shared
-        for setting in ProfileSetting.all {
-            if let value = values[setting.key] { setting.write(settings, value) }
-        }
+        ProfileSetting.apply(values, to: AppSettings.shared)
     }
 
     private func currentValues() -> [String: ProfileValue] {
-        let settings = AppSettings.shared
-        return Dictionary(uniqueKeysWithValues: ProfileSetting.all.map { ($0.key, $0.read(settings)) })
+        ProfileSetting.values(of: AppSettings.shared)
     }
 
     /// Keeps the profile that's on in step with the settings.

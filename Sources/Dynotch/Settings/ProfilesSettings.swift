@@ -11,7 +11,7 @@ struct ProfilesSection: View {
     var body: some View {
         ScrollViewReader { proxy in
             SettingsSection(title: "Profiles", trailing: store.active.map { "\($0.name) is on" },
-                            footer: "A profile keeps what the notch shows and how it opens: tabs, widgets, live activities, size, theme and displays. Changes you make go into the profile that's on. When a profile's Focus ends or its display is unplugged, the notch goes back to how it was.") {
+                            footer: "A profile keeps what the notch shows and how it opens: sections, widgets, live activities, size, look and displays. Changes you make go into the profile that's on. When a profile's Focus ends or its display is unplugged, the notch goes back to how it was.") {
                 SettingsCard {
                     if store.profiles.isEmpty {
                         IntroRow()
@@ -52,7 +52,7 @@ private struct IntroRow: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Keep a setup for each part of your day")
                     .font(.system(size: 13, weight: .medium))
-                Text("Work, Home, Presenting: a profile switches the notch's tabs, widgets and live activities together, from the menu bar, a dynotch:// link, or by itself when a Focus turns on or a display connects.")
+                Text("Work, Home, Presenting: a profile switches the notch's sections, widgets, look and live activities together, from the menu bar, a dynotch:// link, or by itself when a Focus turns on or a display connects.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(Palette.secondaryText)
                     .fixedSize(horizontal: false, vertical: true)
@@ -72,6 +72,7 @@ private struct ProfileRow: View {
     @ViewState private var isRenaming = false
     @ViewState private var draft = ""
     @FocusState private var isEditing: Bool
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         HStack(spacing: 12) {
@@ -109,9 +110,9 @@ private struct ProfileRow: View {
                     .font(.system(size: 12, weight: .bold))
                     .foregroundStyle(.secondary)
                     .frame(width: 26, height: 26)
-                    .background(Circle().fill(Palette.wash))
-                    .overlay(Circle().strokeBorder(Palette.rimGradient))
-                    .contentShape(Circle())
+                    .background(theme.controlShape.fill(Palette.wash))
+                    .overlay(theme.controlShape.strokeBorder(Palette.rimGradient))
+                    .contentShape(theme.controlShape)
             }
             .menuStyle(.button)
             .buttonStyle(.plain)
@@ -181,6 +182,7 @@ private struct RulePicker: View {
     @ObservedObject private var focus = FocusMonitor.shared
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.windowAccent) private var accent
+    @Environment(\.notchTheme) private var theme
 
     private enum Choice: Hashable {
         case byHand, anyFocus, focus(String), display
@@ -225,11 +227,11 @@ private struct RulePicker: View {
             .frame(height: 26)
             .background {
                 // As faint as a selected chip's in light mode, where the accent's text has little room above 4.5:1.
-                Capsule().fill(hasRule ? AnyShapeStyle(accent.color.opacity(colorScheme == .dark ? 0.12 : 0.06))
+                theme.controlShape.fill(hasRule ? AnyShapeStyle(accent.color.opacity(colorScheme == .dark ? 0.12 : 0.06))
                                        : AnyShapeStyle(Palette.wash))
-                    .overlay(Capsule().strokeBorder(accent.color.opacity(hasRule ? 0.55 : 0), lineWidth: 1.2))
+                    .overlay(theme.controlShape.strokeBorder(accent.color.opacity(hasRule ? 0.55 : 0), lineWidth: 1.2))
             }
-            .contentShape(Capsule())
+            .contentShape(theme.controlShape)
         }
         .menuStyle(.button)
         .buttonStyle(.plain)

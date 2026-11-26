@@ -818,6 +818,86 @@ enum SnapshotRenderer {
         }
         print("Wrote \(count) settings snapshots to \(folder.path)")
         renderSpotlights(into: folder)
+        renderOrbitSettings(into: folder)
+    }
+
+    /// Orbit's Appearance and Sections pages, light and dark, at the smallest and largest open sizes
+    /// and with other section placements, so the header's model shows them. Each puts the settings it
+    /// changed back.
+    private static func renderOrbitSettings(into folder: URL) {
+        let settings = AppSettings.shared
+        typealias Look = (appearance: NotchAppearance, placement: SectionPlacement, size: CGSize, radius: Double, accent: NotchAccent)
+        let standard: Look = (.system, .under, CGSize(width: 720, height: 360), 3, .cobalt)
+        let saved: Look = (settings.notchAppearance, settings.sectionPlacement,
+                           CGSize(width: settings.openWidth, height: settings.openHeight), settings.buttonRadius, settings.notchAccent)
+        func use(_ look: Look) {
+            settings.notchAppearance = look.appearance
+            settings.sectionPlacement = look.placement
+            (settings.openWidth, settings.openHeight) = (look.size.width, look.size.height)
+            settings.buttonRadius = look.radius
+            settings.notchAccent = look.accent
+        }
+        var large = standard
+        large.size = CGSize(width: 880, height: 460)
+        large.radius = 8
+        var small = standard
+        small.size = CGSize(width: 640, height: 300)
+        small.appearance = .light
+        var sides = standard
+        sides.placement = .sides
+        var arc = standard
+        arc.placement = .arc
+        arc.accent = .teal
+        var band = standard
+        band.placement = .band
+        band.radius = 0
+        // The variants only change the header, so only the first two of each page scroll.
+        let scenes: [(name: String, page: SettingsPage, appearance: NSAppearance.Name, look: Look, scrolls: Bool)] = [
+            ("o-settings-appearance-dark", .appearance, .darkAqua, standard, true),
+            ("o-settings-appearance-light", .appearance, .aqua, standard, true),
+            ("o-settings-appearance-large-light", .appearance, .aqua, large, false),
+            ("o-settings-appearance-small-dark", .appearance, .darkAqua, small, false),
+            ("o-settings-sections-dark", .nook, .darkAqua, standard, true),
+            ("o-settings-sections-light", .nook, .aqua, standard, true),
+            ("o-settings-sections-sides-dark", .nook, .darkAqua, sides, false),
+            ("o-settings-sections-arc-light", .nook, .aqua, arc, false),
+            ("o-settings-sections-band-dark", .nook, .darkAqua, band, false),
+        ]
+        var count = 0
+        for (index, scene) in scenes.enumerated() where wanted(scene.name) {
+            use(scene.look)
+            let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
+                                         styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
+            let navigation = SettingsNavigation()
+            navigation.page = scene.page
+            SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
+            window.appearance = NSAppearance(named: scene.appearance)
+            window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -90_000))
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: .now + 1.2)
+            if save(window, to: folder.appendingPathComponent(scene.name + ".png")) { count += 1 }
+            // The rest of the page, a screenful at a time.
+            if let scrollView = window.contentView.flatMap(overflowingScrollView), let document = scrollView.documentView,
+               document.isFlipped, scene.scrolls {
+                let viewport = scrollView.contentView.bounds.height
+                let end = document.frame.height - viewport
+                var offset = viewport - 60
+                var part = 2
+                while offset < end + viewport - 60 {
+                    scrollView.contentView.scroll(to: NSPoint(x: 0, y: min(offset, end)))
+                    scrollView.reflectScrolledClipView(scrollView.contentView)
+                    RunLoop.main.run(until: .now + 0.8)
+                    if save(window, to: folder.appendingPathComponent("\(scene.name)-\(part).png")) { count += 1 }
+                    if offset >= end { break }
+                    offset += viewport - 60
+                    part += 1
+                }
+            }
+            window.orderOut(nil)
+            window.close()
+        }
+        use(saved)
+        print("Wrote \(count) Orbit settings snapshots to \(folder.path)")
     }
 
     /// The end of the Tray page, where the Clipboard section is: the history on, and macOS in the way.

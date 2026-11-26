@@ -7,7 +7,7 @@ import SwiftUI
 @MainActor
 final class WelcomeWindowController: NSWindowController, NSWindowDelegate {
     static let shared = WelcomeWindowController()
-    static let contentSize = NSSize(width: 760, height: 720)
+    static let contentSize = NSSize(width: 840, height: 700)
     static let styleMask: NSWindow.StyleMask = [.titled, .closable, .fullSizeContentView]
 
     private let tour = WelcomeTour()
@@ -73,7 +73,7 @@ final class WelcomeTour: ObservableObject {
 
         var title: String {
             switch self {
-            case .notch: "Meet your notch"
+            case .notch: "Point at the notch to see what’s live"
             case .highlights: "What's new"
             case .permissions: "Permissions"
             case .done: "You're all set"
@@ -82,10 +82,20 @@ final class WelcomeTour: ObservableObject {
 
         var subtitle: String {
             switch self {
-            case .notch: "Music, files, your calendar and more, one hover away."
+            case .notch: "It opens on Live: what’s happening now, most urgent first. Your sections sit under it, and the command field is at its foot."
             case .highlights: "A few of the things this version brings to the notch."
             case .permissions: "Allow what you'd like now. The rest is asked for when a feature first needs it."
             case .done: "Dynotch lives in the notch and in the menu bar."
+            }
+        }
+
+        /// The button that moves on, saying where to.
+        var next: String {
+            switch self {
+            case .notch: "Next: what’s new"
+            case .highlights: "Next: permissions"
+            case .permissions: "Next: where things are"
+            case .done: "Start using Dynotch"
             }
         }
     }
@@ -110,7 +120,7 @@ final class WelcomeTour: ObservableObject {
 }
 
 /// A header with the model notch acting out the step, the step underneath, and a footer to move on.
-/// Everything in it draws in the user's accent, as Settings does.
+/// Everything in it draws in Orbit's colors and the user's accent, as Settings does.
 struct WelcomeView: View {
     @ObservedObject var tour: WelcomeTour
     @ObservedObject private var settings = AppSettings.shared
@@ -120,8 +130,8 @@ struct WelcomeView: View {
             WelcomeStage(tour: tour)
             ScrollView {
                 content
-                    .padding(.horizontal, 26)
-                    .padding(.top, 22)
+                    .padding(.horizontal, 40)
+                    .padding(.top, 18)
                     .padding(.bottom, 24)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
             }
@@ -132,7 +142,7 @@ struct WelcomeView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.window)
         .ignoresSafeArea()
-        .windowAccent(WindowAccent(choice: settings.notchAccent))
+        .orbitWindow(settings)
     }
 
     @ViewBuilder
@@ -153,52 +163,64 @@ private struct WelcomeStage: View {
     @ObservedObject private var permissions = PermissionStatus.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.isSnapshot) private var isSnapshot
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.windowAccent) private var accent
 
     private static let cycle: TimeInterval = 2.2
+    private static let deskHeight: CGFloat = 170
 
     var body: some View {
         let step = tour.step
-        let ink = StageInk(colorScheme: colorScheme, contrast: contrast)
-        ZStack(alignment: .bottom) {
-            StageSky()
-            TimelineView(.periodic(from: .now, by: cycles ? Self.cycle : 3600)) { context in
-                let tick = isSnapshot ? 2 : Int(context.date.timeIntervalSinceReferenceDate / Self.cycle)
-                let scene = scene(tick: tick)
-                VStack(spacing: 13) {
-                    ModelNotch(pose: scene.pose)
-                    CaptionText(scene.caption, isNumeric: false)
-                }
-                .animation(reduceMotion ? .easeOut(duration: 0.2) : .notchOpen, value: scene.pose)
-            }
-            .animation(reduceMotion ? .easeOut(duration: 0.2) : .notchOpen, value: step)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .accessibilityHidden(true)
-            HStack(alignment: .bottom, spacing: 16) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(step.title)
-                        .font(.system(size: 26, weight: .bold))
-                        .foregroundStyle(ink.primary)
-                        .accessibilityAddTraits(.isHeader)
-                    Text(step.subtitle)
-                        .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(ink.secondary)
-                }
-                .id(step)
-                .transition(.opacity)
+        VStack(alignment: .leading, spacing: 0) {
+            // Beside the window's buttons: how far along the tour is.
+            HStack(spacing: 6) {
                 Spacer(minLength: 0)
-                if step != .done {
-                    CapsuleButton(title: "Skip Tour", kind: .glass) { tour.finish() }
-                        .transition(.opacity)
+                ForEach(WelcomeTour.Step.allCases) { item in
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(item == step ? accent.fill : Palette.track)
+                        .frame(width: 28, height: 4)
                 }
             }
-            .padding(.horizontal, 26)
-            .padding(.bottom, 20)
+            .frame(height: 24)
+            .padding(.top, 12)
+            .accessibilityElement()
+            .accessibilityLabel("Step \(step.rawValue + 1) of \(WelcomeTour.Step.allCases.count)")
+            StageDesk(menuBarHeight: 22) {
+                TimelineView(.periodic(from: .now, by: cycles ? Self.cycle : 3600)) { context in
+                    let tick = isSnapshot ? 2 : Int(context.date.timeIntervalSinceReferenceDate / Self.cycle)
+                    let scene = scene(tick: tick)
+                    ZStack(alignment: .top) {
+                        ModelNotch(pose: scene.pose, openScale: 0.4, openHeight: Self.deskHeight - 8)
+                        CaptionText(scene.caption, isNumeric: false)
+                            .padding(.leading, 14)
+                            .padding(.bottom, 12)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    }
+                    .animation(reduceMotion ? .easeOut(duration: 0.2) : .notchOpen, value: scene.pose)
+                }
+                .animation(reduceMotion ? .easeOut(duration: 0.2) : .notchOpen, value: step)
+            }
+            .frame(height: Self.deskHeight)
+            .padding(.top, 14)
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(step.title)
+                    .font(.system(size: 28, weight: .bold))
+                    .tracking(-0.4)
+                    .foregroundStyle(.primary)
+                    .accessibilityAddTraits(.isHeader)
+                Text(step.subtitle)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Palette.secondaryText)
+                    .lineSpacing(2)
+                    .frame(maxWidth: 600, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .id(step)
+            .transition(.opacity)
+            .padding(.top, 22)
         }
-        .frame(height: SettingsStage.height)
+        .padding(.horizontal, 40)
         .frame(maxWidth: .infinity)
-        .clipped()
     }
 
     /// The first two steps play a little loop; the others hold still.
@@ -212,7 +234,7 @@ private struct WelcomeStage: View {
             let story: [(ModelNotch.Pose, String)] = [
                 (.closed(.idle), "At rest, it's just the notch"),
                 (.hovering, "Point at it…"),
-                (.open(.home), "…and it opens"),
+                (.open(.live), "…and it opens on Live"),
                 (.closed(.music, secondary: .timer), "Closed, it shows what's going on"),
             ]
             return story[(reduceMotion ? 2 : tick) % story.count]
@@ -226,7 +248,7 @@ private struct WelcomeStage: View {
                                     tint: granted == items.count ? .green : .orange, text: "\(granted)/\(items.count)")
             return (.closed(.notice(notice)), "\(granted) of \(items.count) allowed")
         case .done:
-            return (.open(.home), "The Nook: your music and two widgets")
+            return (.open(.live), "Live on top, your sections under it")
         }
     }
 
@@ -278,13 +300,60 @@ private struct InfoTileView: View {
     }
 }
 
+/// A key, what it does, and a line about it, on a card.
+private struct KeyTile: View {
+    let keys: String
+    let title: String
+    let detail: String
+    @Environment(\.notchTheme) private var theme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(keys)
+                .font(.system(size: 11, weight: .medium, design: .monospaced))
+                .foregroundStyle(Palette.secondaryText)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).strokeBorder(Palette.stroke))
+            Text(title)
+                .font(.system(size: 13.5, weight: .semibold))
+                .padding(.top, 10)
+            Text(detail)
+                .font(.system(size: 12.5))
+                .foregroundStyle(Palette.secondaryText)
+                .lineSpacing(2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(theme.controlShape.fill(Palette.cardTop).overlay(theme.controlShape.strokeBorder(Palette.stroke)))
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private struct NotchStep: View {
+    private struct Key: Identifiable {
+        let keys: String
+        let title: String
+        let detail: String
+        var id: String { keys }
+    }
+
+    private let keys = [
+        Key(keys: "⌃⌥N", title: "Open or close", detail: "Or point at the notch; move away to close."),
+        Key(keys: "⌃⌥K", title: "Type a command", detail: "tea 4m, note Buy coffee, tray."),
+        Key(keys: "⌃⌥S", title: "Capture the screen", detail: "A window, a region or a display."),
+    ]
+
     private let ways = [
-        InfoTile(symbol: "cursorarrow.rays", title: "Hover", detail: "Rest the pointer for a glance at what's live"),
+        InfoTile(symbol: "cursorarrow.rays", title: "Hover", detail: "Rest the pointer on it to see what's live"),
         InfoTile(symbol: "cursorarrow.click.2", title: "Click", detail: "Opens the whole notch"),
         InfoTile(symbol: "rectangle.and.hand.point.up.left.fill", title: "Swipe",
                  detail: "Two fingers down to open, up to close"),
-        InfoTile(symbol: "command", title: "⌃⌥N", detail: "Opens or closes it from anywhere"),
+        InfoTile(symbol: "rectangle.bottomhalf.inset.filled", title: "Sections",
+                 detail: "Buttons under the panel; each shows its live figure"),
     ]
 
     private let activities: [(symbol: String, title: String, tint: Color)] = [
@@ -298,9 +367,12 @@ private struct NotchStep: View {
         ("moon.fill", "Focus", .indigo),
     ]
 
+    @Environment(\.notchTheme) private var theme
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 26) {
-            SettingsSection(title: "Opening it", footer: "Swipe two fingers sideways over the notch to skip a track, or over the open notch to change tabs. Esc or moving away closes it.") {
+        VStack(alignment: .leading, spacing: 22) {
+            TileGrid(items: keys, columns: 3) { KeyTile(keys: $0.keys, title: $0.title, detail: $0.detail) }
+            SettingsSection(title: "Opening it", footer: "Swipe two fingers sideways over the notch to skip a track, or over the open notch to change sections. Esc or moving away closes it.") {
                 TileGrid(items: ways, columns: 4) { InfoTileView(tile: $0) }
             }
             SettingsSection(title: "Beside the camera",
@@ -316,8 +388,7 @@ private struct NotchStep: View {
                         }
                         .padding(.horizontal, 11)
                         .frame(height: 28)
-                        .background(Capsule().fill(Palette.wash))
-                        .overlay(Capsule().strokeBorder(Palette.rimGradient))
+                        .background(theme.controlShape.fill(Palette.wash))
                     }
                 }
                 .padding(12)
@@ -350,7 +421,7 @@ private struct HighlightsStep: View {
 
     var body: some View {
         SettingsSection(title: "Highlights",
-                        footer: "Also new: black or glass themes in your accent color, the volume and brightness keys without the system's HUD, an equalizer that follows the music, an output switcher, Quick Look and screenshots in the Tray, connecting Bluetooth devices from the Control tab, and a second activity as a glyph in the right ear.") {
+                        footer: "Also new: a light or dark notch in your accent color, the volume and brightness keys without the system's HUD, an equalizer that follows the music, an output switcher, Quick Look and screenshots in the Tray, connecting Bluetooth devices from the Control section, and a second activity as a glyph in the right ear.") {
             TileGrid(items: highlights, columns: 4) { InfoTileView(tile: $0) }
         }
     }
@@ -418,7 +489,7 @@ private struct DoneStep: View {
                     .accessibilityElement(children: .combine)
                     Spacer(minLength: 12)
                     CapsuleButton(title: "Open the Notch", symbol: "arrow.up.forward") {
-                        NotchManager.shared.open(tab: .home)
+                        NotchManager.shared.open(tab: .live)
                     }
                 }
                 .padding(14)
@@ -449,35 +520,47 @@ private struct DoneStep: View {
 
 // MARK: Footer
 
+/// Back, Skip tour and the button that moves on, at the window's foot.
 private struct WelcomeFooter: View {
     @ObservedObject var tour: WelcomeTour
-    @Environment(\.windowAccent) private var accent
 
     var body: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 6) {
-                ForEach(WelcomeTour.Step.allCases) { step in
-                    Capsule()
-                        .fill(step == tour.step ? AnyShapeStyle(accent.gradient) : AnyShapeStyle(Palette.track))
-                        .frame(width: step == tour.step ? 20 : 7, height: 7)
-                }
-            }
-            .accessibilityElement()
-            .accessibilityLabel("Step \(tour.step.rawValue + 1) of \(WelcomeTour.Step.allCases.count)")
-            Spacer(minLength: 0)
+        HStack(spacing: 8) {
             if tour.step != .notch {
                 CapsuleButton(title: "Back") { tour.back() }
                     .transition(.opacity)
             }
-            CapsuleButton(title: tour.step == .done ? "Start Using Dynotch" : "Continue", kind: .prominent) { tour.next() }
+            Spacer(minLength: 0)
+            if tour.step != .done {
+                CapsuleButton(title: "Skip tour", kind: .glass) { tour.finish() }
+                    .transition(.opacity)
+            }
+            WelcomeNextButton(title: tour.step.next) { tour.next() }
                 .keyboardShortcut(.defaultAction)
         }
-        .padding(.horizontal, 26)
+        .padding(.horizontal, 40)
         .frame(height: 64)
-        .background(Palette.sidebar)
+        .background(Palette.window)
         .overlay(alignment: .top) {
             Rectangle().fill(Palette.stroke).frame(height: 1)
         }
+    }
+}
+
+/// The tour's large focus button.
+private struct WelcomeNextButton: View {
+    let title: String
+    let action: () -> Void
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            FocusButtonLabel(title: title, height: 36, hovering: hovering)
+        }
+        .buttonStyle(PressableButtonStyle(scale: 0.97))
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+        .accessibilityLabel(title)
     }
 }
 

@@ -3,8 +3,8 @@ import SwiftUI
 
 // MARK: Palette
 
-/// The app icon's colors: a graphite glass body, a lavender glow and an orange-to-magenta accent,
-/// plus the surfaces of the settings window in light and dark mode, and the sky of its header.
+/// The settings window and the welcome tour in Orbit's colors: one flat surface, light or dark with
+/// macOS, raised cards with a hairline round them, and the app icon's colors for the odd badge.
 enum Palette {
     static let indigo = Color(red: 0.20, green: 0.22, blue: 0.48)
     static let lavender = Color(red: 0.55, green: 0.45, blue: 1.0)
@@ -14,67 +14,54 @@ enum Palette {
 
     static let sunset = LinearGradient(colors: [orange, magenta], startPoint: .topLeading, endPoint: .bottomTrailing)
 
-    /// A neutral graphite in dark mode and a cool paper white in light mode, so the accent and the
-    /// glass carry the color.
-    static let window = Color(light: NSColor(srgbRed: 0.949, green: 0.949, blue: 0.961, alpha: 1),
-                              dark: NSColor(srgbRed: 0.071, green: 0.073, blue: 0.086, alpha: 1))
-    /// Under the sidebar's translucent material, and the welcome tour's footer.
-    static let sidebar = Color(light: NSColor(srgbRed: 0.918, green: 0.918, blue: 0.937, alpha: 1),
-                               dark: NSColor(srgbRed: 0.098, green: 0.1, blue: 0.118, alpha: 1))
-    /// A card's glass, top to bottom: lit from above, falling off toward its foot.
-    static let cardTop = Color(light: NSColor(white: 1, alpha: 0.96), dark: NSColor(white: 1, alpha: 0.075))
-    static let cardBottom = Color(light: NSColor(white: 1, alpha: 0.78), dark: NSColor(white: 1, alpha: 0.035))
-    /// A card's rim: bright along its top edge in dark mode; in light mode, white glass shows its
-    /// edge where it turns away from the light, along the bottom.
-    static let rimLit = Color(light: NSColor(white: 1, alpha: 1), dark: NSColor(white: 1, alpha: 0.2))
-    static let rimShade = Color(light: NSColor(white: 0, alpha: 0.11), dark: NSColor(white: 1, alpha: 0.06))
-    static let stroke = Color(light: NSColor(white: 0, alpha: 0.08), dark: NSColor(white: 1, alpha: 0.08))
-    /// Quiet fills: unselected chips, symbols of settings that are off.
-    static let wash = Color(light: NSColor(white: 0, alpha: 0.05), dark: NSColor(white: 1, alpha: 0.07))
+    /// The page: Orbit's panel color.
+    static let window = Color(light: hex(0xF6F6F8), dark: hex(0x161618))
+    /// The sidebar and the welcome tour's footer: Orbit's raised color.
+    static let sidebar = Color(light: hex(0xFFFFFF), dark: hex(0x212124))
+    /// A card: raised and flat.
+    static let cardTop = Color(light: hex(0xFFFFFF), dark: hex(0x212124))
+    static let cardBottom = cardTop
+    /// Hairlines round cards and between rows.
+    static let rimLit = Color(light: NSColor(white: 0, alpha: 0.08), dark: NSColor(white: 1, alpha: 0.08))
+    static let rimShade = rimLit
+    static let stroke = rimLit
+    /// Quiet fills: a button, an unselected chip, a hovered row.
+    static let wash = Color(light: hex(0xEBEBEF), dark: hex(0x2A2A2E))
+    /// A button under the pointer.
+    static let washHover = Color(light: hex(0xE1E1E6), dark: hex(0x323237))
     /// The empty part of a slider, a switch that's off.
-    static let track = Color(light: NSColor(white: 0, alpha: 0.11), dark: NSColor(white: 1, alpha: 0.14))
+    static let track = Color(light: hex(0xDCDCE1), dark: hex(0x3A3A3F))
+    /// The outline of a switch that's off: 3:1 on a card in either appearance.
+    static let switchEdge = Color(light: hex(0x8E8E93), dark: hex(0x76767C))
+    /// A field's fill.
+    static let field = Color(light: hex(0xFFFFFF), dark: hex(0x0F0F11))
+    /// The desk the model notch hangs over, in the header and the welcome tour.
+    static let wall = Color(light: hex(0xD9DCE2), dark: hex(0x2B2D33))
+    /// The menu bar along the top of the desk.
+    static let menuBar = Color(light: NSColor(srgbRed: 0.965, green: 0.965, blue: 0.973, alpha: 0.78),
+                               dark: NSColor(srgbRed: 0.118, green: 0.122, blue: 0.137, alpha: 0.72))
 
     static let cardGradient = LinearGradient(colors: [cardTop, cardBottom], startPoint: .top, endPoint: .bottom)
-    static let rimGradient = LinearGradient(stops: [.init(color: rimLit, location: 0), .init(color: rimShade, location: 0.5),
-                                                    .init(color: rimShade, location: 1)],
-                                            startPoint: .top, endPoint: .bottom)
+    static let rimGradient = LinearGradient(colors: [rimLit, rimLit], startPoint: .top, endPoint: .bottom)
 
-    /// Second-level text: details, footers, readouts. Dark mode keeps the system's secondary label
-    /// color. In light mode the system's, black at half strength, reads under 4.5:1 on the cards and
-    /// the sidebar, so it's a firmer black, firmer still with Increase Contrast. Give it to the text
-    /// itself: on macOS a `Text`'s `.secondary` ignores a second level set higher up.
+    /// Second-level text: details, footers, readouts. Orbit's grey, a step firmer with Increase
+    /// Contrast. Give it to the text itself: on macOS a `Text`'s `.secondary` ignores a second level
+    /// set higher up.
     static let secondaryText = Color(nsColor: NSColor(name: nil) { appearance in
         let match = appearance.bestMatch(from: [.aqua, .darkAqua, .accessibilityHighContrastAqua,
                                                 .accessibilityHighContrastDarkAqua])
-        if match == .darkAqua || match == .accessibilityHighContrastDarkAqua { return .secondaryLabelColor }
-        return NSColor(white: 0, alpha: match == .accessibilityHighContrastAqua ? 0.75 : 0.62)
+        switch match {
+        case .darkAqua: return hex(0xA1A1A6)
+        case .accessibilityHighContrastDarkAqua: return hex(0xC7C7CC)
+        case .accessibilityHighContrastAqua: return hex(0x48484C)
+        default: return hex(0x6E6E73)
+        }
     })
 
-    // MARK: Stage
-
-    /// The sky of the header above every page and the welcome tour, top to bottom. It's light or dark
-    /// with the page under it.
-    static let stageTop = Color(light: NSColor(srgbRed: 0.925, green: 0.925, blue: 0.941, alpha: 1),
-                                dark: NSColor(srgbRed: 0.115, green: 0.118, blue: 0.137, alpha: 1))
-    static let stageBottom = Color(light: NSColor(srgbRed: 0.957, green: 0.957, blue: 0.967, alpha: 1),
-                                   dark: NSColor(srgbRed: 0.05, green: 0.052, blue: 0.062, alpha: 1))
-    static let stageGradient = LinearGradient(colors: [stageTop, stageBottom], startPoint: .top, endPoint: .bottom)
-    /// The window accent's light on the stage: a radial gradient from the top center, where the model
-    /// notch hangs, this strong at its center, reaching `stageBloomRadius` and stretched
-    /// `stageBloomStretch` times as wide.
-    static func stageBloomOpacity(_ colorScheme: ColorScheme) -> Double { colorScheme == .dark ? 0.22 : 0.16 }
-    static let stageBloomRadius: CGFloat = 230
-    static let stageBloomStretch: CGFloat = 1.5
-    /// A white glow under the stage's top edge, drawn like the bloom. The light stage has none.
-    static let stageGlow = Color(light: NSColor(white: 1, alpha: 0), dark: NSColor(white: 1, alpha: 0.15))
-    static let stageGlowRadius: CGFloat = 190
-    static let stageGlowStretch: CGFloat = 1.9
-    private static let stageFootEdge = Color(light: NSColor(white: 0, alpha: 0.08), dark: NSColor(white: 1, alpha: 0))
-    private static let stageFootMiddle = Color(light: NSColor(white: 0, alpha: 0.08), dark: NSColor(white: 1, alpha: 0.18))
-    /// The 1 pt line along the stage's foot, where it meets the page: a hairline on the light stage,
-    /// and on the dark one a line of light that fades out to both sides.
-    static let stageFoot = LinearGradient(colors: [stageFootEdge, stageFootMiddle, stageFootEdge],
-                                          startPoint: .leading, endPoint: .trailing)
+    static func hex(_ value: UInt32) -> NSColor {
+        NSColor(srgbRed: CGFloat((value >> 16) & 0xFF) / 255, green: CGFloat((value >> 8) & 0xFF) / 255,
+                blue: CGFloat(value & 0xFF) / 255, alpha: 1)
+    }
 }
 
 extension Color {
@@ -107,53 +94,48 @@ extension NotchAccent {
     }
 }
 
-/// The user's accent as the settings window and the welcome tour draw it: a deeper shade under white
-/// text on the light page, and the notch's own color under dark ink on the dark one. Their roots put
-/// it in the environment, and every control here reads it from there.
+/// The user's accent as the settings window and the welcome tour draw it. On the light page it's a
+/// deeper shade, under white text and as text itself. On the dark page the solid face is the notch's
+/// own accent, and text in the accent is lifted to read on the page. Their roots put it in the
+/// environment, and every control here reads it from there.
 struct WindowAccent {
-    /// Switch grooves, slider fills, prominent buttons, selected rims and accent text on the page.
+    /// The accent as text, rings and marks on the page: 4.5:1 on it in either appearance.
     let color: Color
-    /// The top of a fill, as if lit from above: `color` with 18% white in dark mode, and 6% in light
-    /// mode, where more would take the white text on a prominent button under 4.5:1.
-    let top: Color
-    /// Text and symbols on a fill of the accent.
+    /// The solid face: the selected sidebar row, a switch that's on, a slider's fill.
+    let fill: Color
+    /// Kept for callers from before Orbit; the same as `fill`, which is flat.
+    var top: Color { fill }
+    /// Text and symbols on `fill`.
     let onFill: Color
 
     init(choice: NotchAccent) {
         self = Self.shades[choice] ?? Self(mixing: choice)
     }
 
-    /// A fill of the accent, from `top` down to `color`.
+    /// The solid face as a fill. Orbit has no gradients; kept so older callers draw it flat.
     var gradient: LinearGradient {
-        LinearGradient(colors: [top, color], startPoint: .top, endPoint: .bottom)
+        LinearGradient(colors: [fill, fill], startPoint: .top, endPoint: .bottom)
     }
 
     /// Every accent's shades, worked out once, so nothing mixes colors while it draws.
     private static let shades = Dictionary(uniqueKeysWithValues: NotchAccent.allCases.map { ($0, Self(mixing: $0)) })
 
     private init(mixing choice: NotchAccent) {
-        let own = choice.color.resolve(in: EnvironmentValues())
-        let light = choice.windowDeep
-        let dark = (red: Double(own.red), green: Double(own.green), blue: Double(own.blue))
-        color = Color(light: Self.srgb(light), dark: Self.srgb(dark))
-        top = Color(light: Self.srgb(light, white: 0.06), dark: Self.srgb(dark, white: 0.18))
-        onFill = Color(light: .white, dark: NSColor(NotchTheme.standard.onAccent))
-    }
-
-    /// An sRGB color with `white` of white mixed in.
-    private static func srgb(_ color: (red: Double, green: Double, blue: Double), white: Double = 0) -> NSColor {
-        func mix(_ part: Double) -> CGFloat { part + (1 - part) * white }
-        return NSColor(srgbRed: mix(color.red), green: mix(color.green), blue: mix(color.blue), alpha: 1)
+        let dark = NotchTheme(accent: choice, isDark: true)
+        let deep = NSColor(srgbRed: choice.windowDeep.red, green: choice.windowDeep.green, blue: choice.windowDeep.blue, alpha: 1)
+        color = Color(light: deep, dark: NSColor(dark.accentText))
+        fill = Color(light: deep, dark: NSColor(choice.color))
+        onFill = Color(light: .white, dark: NSColor(dark.onAccent))
     }
 }
 
 private struct WindowAccentKey: EnvironmentKey {
-    static let defaultValue = WindowAccent(choice: .lavender)
+    static let defaultValue = WindowAccent(choice: .cobalt)
 }
 
 extension EnvironmentValues {
     /// The accent the window controls draw in. Settings and the welcome tour put the user's in at
-    /// their roots; anywhere else it's lavender.
+    /// their roots; anywhere else it's cobalt.
     var windowAccent: WindowAccent {
         get { self[WindowAccentKey.self] }
         set { self[WindowAccentKey.self] = newValue }
@@ -164,6 +146,26 @@ extension View {
     /// Draws the window controls inside in `accent`.
     func windowAccent(_ accent: WindowAccent) -> some View {
         environment(\.windowAccent, accent)
+    }
+
+    /// The settings window's and the welcome tour's look: the user's accent, and an Orbit theme,
+    /// light or dark with the window, at the user's button roundness, for the controls that read it.
+    func orbitWindow(_ settings: AppSettings) -> some View {
+        modifier(OrbitWindowModifier(settings: settings))
+    }
+}
+
+private struct OrbitWindowModifier: ViewModifier {
+    @ObservedObject var settings: AppSettings
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    func body(content: Content) -> some View {
+        var theme = NotchTheme(accent: settings.notchAccent, isDark: colorScheme == .dark, radius: settings.buttonRadius)
+        theme.isHighContrast = contrast == .increased
+        return content
+            .environment(\.notchTheme, theme)
+            .windowAccent(WindowAccent(choice: settings.notchAccent))
     }
 }
 
@@ -177,10 +179,10 @@ struct SettingsSection<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(title)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.primary)
                     .accessibilityLabel(title)
                     .accessibilityAddTraits(.isHeader)
@@ -205,38 +207,26 @@ struct SettingsSection<Content: View>: View {
     }
 }
 
-/// A pane of glass on the page, lit from above like the cards in the notch. One that's on holds a
-/// little of the accent's light; a selected one is ringed with it.
+/// A raised card on the page with a hairline round it, as Orbit draws its cards. One that's on is
+/// the same; a selected one is ringed with the accent.
 struct CardBackground: View {
     enum Highlight {
         case none, on, selected
     }
 
     var highlight = Highlight.none
-    var cornerRadius: CGFloat = 14
-    @Environment(\.colorScheme) private var colorScheme
+    var cornerRadius: CGFloat = 10
     @Environment(\.windowAccent) private var accent
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        let dark = colorScheme == .dark
-        shape.fill(Palette.cardGradient)
+        shape.fill(Palette.cardTop)
             .overlay {
                 switch highlight {
-                case .none: EmptyView()
-                case .on: shape.fill(LinearGradient(colors: [accent.color.opacity(dark ? 0.1 : 0.05), .clear],
-                                                    startPoint: .top, endPoint: .bottom))
-                case .selected: shape.fill(accent.color.opacity(dark ? 0.13 : 0.07))
+                case .none, .on: shape.strokeBorder(Palette.stroke)
+                case .selected: shape.strokeBorder(accent.color, lineWidth: 2)
                 }
             }
-            .overlay {
-                switch highlight {
-                case .none, .on: shape.strokeBorder(Palette.rimGradient)
-                case .selected: shape.strokeBorder(accent.color.opacity(0.75), lineWidth: 1.5)
-                }
-            }
-            .shadow(color: .black.opacity(dark ? 0.3 : 0.07), radius: dark ? 8 : 10, y: dark ? 3 : 4)
-            .shadow(color: accent.color.opacity(highlight == .selected ? (dark ? 0.35 : 0.22) : 0), radius: 10)
     }
 }
 
@@ -251,9 +241,10 @@ struct SettingsCard<Content: View>: View {
     }
 }
 
+/// The hairline between rows in a card, edge to edge.
 struct CardDivider: View {
     var body: some View {
-        Rectangle().fill(Palette.stroke).frame(height: 1).padding(.leading, 14)
+        Rectangle().fill(Palette.stroke).frame(height: 1)
     }
 }
 
@@ -308,34 +299,36 @@ struct FlowLayout: Layout {
 
 // MARK: Controls
 
-/// The on/off pill inside switch tiles and rows: a groove that fills with the accent's light,
-/// and a pearl of white glass riding in it.
+/// The on/off switch inside switch tiles and rows: a track at the button roundness that fills with
+/// the accent, and a white knob riding in it.
 struct SwitchMark: View {
     let isOn: Bool
     @Environment(\.windowAccent) private var accent
+    @Environment(\.notchTheme) private var theme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        let radius = min(theme.radius + 2, 10)
         ZStack(alignment: isOn ? .trailing : .leading) {
-            Capsule()
-                .fill(isOn ? AnyShapeStyle(accent.gradient) : AnyShapeStyle(Palette.track))
-                .overlay(Capsule().strokeBorder(LinearGradient(colors: [.black.opacity(0.12), .white.opacity(isOn ? 0.3 : 0.1)],
-                                                               startPoint: .top, endPoint: .bottom)))
-                .shadow(color: accent.color.opacity(isOn ? 0.45 : 0), radius: 5)
-            Circle()
-                .fill(LinearGradient(colors: [.white, Color(white: 0.9)], startPoint: .top, endPoint: .bottom))
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .fill(isOn ? accent.fill : Palette.track)
+                // An outline at 3:1 while it's off, so the switch shows on the card.
+                .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous)
+                    .strokeBorder(isOn ? .clear : Palette.switchEdge))
+            RoundedRectangle(cornerRadius: max(radius - 2, 1), style: .continuous)
+                .fill(.white)
                 .padding(2)
-                .shadow(color: .black.opacity(0.25), radius: 1.5, y: 1)
+                .frame(width: 20)
+                .shadow(color: .black.opacity(0.2), radius: 1, y: 0.5)
         }
         .frame(width: 34, height: 20)
-        // The pearl overshoots a little as it lands, unless motion is reduced.
-        .animation(.notchLift(reduceMotion: reduceMotion), value: isOn)
+        .animation(reduceMotion ? .easeOut(duration: 0.15) : .snappy(duration: 0.2), value: isOn)
         .accessibilityHidden(true)
     }
 }
 
-/// A rounded square holding a symbol: while the setting is on, a tile of glass filled with its tint,
-/// lit along the top like an app icon.
+/// A small rounded square holding a white symbol, filled with its color, like the badges in System
+/// Settings' sidebar. Grey while its setting is off.
 struct SymbolBadge: View {
     let symbol: String
     /// Without one, the window accent, with its symbol in the accent's onFill. Pass nil rather than
@@ -343,29 +336,20 @@ struct SymbolBadge: View {
     var tint: Color?
     var isActive = true
     var size: CGFloat = 30
+
     @Environment(\.windowAccent) private var accent
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: size * 0.25, style: .continuous)
         Image(systemName: symbol)
-            .font(.system(size: size * 0.44, weight: .semibold))
-            .foregroundStyle(isActive ? glyph : Color.secondary)
+            .font(.system(size: size * 0.46, weight: .semibold))
+            .foregroundStyle(isActive ? glyph : Palette.secondaryText)
             .frame(width: size, height: size)
-            .background {
-                if isActive {
-                    shape.fill((tint ?? accent.color).gradient)
-                        .overlay(shape.fill(LinearGradient(colors: [.white.opacity(0.28), .white.opacity(0)],
-                                                           startPoint: .top, endPoint: .center)))
-                        .overlay(shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.55), .white.opacity(0.05)],
-                                                                   startPoint: .top, endPoint: .bottom)))
-                } else {
-                    shape.fill(Palette.wash)
-                }
-            }
+            .background(shape.fill(isActive ? (tint ?? accent.fill) : Palette.wash))
             .accessibilityHidden(true)
     }
 
-    /// White, like an app icon's, except on the window accent, which is too light for it in dark mode.
+    /// White, except on the window accent, where it's the accent's own ink.
     private var glyph: Color {
         tint == nil ? accent.onFill : .white
     }
@@ -373,7 +357,7 @@ struct SymbolBadge: View {
 
 /// Shrinks a little while pressed and outlines itself under the pointer.
 struct TileButtonStyle: ButtonStyle {
-    var cornerRadius: CGFloat = 14
+    var cornerRadius: CGFloat = 10
 
     func makeBody(configuration: Configuration) -> some View {
         TileButtonBody(configuration: configuration, cornerRadius: cornerRadius)
@@ -390,8 +374,8 @@ private struct TileButtonBody: View {
     var body: some View {
         configuration.label
             .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                .strokeBorder(accent.color.opacity(hovering && isEnabled ? 0.35 : 0), lineWidth: 1))
-            .scaleEffect(configuration.isPressed ? 0.975 : 1)
+                .strokeBorder(accent.color.opacity(hovering && isEnabled ? 0.45 : 0), lineWidth: 1))
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.spring(response: 0.22, dampingFraction: 0.7), value: configuration.isPressed)
             .animation(.easeOut(duration: 0.12), value: hovering)
             .onHover { hovering = $0 }
@@ -414,7 +398,7 @@ struct SwitchTile: View {
         Button { isOn.toggle() } label: {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .top) {
-                    SymbolBadge(symbol: symbol, tint: tint, isActive: isOn && isEnabled)
+                    SymbolBadge(symbol: symbol, tint: tint, isActive: isOn && isEnabled, size: 26)
                     Spacer(minLength: 8)
                     SwitchMark(isOn: isOn)
                 }
@@ -429,10 +413,10 @@ struct SwitchTile: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(13)
+            .padding(12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(CardBackground(highlight: isOn && isEnabled ? .on : .none))
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(TileButtonStyle())
         .opacity(isEnabled ? 1 : 0.5)
@@ -453,7 +437,7 @@ struct ActionTile: View {
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 10) {
-                SymbolBadge(symbol: symbol, tint: Palette.magenta)
+                SymbolBadge(symbol: symbol, tint: Palette.magenta, size: 26)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title)
                         .font(.system(size: 13, weight: .semibold))
@@ -465,11 +449,11 @@ struct ActionTile: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(13)
+            .padding(12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Palette.track, style: StrokeStyle(lineWidth: 1.2, dash: [5, 4])))
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(TileButtonStyle())
         .accessibilityLabel(title)
@@ -490,11 +474,11 @@ struct SwitchRow: View {
         Button { isOn.toggle() } label: {
             HStack(spacing: 12) {
                 if let symbol {
-                    SymbolBadge(symbol: symbol, tint: tint, isActive: isOn, size: 26)
+                    SymbolBadge(symbol: symbol, tint: tint, isActive: isOn, size: 24)
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 13))
                         .foregroundStyle(.primary)
                     if let detail {
                         Text(detail)
@@ -507,7 +491,8 @@ struct SwitchRow: View {
                 SwitchMark(isOn: isOn)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+            .padding(.vertical, 8)
+            .frame(minHeight: 48)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -518,6 +503,36 @@ struct SwitchRow: View {
     }
 }
 
+/// A row in a card with a name and a hint on the left and a control on the right, as Orbit's
+/// settings rows are laid out.
+struct SettingRow<Control: View>: View {
+    let title: String
+    var detail: String?
+    @ViewBuilder var control: Control
+
+    var body: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.primary)
+                if let detail {
+                    Text(detail)
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(Palette.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            Spacer(minLength: 12)
+            control
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .frame(minHeight: 48)
+    }
+}
+
 /// One of several options, as a tile with a picture above its name.
 struct ChoiceTile<Art: View>: View {
     let title: String
@@ -525,7 +540,6 @@ struct ChoiceTile<Art: View>: View {
     let isSelected: Bool
     let action: () -> Void
     @ViewBuilder var art: Art
-    @Environment(\.windowAccent) private var accent
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -539,44 +553,37 @@ struct ChoiceTile<Art: View>: View {
                     if let detail {
                         Text(detail)
                             .font(.system(size: 11.5))
-                            // Firmer on a selected tile: its accent wash lifts the background under it.
-                            .foregroundStyle(isSelected ? Color.primary.opacity(0.8) : Palette.secondaryText)
+                            .foregroundStyle(Palette.secondaryText)
                     }
                 }
                 .multilineTextAlignment(.center)
             }
-            .padding(.vertical, 15)
+            .padding(.vertical, 14)
             .padding(.horizontal, 10)
             .frame(maxWidth: .infinity)
             .background(CardBackground(highlight: isSelected ? .selected : .none))
-            .overlay(alignment: .topTrailing) {
-                if isSelected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(accent.color)
-                        .padding(9)
-                        .transition(reduceMotion ? AnyTransition.opacity : .scale.combined(with: .opacity))
-                }
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(TileButtonStyle())
-        .animation(reduceMotion ? .easeOut(duration: 0.15) : .spring(response: 0.3, dampingFraction: 0.75), value: isSelected)
+        .animation(reduceMotion ? .easeOut(duration: 0.15) : .snappy(duration: 0.2), value: isSelected)
         .accessibilityLabel(title)
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 }
 
-/// A compact option: a symbol and a name in a rounded chip.
+/// A compact option: a symbol and a name in a chip at the button roundness. The selected one is a
+/// solid face of the accent.
 struct ChoiceChip: View {
     let title: String
     let symbol: String
     let isSelected: Bool
     let action: () -> Void
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.windowAccent) private var accent
+    @Environment(\.notchTheme) private var theme
+    @ViewState private var hovering = false
 
     var body: some View {
+        let shape = theme.controlShape
         Button(action: action) {
             HStack(spacing: 7) {
                 Image(systemName: symbol)
@@ -587,21 +594,31 @@ struct ChoiceChip: View {
                     .lineLimit(1)
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(isSelected ? accent.color : Color.primary.opacity(0.78))
+            .foregroundStyle(isSelected ? accent.onFill : Color.primary)
             .padding(.horizontal, 10)
-            .frame(height: 30)
-            .background {
-                let shape = RoundedRectangle(cornerRadius: 9, style: .continuous)
-                // Fainter in light mode, where the accent's text on it has little room above 4.5:1.
-                let selectedFill = accent.color.opacity(colorScheme == .dark ? 0.12 : 0.06)
-                shape.fill(isSelected ? AnyShapeStyle(selectedFill) : AnyShapeStyle(Palette.wash))
-                    .overlay(shape.strokeBorder(accent.color.opacity(isSelected ? 0.55 : 0), lineWidth: 1.2))
-            }
-            .contentShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .frame(height: 28)
+            .background(shape.fill(isSelected ? accent.fill : hovering ? Palette.washHover : Palette.wash))
+            .contentShape(shape)
         }
-        .buttonStyle(TileButtonStyle(cornerRadius: 9))
+        .buttonStyle(PressableButtonStyle(scale: 0.97))
+        .onHover { hovering = $0 }
         .accessibilityLabel(title)
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+    }
+}
+
+/// Orbit's segmented control for a settings row: a track a shade off the card with the picked one
+/// raised on it.
+struct SettingSegments<Value: Hashable>: View {
+    let title: String
+    @Binding var selection: Value
+    let options: [(value: Value, title: String)]
+
+    var body: some View {
+        CardSegments(selection: $selection, segments: options.map { .init(value: $0.value, title: $0.title) })
+            .fixedSize()
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(title)
     }
 }
 
@@ -614,26 +631,24 @@ struct TrackSlider: View {
     /// The value as it's read out, like "0.15 seconds".
     let spokenValue: String
     @FocusState private var isFocused: Bool
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.windowAccent) private var accent
 
-    private let knob: CGFloat = 18
+    private let knob: CGFloat = 16
 
     var body: some View {
         GeometryReader { proxy in
             let travel = max(1, proxy.size.width - knob)
             let fraction = CGFloat((value - range.lowerBound) / (range.upperBound - range.lowerBound))
-            // A groove filled with the accent's light, glowing in dark mode, and a pearl of white glass to drag.
+            // A thin track filled with the accent, and a white knob to drag.
             ZStack(alignment: .leading) {
-                Capsule().fill(Palette.track).frame(height: 5)
-                Capsule()
-                    .fill(accent.gradient)
-                    .frame(width: knob / 2 + travel * fraction, height: 5)
-                    .shadow(color: accent.color.opacity(colorScheme == .dark ? 0.5 : 0), radius: 4)
+                RoundedRectangle(cornerRadius: 2).fill(Palette.track).frame(height: 4)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(accent.fill)
+                    .frame(width: knob / 2 + travel * fraction, height: 4)
                 Circle()
-                    .fill(LinearGradient(colors: [.white, Color(white: 0.9)], startPoint: .top, endPoint: .bottom))
+                    .fill(.white)
                     .frame(width: knob, height: knob)
-                    .shadow(color: .black.opacity(0.3), radius: 2.5, y: 1.5)
+                    .shadow(color: .black.opacity(0.35), radius: 1.5, y: 1)
                     .overlay(Circle().strokeBorder(accent.color, lineWidth: isFocused ? 2.5 : 0))
                     .offset(x: travel * fraction)
             }
@@ -668,7 +683,7 @@ struct TrackSlider: View {
     }
 }
 
-/// How far along something is, like an update's download: a thin groove that fills with the accent.
+/// How far along something is, like an update's download: a thin track that fills with the accent.
 struct MeterBar: View {
     /// From 0 to 1.
     let value: Double
@@ -677,13 +692,13 @@ struct MeterBar: View {
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
-                Capsule().fill(Palette.track)
-                Capsule()
-                    .fill(accent.color)
+                RoundedRectangle(cornerRadius: 2).fill(Palette.track)
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(accent.fill)
                     .frame(width: proxy.size.width * max(0, min(1, value)))
             }
         }
-        .frame(height: 5)
+        .frame(height: 4)
         .animation(.easeOut(duration: 0.2), value: value)
         .accessibilityRepresentation {
             ProgressView(value: max(0, min(1, value)))
@@ -705,7 +720,7 @@ struct NumberDial: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 6) {
-                Circle().fill(tint ?? accent.color).frame(width: 7, height: 7)
+                Circle().fill(tint ?? accent.fill).frame(width: 7, height: 7)
                 Text(title)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Palette.secondaryText)
@@ -713,8 +728,7 @@ struct NumberDial: View {
             }
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text("\(value)")
-                    .font(.system(size: 30, weight: .medium, design: .rounded))
-                    .monospacedDigit()
+                    .font(.system(size: 28, weight: .medium, design: .monospaced))
                     .contentTransition(.numericText(value: Double(value)))
                 Text(unit)
                     .font(.system(size: 12, weight: .semibold))
@@ -744,6 +758,7 @@ private struct DialButton: View {
     let symbol: String
     let isEnabled: Bool
     let action: () -> Void
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         Button(action: action) {
@@ -751,9 +766,8 @@ private struct DialButton: View {
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(.primary)
                 .frame(width: 30, height: 26)
-                .background(Capsule().fill(Palette.wash))
-                .overlay(Capsule().strokeBorder(Palette.rimGradient))
-                .contentShape(Capsule())
+                .background(theme.controlShape.fill(Palette.wash))
+                .contentShape(theme.controlShape)
         }
         .buttonStyle(PressableButtonStyle())
         .disabled(!isEnabled)
@@ -761,11 +775,13 @@ private struct DialButton: View {
     }
 }
 
-/// A capsule button for actions on a settings page.
+/// A button for actions on a settings page, in Orbit's shapes. Plain is a fill a shade off the card;
+/// prominent is a focus button, with spaced capitals and a block of the accent down its right edge;
+/// destructive is a red focus button.
 struct CapsuleButton: View {
     enum Kind {
         case plain, prominent, destructive
-        /// For the header's stage: clear glass, light or dark with the stage.
+        /// Kept for callers from before Orbit: a quiet button with no fill until the pointer's on it.
         case glass
     }
 
@@ -774,79 +790,41 @@ struct CapsuleButton: View {
     var kind: Kind = .plain
     let action: () -> Void
     @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.windowAccent) private var accent
+    @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 6) {
-                if let symbol {
-                    Image(systemName: symbol).font(.system(size: 11, weight: .bold))
+            switch look {
+            case .prominent:
+                FocusButtonLabel(title: title, symbol: symbol, height: 28, hovering: hovering && isEnabled)
+            case .destructive:
+                FocusButtonLabel(title: title, symbol: symbol, tint: theme.alert, height: 28, hovering: hovering && isEnabled)
+            case .plain, .glass:
+                HStack(spacing: 6) {
+                    if let symbol {
+                        Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
+                    }
+                    Text(title).font(.system(size: 13, weight: .medium)).lineLimit(1)
                 }
-                Text(title).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                .foregroundStyle(look == .glass && !hovering ? Palette.secondaryText : Color.primary)
+                .padding(.horizontal, 12)
+                .frame(height: 28)
+                .background {
+                    if look == .plain || hovering {
+                        theme.controlShape.fill(hovering && isEnabled ? Palette.washHover : Palette.wash)
+                    }
+                }
+                .contentShape(theme.controlShape)
             }
-            .foregroundStyle(foreground)
-            .padding(.horizontal, 13)
-            .frame(height: 28)
-            .background(Capsule().fill(background))
-            // Every kind is a capsule of glass whose top edge catches the light.
-            .overlay(Capsule().strokeBorder(rim))
-            // In dark mode a prominent button glows with the accent, like a switch that's on.
-            .shadow(color: accent.color.opacity(look == .prominent && isDark ? 0.3 : 0), radius: 8)
-            // A light-mode prominent button darkens under the pointer instead, so its white label keeps 4.5:1.
-            .brightness(hovering && isEnabled ? (look == .prominent && !isDark ? -0.04 : 0.04) : 0)
-            .contentShape(Capsule())
         }
-        .buttonStyle(PressableButtonStyle())
+        .buttonStyle(PressableButtonStyle(scale: 0.96))
         .opacity(isEnabled ? 1 : 0.45)
         .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+        .accessibilityLabel(title)
     }
 
-    private var isDark: Bool { colorScheme == .dark }
-
-    /// A destructive button's red: the window's shade of it, deep in light mode, so its label reads
-    /// 4.5:1 on its own faint fill, where the system red read about 3:1 light and 4:1 dark.
-    private static let red = WindowAccent(choice: .red).color
-
-    /// A prominent button that's disabled looks plain, the way macOS greys out a default button:
-    /// faded along with the accent's fill, its label would all but disappear.
+    /// A prominent button that's disabled looks plain, the way macOS greys out a default button.
     private var look: Kind { kind == .prominent && !isEnabled ? .plain : kind }
-
-    private var foreground: Color {
-        switch look {
-        case .plain: .primary
-        case .prominent: accent.onFill
-        case .destructive: Self.red
-        case .glass: isDark ? .white : .primary
-        }
-    }
-
-    private var background: AnyShapeStyle {
-        switch look {
-        case .plain: AnyShapeStyle(Palette.wash)
-        case .prominent: AnyShapeStyle(accent.gradient)
-        // Fainter in light mode, as a selected choice chip is: at 0.12 the red label fell under 4.5:1.
-        case .destructive: AnyShapeStyle(Self.red.opacity(isDark ? 0.12 : 0.06))
-        case .glass where isDark:
-            AnyShapeStyle(LinearGradient(colors: [.white.opacity(hovering ? 0.22 : 0.16), .white.opacity(hovering ? 0.12 : 0.07)],
-                                         startPoint: .top, endPoint: .bottom))
-        case .glass: AnyShapeStyle(Color.white.opacity(hovering ? 0.9 : 0.75))
-        }
-    }
-
-    private var rim: LinearGradient {
-        switch look {
-        case .plain: Palette.rimGradient
-        case .prominent: Self.lit(.white.opacity(0.45))
-        case .destructive: Self.lit(Self.red.opacity(0.2))
-        case .glass where isDark: Self.lit(.white.opacity(0.4))
-        case .glass: LinearGradient(colors: [.white, .black.opacity(0.1)], startPoint: .top, endPoint: .bottom)
-        }
-    }
-
-    /// A rim lit along the top, fading to a tenth of `color` along the bottom.
-    private static func lit(_ color: Color) -> LinearGradient {
-        LinearGradient(colors: [color, color.opacity(0.1)], startPoint: .top, endPoint: .bottom)
-    }
 }
