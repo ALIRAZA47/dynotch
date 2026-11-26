@@ -144,7 +144,7 @@ final class NotchViewModel: ObservableObject {
         case files, clipboard
     }
 
-    @Published var tab: NotchTab = .home
+    @Published var tab: NotchTab = .live
     @Published var traySide = TraySide.files
     /// What's typed in the Clipboard side's search field.
     @Published var clipSearch = ""
@@ -280,18 +280,50 @@ final class NotchViewModel: ObservableObject {
 
     /// The open notch with the command field up: tall enough for its rows, at least as tall as the tabs.
     static func commandHeight(rows: Int, closedHeight: CGFloat) -> CGFloat {
-        max(closedHeight, NotchTheme.headerControlHeight) + 92 + 32 * CGFloat(min(max(rows, 1), CommandEngine.maximumResults))
+        max(closedHeight, 36) + 24 + NotchTheme.commandFieldHeight + NotchTheme.commandFieldGap
+            + 34 * CGFloat(min(max(rows, 1), CommandEngine.maximumResults))
+    }
+
+    /// Room the section buttons take outside the panel, for the placement in Settings. The panel's
+    /// window is sized for the most any placement needs, so this only moves the hit area.
+    static func stripInsets(for placement: SectionPlacement) -> EdgeInsets {
+        switch placement {
+        case .under: EdgeInsets(top: 0, leading: 0, bottom: SectionStrip.underHeight, trailing: 0)
+        case .sides: EdgeInsets(top: 0, leading: SectionStrip.sideWidth, bottom: 0, trailing: SectionStrip.sideWidth)
+        case .left: EdgeInsets(top: 0, leading: SectionStrip.sideWidth, bottom: 0, trailing: 0)
+        case .right: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: SectionStrip.sideWidth)
+        case .arc: EdgeInsets(top: 0, leading: SectionStrip.arcOverhang, bottom: SectionStrip.arcDepth,
+                              trailing: SectionStrip.arcOverhang)
+        case .band, .hidden: EdgeInsets()
+        }
+    }
+
+    /// The room around the open panel the strip needs at most, whatever the placement.
+    static let stripRoom = EdgeInsets(top: 0, leading: SectionStrip.arcOverhang, bottom: SectionStrip.arcDepth,
+                                      trailing: SectionStrip.arcOverhang)
+
+    /// The strip's room outside the panel, now. Nothing unless the panel is open and the strip shows.
+    var stripInsets: EdgeInsets {
+        guard phase == .open, !isCommandMode else { return EdgeInsets() }
+        return Self.stripInsets(for: AppSettings.shared.sectionPlacement)
+    }
+
+    /// The band beside the camera, where the section's title and actions sit: as tall as the menu
+    /// bar, and never shorter than its buttons need.
+    static func bandHeight(closedHeight: CGFloat) -> CGFloat {
+        max(closedHeight, 36)
     }
 
     /// The tallest the open notch gets, so its panel always has room.
     static func tallestOpenHeight(closedHeight: CGFloat) -> CGFloat {
-        max(AppSettings.shared.openHeight, commandHeight(rows: CommandEngine.maximumResults, closedHeight: closedHeight))
+        max(AppSettings.shared.openHeight, commandHeight(rows: CommandEngine.maximumResults, closedHeight: closedHeight),
+            LiveSectionView.preferredHeight(rows: LiveFeed.mostShown, band: bandHeight(closedHeight: closedHeight)))
     }
 
     /// The tab on screen: the tray while files are dragged in, otherwise the chosen one if it's enabled.
     var visibleTab: NotchTab {
         if isDraggingFiles { return .tray }
-        return AppSettings.shared.enabledTabs.contains(tab) ? tab : .home
+        return AppSettings.shared.enabledTabs.contains(tab) ? tab : .live
     }
 
     var closedLayout: ClosedLayout {
@@ -302,13 +334,16 @@ final class NotchViewModel: ObservableObject {
         let settings = AppSettings.shared
         switch phase {
         case .open:
-            let theme = settings.theme
             var height = settings.openHeight
             if isCommandMode {
                 height = max(height, Self.commandHeight(rows: commandResults.count, closedHeight: geometry.closedSize.height))
+            } else if visibleTab == .live {
+                // Live grows with what's in it.
+                let rows = LiveFeed.items(at: .now, viewModel: nil, theme: .standard).count
+                height = LiveSectionView.preferredHeight(rows: rows, band: Self.bandHeight(closedHeight: geometry.closedSize.height))
             }
             return NotchMetrics(width: settings.openWidth, height: height,
-                                topRadius: theme.topRadius, bottomRadius: theme.bottomRadius)
+                                topRadius: NotchTheme.panelTopRadius, bottomRadius: NotchTheme.panelBottomRadius)
         case .glance:
             let closed = geometry.closedSize
             let content = glanceContent
@@ -334,7 +369,8 @@ final class NotchViewModel: ObservableObject {
     }
 
     func open(tab: NotchTab? = nil) {
-        if let tab { self.tab = tab }
+        // Orbit opens on what's live now, unless something asked for a section by name.
+        if let tab { self.tab = tab } else if phase != .open { self.tab = .live }
         // Whatever opens the Tray by name means its files, like a screenshot's Show.
         if tab == .tray { traySide = .files }
         guard phase != .open else { return }
@@ -472,7 +508,7 @@ final class NotchViewModel: ObservableObject {
 
     // MARK: Snapshots
 
-    func stage(phase: Phase, activity: ClosedActivity, secondary: CompactActivity? = nil, tab: NotchTab = .home,
+    func stage(phase: Phase, activity: ClosedActivity, secondary: CompactActivity? = nil, tab: NotchTab = .live,
                traySide: TraySide = .files, clipSearch: String = "",
                draggingFiles: Bool = false, draggingImages: Bool = false, command: String? = nil, showingRecent: Bool = false,
                showingUsage: Bool = false) {

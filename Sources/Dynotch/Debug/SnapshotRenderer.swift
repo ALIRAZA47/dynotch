@@ -102,6 +102,7 @@ enum SnapshotRenderer {
         NotchAccent.checkContrast()
         #endif
         only = prefixes
+        SnapshotClock.now = sampleTime
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         PowerMonitor.shared.start()
         loadSamples(in: folder)
@@ -203,6 +204,12 @@ enum SnapshotRenderer {
             Scene(name: "09-closed-notification", phase: .closed, activity: .notice(message)),
             Scene(name: "09-closed-notification-private", phase: .closed, activity: .notice(privateMessage)),
             Scene(name: "09-closed-notification-other-app", phase: .closed, activity: .notice(otherAppMessage)),
+            Scene(name: "o-live", phase: .open, tab: .live),
+            Scene(name: "o-live-light", phase: .open, tab: .live, theme: NotchTheme(isDark: false)),
+            Scene(name: "o-music", phase: .open, tab: .music),
+            Scene(name: "o-clipboard", phase: .open, tab: .clipboard),
+            Scene(name: "o-notes", phase: .open, tab: .notes),
+            Scene(name: "o-calendar", phase: .open, tab: .calendar),
             Scene(name: "10-open-nook", phase: .open, tab: .home),
             Scene(name: "11-open-nook-empty", phase: .open, tab: .home, hasTrack: false),
             Scene(name: "12-open-tray", phase: .open, tab: .tray),
@@ -445,13 +452,15 @@ enum SnapshotRenderer {
         ] + lyricsScenes() + clipboardScenes() + sizeScenes() + edgeScenes(virtualNotch: virtualNotch)
 
         let settings = AppSettings.shared
-        let savedTheme = settings.theme
+        let savedTheme = NotchTheme()
         let savedSize = (settings.openWidth, settings.openHeight)
         var written = 0
         for scene in scenes where wanted(scene.name) {
             apply(scene.theme ?? savedTheme)
             (settings.openWidth, settings.openHeight) = scene.openSize.map { ($0.width, $0.height) } ?? savedSize
-            let size = CGSize(width: settings.openWidth + NotchTheme.standard.topRadius * 2 + 80, height: settings.openHeight + 40)
+            let room = NotchViewModel.stripRoom
+            let size = CGSize(width: settings.openWidth + room.leading + room.trailing + 80,
+                              height: NotchViewModel.tallestOpenHeight(closedHeight: 32) + room.bottom + 40)
             scene.prepare?()
             AppSettings.shared.focusShowsNotes = scene.focusShowsNotes
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
@@ -606,11 +615,11 @@ enum SnapshotRenderer {
     /// Puts a theme in the settings, where the notch reads it. Only writes what differs.
     private static func apply(_ theme: NotchTheme) {
         let settings = AppSettings.shared
-        guard settings.theme != theme else { return }
-        settings.notchMaterial = theme.material
+        let appearance: NotchAppearance = theme.isDark ? .dark : .light
+        if settings.notchAppearance != appearance { settings.notchAppearance = appearance }
+        guard settings.theme(systemIsDark: true) != theme else { return }
         settings.notchAccent = theme.accentChoice
-        settings.notchTopRadius = theme.topRadius
-        settings.notchBottomRadius = theme.bottomRadius
+        settings.buttonRadius = theme.radius
     }
 
     // MARK: Welcome tour

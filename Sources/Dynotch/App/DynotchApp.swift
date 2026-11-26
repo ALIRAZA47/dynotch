@@ -248,7 +248,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return item
     }
 
-    @objc private func openNotch() { NotchManager.shared.open(tab: .home) }
+    @objc private func openNotch() { NotchManager.shared.open(tab: .live) }
     @objc private func openTray() { NotchManager.shared.open(tab: .tray) }
     @objc private func openSettings() { SettingsWindowController.shared.show() }
     @objc private func openAbout() { SettingsWindowController.shared.show(page: .about) }

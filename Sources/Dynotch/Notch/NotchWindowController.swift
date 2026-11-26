@@ -95,9 +95,13 @@ final class NotchWindowController {
         let settings = AppSettings.shared
         viewModel.update(geometry: NotchGeometry.make(for: screen, virtualWidth: settings.virtualNotchWidth,
                                                       virtualStyle: settings.virtualNotchStyle))
-        let width = settings.openWidth + NotchTheme.maxTopRadius * 2 + Self.shadowInset * 2
+        // Room for the section buttons around the panel too, wherever they're placed.
+        let room = NotchViewModel.stripRoom
+        let width = max(settings.openWidth + NotchTheme.maxTopRadius * 2, settings.openWidth + room.leading + room.trailing)
+            + Self.shadowInset * 2
         // The command field can make the open notch taller than its setting.
-        let height = NotchViewModel.tallestOpenHeight(closedHeight: viewModel.geometry.closedSize.height) + Self.shadowInset
+        let height = NotchViewModel.tallestOpenHeight(closedHeight: viewModel.geometry.closedSize.height) + room.bottom
+            + Self.shadowInset
         let frame = screen.frame
         panel.setFrame(CGRect(x: (frame.midX - width / 2).rounded(), y: frame.maxY - height, width: width, height: height),
                        display: true)
@@ -313,8 +317,12 @@ final class NotchWindowController {
     private var notchRect: CGRect {
         let metrics = viewModel.metrics
         let frame = viewModel.geometry.screenFrame
-        return CGRect(x: frame.midX - metrics.outerWidth / 2, y: frame.maxY - metrics.height,
-                      width: metrics.outerWidth, height: metrics.height)
+        // The section buttons around the open panel count as part of it.
+        let strip = viewModel.stripInsets
+        let left = max(metrics.outerWidth / 2, metrics.width / 2 + strip.leading)
+        let right = max(metrics.outerWidth / 2, metrics.width / 2 + strip.trailing)
+        return CGRect(x: frame.midX - left, y: frame.maxY - metrics.height - strip.bottom,
+                      width: left + right, height: metrics.height + strip.bottom)
     }
 
     /// The notch plus a little slack, and up past the top edge so the very top pixel counts.

@@ -702,12 +702,12 @@ private struct TodayGlance: View {
                 let sky = Sky(code: conditions.code, isDay: conditions.isDay)
                 let temperature = WeatherService.format(conditions.temperature, units: settings.weatherUnits)
                 chip(symbol: sky.symbol, tint: .yellow, text: describesSky ? temperature + " " + sky.description : temperature) {
-                    viewModel.open(tab: .home)
+                    viewModel.open(tab: AppSettings.shared.enabledTabs.contains(.home) ? .home : .live)
                 }
             }
             if let event = nextEvent(at: now) {
                 chip(symbol: "calendar", tint: .orange, text: eventText(event, at: now)) {
-                    viewModel.open(tab: .home)
+                    viewModel.open(tab: .calendar)
                 }
             }
             if showsReviews, ci.reviewCount > 0 {

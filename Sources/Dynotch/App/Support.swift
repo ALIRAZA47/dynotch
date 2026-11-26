@@ -172,8 +172,25 @@ extension NSImage {
 }
 
 extension Animation {
-    static let notchOpen = Animation.spring(response: 0.42, dampingFraction: 0.76)
-    static let notchClose = Animation.spring(response: 0.36, dampingFraction: 0.95)
+    /// Settings › Appearance › Motion: springy overshoots, smooth settles, minimal only fades.
+    @MainActor static var notchOpen: Animation {
+        switch AppSettings.shared.notchMotion {
+        case .springy: .spring(response: 0.42, dampingFraction: 0.72)
+        case .smooth: .spring(response: 0.4, dampingFraction: 0.95)
+        case .minimal: .easeOut(duration: 0.18)
+        }
+    }
+    @MainActor static var notchClose: Animation {
+        AppSettings.shared.notchMotion == .minimal ? .easeOut(duration: 0.14) : .spring(response: 0.36, dampingFraction: 0.95)
+    }
+    /// The section strip sliding out from under the panel, a beat after it opens.
+    @MainActor static var notchStrip: Animation {
+        switch AppSettings.shared.notchMotion {
+        case .springy: .spring(response: 0.44, dampingFraction: 0.66).delay(0.08)
+        case .smooth: .spring(response: 0.4, dampingFraction: 0.95).delay(0.06)
+        case .minimal: .easeOut(duration: 0.15)
+        }
+    }
     static let notchHover = Animation.spring(response: 0.28, dampingFraction: 0.7)
     /// The hovered notch growing into a glance: quicker and calmer than opening.
     static let notchGlance = Animation.spring(response: 0.34, dampingFraction: 0.82)

@@ -93,6 +93,7 @@ extension NotchAccent {
     /// read: white text on it, and it as text on the page, both pass 4.5:1.
     var windowDeep: (red: Double, green: Double, blue: Double) {
         switch self {
+        case .cobalt: (0.12, 0.33, 0.84)
         case .lavender: (0.40, 0.27, 0.94)
         case .blue: (0.0, 0.40, 0.86)
         case .teal: (0.0, 0.47, 0.50)

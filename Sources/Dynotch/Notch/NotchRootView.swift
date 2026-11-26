@@ -10,13 +10,15 @@ struct NotchRootView: View {
     @Environment(\.colorScheme) private var menuBarScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.isSnapshot) private var isSnapshot
 
-    /// The user's look, with the system's Increase Contrast and Reduce Transparency.
+    /// The user's look, with the system's Increase Contrast and Reduce Transparency. Closed, the
+    /// notch is black and its contents are drawn for dark, whatever the panel's appearance.
     private var theme: NotchTheme {
-        var theme = settings.theme
+        var theme = settings.theme(systemIsDark: menuBarScheme == .dark)
         theme.isHighContrast = contrast == .increased
         theme.reducesTransparency = reduceTransparency
-        return theme
+        return viewModel.isOpen ? theme : theme.dark
     }
 
     var body: some View {
@@ -46,9 +48,7 @@ struct NotchRootView: View {
             .frame(width: metrics.width, height: metrics.height, alignment: .top)
             .padding(.horizontal, metrics.topRadius)
             .background {
-                NotchSurface(isGlass: viewModel.isOpen && theme.isGlass, topRadius: metrics.topRadius,
-                             bottomRadius: metrics.bottomRadius, bandHeight: viewModel.geometry.closedSize.height,
-                             chamfer: viewModel.isOpen)
+                NotchSurface(isOpen: viewModel.isOpen, topRadius: metrics.topRadius, bottomRadius: metrics.bottomRadius)
                 // Black fades into a light menu bar; a dark one needs the line a shade lighter than itself.
                 if isLine, menuBarScheme == .dark {
                     Color.white.opacity(0.55)
@@ -63,17 +63,33 @@ struct NotchRootView: View {
                                                 removal: .opacity.animation(.easeOut(duration: 0.2))))
                 }
             }
+            .overlay(alignment: .top) {
+                // The section buttons sit outside the panel's outline, so they're drawn over it unclipped.
+                if viewModel.isOpen, !viewModel.isCommandMode {
+                    SectionStrip(viewModel: viewModel, panel: CGSize(width: metrics.width, height: metrics.height))
+                        .frame(width: metrics.width, height: metrics.height, alignment: .top)
+                        .transition(.opacity.animation(.easeOut(duration: 0.1)))
+                }
+            }
+            .overlay(alignment: .top) {
+                // The camera housing, drawn for snapshots so a light panel shows it as a real Mac would.
+                if isSnapshot, viewModel.isOpen, viewModel.geometry.hasHardwareNotch {
+                    UnevenRoundedRectangle(cornerRadii: .init(bottomLeading: 10, bottomTrailing: 10), style: .continuous)
+                        .fill(.black)
+                        .frame(width: viewModel.geometry.closedSize.width, height: viewModel.geometry.closedSize.height)
+                        .allowsHitTesting(false)
+                }
+            }
             .modifier(SnapshotLayer())
-            // Glass carries a lighter shadow: a heavy one shows through it.
             .shadow(color: .black.opacity((viewModel.isOpen || viewModel.isGlancing) && settings.showOpenShadow
-                        ? (viewModel.isOpen && theme.isGlass ? 0.3 : 0.5) : 0),
-                    radius: 18, y: 8)
+                        ? (theme.isDark ? 0.42 : 0.22) : 0),
+                    radius: 17, y: 13)
             // The line is faint until the pointer finds it.
             .opacity(isLine ? (viewModel.phase == .hovering ? 0.7 : 0.4) : 1)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .environment(\.colorScheme, .dark)
+        .environment(\.colorScheme, theme.colorScheme)
         .environment(\.notchTheme, theme)
         .tint(theme.accent)
     }

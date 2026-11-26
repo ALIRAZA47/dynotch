@@ -227,51 +227,25 @@ struct CardSurface: View {
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
-        GlassSurface(depth: .pane, shape: RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous),
-                     isLit: isHighlighted)
+        GlassSurface(depth: .pane, shape: theme.cardShape, isLit: isHighlighted)
             .animation(.notchHighlight, value: isHighlighted)
     }
 }
 
-/// A piece of the notch's glass in `shape`, lit from above as `depth` says: its fill, light across
-/// its upper part and a specular rim. Nothing in it moves, so it costs nothing once drawn.
+/// A flat Orbit surface in `shape`: its fill and the hairline round it, as `depth` says.
 struct GlassSurface<S: InsettableShape>: View {
     let depth: GlassDepth
     let shape: S
     var isLit = false
-    /// A lens's color spills softly onto the glass around it. Only for the selected tab and a
-    /// targeted drop zone; everywhere else the solid face is enough.
+    /// Kept for callers from before Orbit; nothing spills.
     var spills = false
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
         ZStack {
-            if spills, case .lens(let color) = depth {
-                shape.fill(color.opacity(0.35))
-                    .blur(radius: 6)
-                    .allowsHitTesting(false)
-            }
-            if case .lens = depth {
-                // A solid face can't take on more light, so it brightens under the pointer instead.
-                shape.fill(theme.fill(depth)).brightness(isLit ? 0.04 : 0)
-            } else {
-                shape.fill(theme.fill(depth, isLit: isLit))
-            }
-            if theme.sheen(depth) > 0 {
-                shape.fill(sheen)
-            }
+            shape.fill(theme.fill(depth, isLit: isLit))
             shape.strokeBorder(theme.rim(depth, isLit: isLit), lineWidth: 1)
         }
-    }
-
-    /// A pane glows softly under the middle of its top edge; smaller glass catches a band of light
-    /// across its top half.
-    private var sheen: AnyShapeStyle {
-        let light = Color.white.opacity(theme.sheen(depth))
-        if depth == .pane {
-            return AnyShapeStyle(EllipticalGradient(colors: [light, light.opacity(0)], center: .top, endRadiusFraction: 0.85))
-        }
-        return AnyShapeStyle(LinearGradient(colors: [light, light.opacity(0)], startPoint: .top, endPoint: .center))
     }
 }
 
@@ -288,11 +262,8 @@ struct EtchedDivider: View {
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
-        VStack(spacing: 0) {
-            theme.divider.frame(height: 1)
-            theme.dividerLight.frame(height: 1)
-        }
-        .accessibilityHidden(true)
+        theme.line.frame(height: 1)
+            .accessibilityHidden(true)
     }
 }
 
@@ -366,7 +337,7 @@ struct CardSegments<Value: Hashable>: View {
             }
         }
         .padding(2)
-        .glass(.well, in: Capsule())
+        .background(theme.hover, in: RoundedRectangle(cornerRadius: theme.radius + 2, style: .continuous))
     }
 
     private func segment(_ segment: Segment) -> some View {
@@ -386,10 +357,11 @@ struct CardSegments<Value: Hashable>: View {
             }
             .foregroundStyle(isSelected ? theme.primary : theme.secondary)
             .padding(.horizontal, 10)
-            .frame(height: 22)
+            .frame(height: 24)
             .background {
                 if isSelected {
-                    GlassSurface(depth: .control, shape: Capsule())
+                    theme.controlShape.fill(theme.raised)
+                        .shadow(color: .black.opacity(theme.isDark ? 0.3 : 0.12), radius: 1, y: 1)
                         .matchedGeometryEffect(id: "segment", in: highlight)
                 }
             }
@@ -414,7 +386,7 @@ struct CardField: View {
     @ViewState private var hovering = false
 
     var body: some View {
-        let shape = Capsule()
+        let shape = theme.controlShape
         HStack(spacing: 6) {
             Image(systemName: symbol)
                 .font(.system(size: 9.5, weight: .bold))
@@ -435,9 +407,10 @@ struct CardField: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 9)
-        .frame(height: 22)
+        .frame(height: 26)
         .glass(.well, in: shape, isLit: hovering || isFocused)
-        .overlay(shape.strokeBorder(isInvalid ? Color.red.opacity(0.75) : theme.accent.opacity(isFocused ? 0.6 : 0)))
+        .overlay(shape.strokeBorder(isInvalid ? theme.alert : theme.accent.opacity(isFocused ? 1 : 0), lineWidth: 1.5))
+        .background(shape.inset(by: -3).fill(isFocused ? theme.accentSoft : .clear))
         .contentShape(shape)
         .onHover { hovering = $0 }
         .animation(.notchHighlight, value: hovering)
@@ -507,7 +480,7 @@ struct IconButton: View {
     let symbol: String
     var size: CGFloat = 14
     var isActive = false
-    var activeColor: Color = .white
+    var activeColor: Color?
     /// How strong the symbol is while it's neither active nor under the pointer. Secondary
     /// controls, like shuffle beside the play button, sit back further.
     var idleOpacity: Double = 0.82
@@ -520,12 +493,12 @@ struct IconButton: View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(isActive ? activeColor : theme.primary.opacity(hovering ? 1 : idleOpacity))
+                .foregroundStyle(isActive ? activeColor ?? theme.accentText : theme.primary.opacity(hovering ? 1 : idleOpacity))
                 .frame(width: size + 16, height: size + 14)
                 .background {
-                    if hovering { GlassSurface(depth: .control, shape: Circle()) }
+                    if hovering { theme.controlShape.fill(theme.hover) }
                 }
-                .contentShape(Circle())
+                .contentShape(Rectangle())
         }
         .buttonStyle(PressableButtonStyle())
         .onHover { hovering = $0 }
@@ -576,41 +549,118 @@ struct CardButtonLabel: View {
         // As tall as the title row; the highlight and the target reach a little past it.
         .frame(minWidth: 20, minHeight: 14)
         .background {
-            if hovering { GlassSurface(depth: .control, shape: Capsule()).padding(.vertical, -2) }
+            if hovering { theme.controlShape.fill(theme.hover).padding(.vertical, -3) }
         }
         .contentShape(Rectangle().inset(by: -3))
         .animation(.notchHighlight, value: hovering)
     }
 }
 
-/// A small capsule of glass with the accent's light in it, or a tint's. Its label is white, like all
-/// text on glass: in the tint, over that glass, it would read under 4.5:1.
+/// A focus button: the ones a person should look at first, like Allow once, Join or Grant
+/// Access. A light wash of its color, a thin border, spaced capitals, and a solid block of the
+/// color down its right edge. Red for one that can't be taken back.
 struct PillButton: View {
     let title: String
     var symbol: String?
     var tint: Color?
+    var height: CGFloat = 26
     let action: () -> Void
     @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
 
     var body: some View {
-        let tint = tint ?? theme.accent
         Button(action: action) {
-            HStack(spacing: 5) {
-                if let symbol {
-                    Image(systemName: symbol).font(.system(size: 9.5, weight: .bold))
-                }
-                Text(title).font(NotchFont.bodyStrong).lineLimit(1)
-            }
-            .foregroundStyle(theme.primary)
-            .padding(.horizontal, 11)
-            .frame(height: 24)
-            .glass(.tint(tint), in: Capsule(), isLit: hovering)
-            .contentShape(Capsule())
+            FocusButtonLabel(title: title, symbol: symbol, tint: tint, height: height, hovering: hovering)
         }
-        .buttonStyle(PressableButtonStyle(scale: 0.94))
+        .buttonStyle(PressableButtonStyle(scale: 0.96))
         .onHover { hovering = $0 }
         .animation(.notchHighlight, value: hovering)
+        .accessibilityLabel(title)
+    }
+}
+
+/// How a focus button looks, for buttons that need their own action handling.
+struct FocusButtonLabel: View {
+    let title: String
+    var symbol: String?
+    var tint: Color?
+    var height: CGFloat = 26
+    var hovering = false
+    @Environment(\.notchTheme) private var theme
+
+    var body: some View {
+        let tint = tint ?? theme.accent
+        let shape = theme.controlShape
+        HStack(spacing: 6) {
+            if let symbol {
+                Image(systemName: symbol).font(.system(size: 10, weight: .bold))
+            }
+            Text(title.uppercased())
+                .font(.system(size: 11.5, weight: .semibold))
+                .tracking(1.6)
+                .lineLimit(1)
+                .fixedSize()
+        }
+        .foregroundStyle(theme.primary)
+        .padding(.leading, 14)
+        .padding(.trailing, 22)
+        .frame(height: height)
+        .background {
+            ZStack(alignment: .trailing) {
+                shape.fill(tint.opacity((theme.isDark ? 0.16 : 0.12) + (hovering ? 0.08 : 0)))
+                UnevenRoundedRectangle(cornerRadii: .init(bottomTrailing: theme.radius, topTrailing: theme.radius), style: .continuous)
+                    .fill(tint)
+                    .frame(width: 7)
+                shape.strokeBorder(theme.edge, lineWidth: 1)
+            }
+        }
+        .contentShape(shape)
+    }
+}
+
+/// A plain Orbit button: a filled shape a shade off the panel, with a title or a symbol.
+struct OrbitButton: View {
+    enum Style {
+        /// Filled a shade off the panel.
+        case plain
+        /// No fill until the pointer's on it.
+        case ghost
+    }
+
+    var title: String?
+    var symbol: String?
+    var style: Style = .plain
+    var height: CGFloat = 26
+    var help: String?
+    let action: () -> Void
+    @Environment(\.notchTheme) private var theme
+    @ViewState private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                if let symbol {
+                    Image(systemName: symbol).font(.system(size: 11.5, weight: .semibold))
+                }
+                if let title {
+                    Text(title).font(NotchFont.bodyStrong).lineLimit(1).fixedSize()
+                }
+            }
+            .foregroundStyle(style == .ghost && !hovering ? theme.secondary : theme.primary)
+            .padding(.horizontal, title == nil ? 0 : 12)
+            .frame(minWidth: height, minHeight: height, maxHeight: height)
+            .background {
+                if style == .plain || hovering {
+                    theme.controlShape.fill(hovering ? theme.controlHover : theme.hover)
+                }
+            }
+            .contentShape(theme.controlShape)
+        }
+        .buttonStyle(PressableButtonStyle(scale: 0.96))
+        .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: hovering)
+        .help(help ?? title ?? "")
+        .accessibilityLabel(help ?? title ?? "")
     }
 }
 
@@ -632,7 +682,7 @@ struct Keycap: View {
 
     var body: some View {
         let side: CGFloat = style == .window ? 24 : 18
-        let shape = RoundedRectangle(cornerRadius: style == .window ? 6 : 5, style: .continuous)
+        let shape = RoundedRectangle(cornerRadius: style == .window ? 6 : 4, style: .continuous)
         Text(label)
             .font(style == .window ? .system(size: 12, weight: .semibold, design: .rounded) : NotchFont.keycap)
             .foregroundStyle(foreground)
@@ -647,7 +697,7 @@ struct Keycap: View {
 
     private var foreground: Color {
         switch style {
-        case .notch: theme.primary.opacity(0.72)
+        case .notch: theme.secondary
         case .onLens: theme.onAccent
         case .window: .primary
         }
@@ -657,7 +707,7 @@ struct Keycap: View {
     private func face(_ shape: RoundedRectangle) -> some View {
         switch style {
         case .notch:
-            GlassSurface(depth: .control, shape: shape)
+            shape.strokeBorder(theme.line, lineWidth: 1)
         case .onLens:
             shape.fill(theme.onAccent.opacity(0.12))
                 .overlay(shape.strokeBorder(theme.onAccent.opacity(0.18)))
