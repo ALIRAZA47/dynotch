@@ -362,8 +362,12 @@ final class NotchViewModel: ObservableObject {
 
     /// The open notch with the command field up: tall enough for its rows, at least as tall as the tabs.
     static func commandHeight(rows: Int, closedHeight: CGFloat) -> CGFloat {
-        max(closedHeight, 36) + 24 + NotchTheme.commandFieldHeight + NotchTheme.commandFieldGap
-            + 34 * CGFloat(min(max(rows, 1), CommandEngine.maximumResults))
+        // The band, the gap under it (8), the heading with its gap, the rows, then the field at the
+        // foot with the gap over it and the panel's bottom edge (14), as `CommandView` lays them out.
+        let rows = CGFloat(min(max(rows, 1), CommandEngine.maximumResults))
+        return bandHeight(closedHeight: closedHeight) + 8 + CommandView.headingHeight + CommandView.headingGap
+            + rows * (CommandView.rowHeight + CommandView.rowGap) + NotchTheme.commandFieldGap
+            + NotchTheme.commandFieldHeight + 14
     }
 
     /// Room the section buttons take outside the panel, for the placement in Settings. The panel's

@@ -1,87 +1,6 @@
 import DynotchShared
 import SwiftUI
 
-/// The sessions, in a tab that's only there while there are some. A waiting session has Review,
-/// which turns the notch to the glance, and no Allow: that's only ever in the glance.
-struct AgentsTabView: View {
-    @ObservedObject var viewModel: NotchViewModel
-    @ObservedObject private var deck = AgentDeck.shared
-
-    var body: some View {
-        TimelineView(.periodic(from: .now, by: 30)) { context in
-            Group {
-                if deck.sessions.isEmpty {
-                    EmptyState(symbol: "sparkles", message: "No sessions right now")
-                } else {
-                    Scroller(.vertical, fadesOverflow: true) {
-                        LazyVStack(spacing: 0) {
-                            ForEach(deck.ordered) { session in
-                                SessionRow(session: session, now: context.date, viewModel: viewModel,
-                                           hasApproval: deck.hasApproval(forSession: session.id))
-                            }
-                        }
-                    }
-                }
-            }
-            .padding(EdgeInsets(top: 6, leading: 12, bottom: 6, trailing: 10))
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(CardSurface())
-        }
-    }
-}
-
-/// A session: a dot for its state, the project, and a quiet line about it that names no arguments.
-private struct SessionRow: View {
-    let session: AgentSession
-    let now: Date
-    @ObservedObject var viewModel: NotchViewModel
-    let hasApproval: Bool
-    @Environment(\.notchTheme) private var theme
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Circle()
-                .fill(dot)
-                .frame(width: 7, height: 7)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(session.project)
-                    .font(NotchFont.bodyStrong)
-                    .foregroundStyle(theme.primary)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
-                Text(session.line(at: now))
-                    .font(NotchFont.caption)
-                    .foregroundStyle(theme.secondary)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 8)
-            if hasApproval {
-                PillButton(title: "Review", tint: AgentDeck.tint) {
-                    AgentDeck.shared.bringForward(session: session.id)
-                    viewModel.showApproval()
-                }
-            } else if let action = session.origin.action {
-                NoticeButton(action: action, isMain: false, height: 24) {
-                    session.origin.focus()
-                    viewModel.close()
-                }
-            }
-        }
-        .frame(height: 38)
-        .accessibilityElement(children: .contain)
-    }
-
-    private var dot: Color {
-        switch session.state {
-        case .ready: theme.tertiary
-        case .working: theme.accent
-        case .waiting: AgentDeck.tint
-        case .done: .green
-        }
-    }
-}
-
 /// The tool call waiting for an answer. This is the only place with Allow and Deny.
 struct ApprovalGlance: View {
     let approval: AgentApproval
@@ -130,40 +49,42 @@ struct ApprovalGlance: View {
         }
     }
 
-    /// The tool and the project in the left ear, and how far along the queue this is in the right one.
+    /// The project and the tool in the left ear, and how far along the queue this is in the right one.
     private var header: some View {
         let ear = max((Self.width - viewModel.geometry.closedSize.width) / 2 - 18, 60)
         return HStack(spacing: 0) {
-            HStack(spacing: 6) {
-                Image(systemName: "hand.raised.fill")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(AgentDeck.tint)
+            HStack(spacing: 8) {
+                // "Needs you": the accent's dot, as on the session's card in Agents.
+                Circle()
+                    .fill(theme.accent)
+                    .frame(width: 7, height: 7)
+                    .accessibilityHidden(true)
                 Text(approval.project)
-                    .font(NotchFont.bodyStrong)
+                    .font(NotchFont.headline)
                     .foregroundStyle(theme.primary)
                     .lineLimit(1)
                     .truncationMode(.middle)
                 Text(approval.tool)
-                    .font(NotchFont.body)
+                    .font(NotchFont.subheadline)
                     .foregroundStyle(theme.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
             .frame(width: ear, alignment: .leading)
             Spacer(minLength: 0)
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 if approval.isFromSubagent {
                     Text("Subagent")
                         .font(NotchFont.caption)
                         .foregroundStyle(theme.primary)
                         .padding(.horizontal, 7)
                         .frame(height: 18)
-                        .glass(.control, in: Capsule())
+                        .background(theme.controlShape.fill(theme.hover))
                         .fixedSize()
                 }
                 if deck.approvals.count > 1, let place = deck.approvals.firstIndex(where: { $0.id == approval.id }) {
                     Text("\(place + 1) of \(deck.approvals.count)")
-                        .font(NotchFont.numeric(12))
+                        .font(NotchFont.time(12))
                         .foregroundStyle(theme.secondary)
                         .fixedSize()
                 }
@@ -188,12 +109,14 @@ struct ApprovalGlance: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
-            ApprovalButton(title: "Deny", depth: .control, isArmed: isArmed, viewModel: viewModel) {
+            // Allow stays at the far right, where it has always been, so a hand that knows the glance
+            // finds neither Deny nor Back under it, and Back stays at the far left.
+            ApprovalButton(title: "Deny", isRisk: false, isArmed: isArmed, viewModel: viewModel) {
                 guard viewModel.acceptsNoticeButtons else { return }
                 deck.deny(approval, shown: guardrail, pressedAt: viewModel.lastPress)
                 closeIfThatWasTheLast()
             }
-            ApprovalButton(title: "Allow", depth: .lens(NotchAccent.green.color), isArmed: isArmed, viewModel: viewModel) {
+            ApprovalButton(title: "Allow once", isRisk: true, isArmed: isArmed, viewModel: viewModel) {
                 guard viewModel.acceptsNoticeButtons else { return }
                 deck.allow(approval, shown: guardrail, pressedAt: viewModel.lastPress)
                 closeIfThatWasTheLast()
@@ -219,7 +142,7 @@ private struct ApprovalWell: View {
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: theme.controlRadius, style: .continuous)
+        let shape = theme.controlShape
         // A line at a time, so a long file only lays out what's on screen.
         Scroller(.vertical, fadesOverflow: true) {
             LazyVStack(alignment: .leading, spacing: 0) {
@@ -236,7 +159,8 @@ private struct ApprovalWell: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .glass(.well, in: shape)
+        .background(shape.fill(theme.field))
+        .overlay(shape.strokeBorder(theme.line))
         .contentShape(shape)
         .onTapGesture {}
         .id(approval.id)
@@ -264,7 +188,7 @@ private struct ApprovalWell: View {
     private func color(of tone: ApprovalLine.Tone) -> Color {
         switch tone {
         case .plain: theme.primary
-        case .path: theme.accent
+        case .path: theme.accentText
         case .removed: NotchAccent.red.color
         case .added: NotchAccent.green.color
         case .quiet, .folder: theme.secondary
@@ -272,12 +196,13 @@ private struct ApprovalWell: View {
     }
 }
 
-/// Allow or Deny. It stays a button while it's inert, so a click on it goes nowhere rather than
-/// through to the glance behind it, and it does nothing until `isArmed`. Neither has a key. VoiceOver
-/// has no press to go by, so its own press is when it asks.
+/// Allow once or Deny. Allow once is a red focus button, as it lets something through; Deny is a
+/// plain one. It stays a button while it's inert, so a click on it goes nowhere rather than through
+/// to the glance behind it, and it does nothing until `isArmed`. Neither has a key. VoiceOver has
+/// no press to go by, so its own press is when it asks.
 private struct ApprovalButton: View {
     let title: String
-    let depth: GlassDepth
+    let isRisk: Bool
     let isArmed: Bool
     let viewModel: NotchViewModel
     let action: () -> Void
@@ -286,14 +211,7 @@ private struct ApprovalButton: View {
 
     var body: some View {
         Button(action: action) {
-            Text(title)
-                .font(NotchFont.bodyStrong)
-                .foregroundStyle(theme.ink(on: depth))
-                .frame(minWidth: 52)
-                .padding(.horizontal, 12)
-                .frame(height: 28)
-                .glass(depth, in: Capsule(), isLit: hovering && isArmed)
-                .contentShape(Capsule())
+            label
                 .opacity(isArmed ? 1 : 0.35)
         }
         .buttonStyle(PressableButtonStyle(scale: isArmed ? 0.95 : 1))
@@ -302,10 +220,29 @@ private struct ApprovalButton: View {
         .animation(.notchHighlight, value: hovering)
         .animation(.easeOut(duration: 0.15), value: isArmed)
         .help(title)
+        .accessibilityLabel(title)
         .accessibilityHint(isArmed ? "" : "Not ready yet")
         .accessibilityAction {
             viewModel.lastPress = .now
             action()
+        }
+    }
+
+    @ViewBuilder
+    private var label: some View {
+        // The pointer lights it only once it works, so an inert button never looks ready.
+        let isLit = hovering && isArmed
+        if isRisk {
+            FocusButtonLabel(title: title, tint: theme.alert, height: 28, hovering: isLit)
+        } else {
+            Text(title)
+                .font(NotchFont.bodyStrong)
+                .foregroundStyle(theme.primary)
+                .frame(minWidth: 44)
+                .padding(.horizontal, 12)
+                .frame(height: 28)
+                .background(theme.controlShape.fill(isLit ? theme.controlHover : theme.hover))
+                .contentShape(theme.controlShape)
         }
     }
 }

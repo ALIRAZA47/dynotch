@@ -87,14 +87,20 @@ struct CIGlance: View {
     var body: some View {
         GlanceLayout(band: band) {
             ZStack {
-                CIRing(run: run, lineWidth: 4, halo: true)
+                CIRing(run: run, lineWidth: 4, halo: false)
                 Image(systemName: run.symbol)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(run.tint)
             }
             .padding(2)
         } trailing: {
-            CIStatus(run: run)
+            // In SF Mono, as Orbit sets figures; the closed notch keeps its own `CIStatus`.
+            Text(run.statusText)
+                .font(NotchFont.time(12))
+                .foregroundStyle(run.tint)
+                .lineLimit(1)
+                .fixedSize()
+                .contentTransition(.numericText())
         } center: {
             // The chip gives up its word before the line about the run gets cut off.
             ViewThatFits(in: .horizontal) {

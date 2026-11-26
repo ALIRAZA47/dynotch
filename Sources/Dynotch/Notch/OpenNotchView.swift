@@ -47,7 +47,6 @@ struct OpenNotchView: View {
     private var content: some View {
         if viewModel.isCommandMode {
             CommandView(viewModel: viewModel)
-                .orbitHeader("Command", subtitle: "Type, then Return")
         } else {
             switch viewModel.visibleTab {
             case .live: LiveSectionView(viewModel: viewModel)
@@ -59,7 +58,7 @@ struct OpenNotchView: View {
             case .notes: NotesWidget().orbitHeader("Notes")
             case .calendar: CalendarWidget().orbitHeader("Calendar")
             case .stats: ControlSection()
-            case .agents: AgentsTabView(viewModel: viewModel).orbitHeader("Agents")
+            case .agents: AgentsSectionView(viewModel: viewModel)
             }
         }
     }
