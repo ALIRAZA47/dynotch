@@ -19,7 +19,14 @@ struct RowAction: Identifiable {
     var symbol: String?
     var role: Role = .plain
     var isEnabled = true
+    /// Drawn as its symbol alone, like a player's controls; the title is what VoiceOver and the tooltip say.
+    var isIcon = false
     let perform: () -> Void
+
+    /// A control drawn as its symbol: play, pause, next, cancel.
+    static func icon(_ symbol: String, _ title: String, role: Role = .plain, perform: @escaping () -> Void) -> RowAction {
+        RowAction(title: title, symbol: symbol, role: role, isIcon: true, perform: perform)
+    }
 
     /// A row's main action is its last: the focus button at the end.
     static func main(of actions: [RowAction]) -> RowAction? {
@@ -71,6 +78,18 @@ struct RowActionButton: View {
 
     var body: some View {
         Button(action: action.perform) {
+            if action.isIcon {
+                // The main control is a solid face of the accent; the others are filled a shade off the panel.
+                let isMain = action.role != .plain
+                Image(systemName: action.symbol ?? "circle")
+                    .font(.system(size: 11.5, weight: .bold))
+                    .foregroundStyle(isMain ? theme.onAccent : theme.primary)
+                    .frame(width: height + 4, height: height)
+                    .background(theme.controlShape.fill(isMain
+                        ? (action.role == .risk ? theme.alert : theme.accent).opacity(hovering ? 0.88 : 1)
+                        : hovering ? theme.controlHover : theme.hover))
+                    .contentShape(theme.controlShape)
+            } else {
             switch action.role {
             case .primary:
                 FocusButtonLabel(title: action.title, symbol: action.symbol, height: height, hovering: hovering)
@@ -89,8 +108,10 @@ struct RowActionButton: View {
                 .background(theme.controlShape.fill(hovering ? theme.controlHover : theme.hover))
                 .contentShape(theme.controlShape)
             }
+            }
         }
         .buttonStyle(PressableButtonStyle(scale: 0.96))
+        .help(action.title)
         .disabled(!action.isEnabled)
         .opacity(action.isEnabled ? 1 : 0.45)
         .onHover { hovering = $0 }

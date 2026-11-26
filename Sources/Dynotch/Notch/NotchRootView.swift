@@ -257,6 +257,9 @@ struct ClosedNotchView: View {
         case .timer:
             ProgressRing(progress: timer.progress, color: timer.phase.color, lineWidth: 2.6)
                 .frame(width: 17, height: 17)
+        case .notice(let notice) where notice.isPeek:
+            PeekAppIcon(bundleID: notice.appBundleID, symbol: notice.symbol, tint: notice.tint)
+                .transition(arrival(from: 0.6))
         case .notice(let notice):
             Image(systemName: notice.symbol)
                 .font(.system(size: 13, weight: .semibold))
@@ -300,6 +303,10 @@ struct ClosedNotchView: View {
             case .meter(let level):
                 LevelBar(level: level)
                     .frame(width: 62, height: 5)
+            case .info where notice.isPeek:
+                Text("now")
+                    .font(NotchFont.time(11.5, .medium))
+                    .foregroundStyle(theme.secondary)
             case .info:
                 NoticeText(text: notice.text, tint: notice.tint)
             }
@@ -327,6 +334,20 @@ struct ClosedNotchView: View {
             }
         case .lyrics:
             LyricRow()
+        case .notice(let notice) where notice.isPeek:
+            VStack(alignment: .leading, spacing: 1) {
+                Text(notice.text)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(theme.primary)
+                if let detail = notice.detail {
+                    Text(detail)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(theme.secondary)
+                }
+            }
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
         case .notice(let notice):
             if let detail = notice.detail {
                 // `ClosedLayout` widens the notch for this face, up to `maxRowWidth`.
@@ -403,5 +424,28 @@ struct ScriptBadge: View {
             .background(Circle().fill(.white))
             .offset(x: 4, y: 3)
             .accessibilityLabel("From a script")
+    }
+}
+
+/// A notification's app, as its own icon in a small rounded square, or the notice's symbol when
+/// the app can't be found.
+struct PeekAppIcon: View {
+    let bundleID: String?
+    let symbol: String
+    let tint: Color
+
+    var body: some View {
+        if let bundleID, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 20, height: 20)
+                .accessibilityHidden(true)
+        } else {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 20, height: 20)
+        }
     }
 }

@@ -249,13 +249,13 @@ struct SectionButton: View, Identifiable {
     private var label: some View {
         switch style {
         case .tile, .disc:
+            // The figure's line is kept even when there's no figure, so every icon sits at the same height.
             VStack(spacing: 2) {
                 Image(systemName: tab.symbol)
                     .font(.system(size: 14, weight: .medium))
                     .frame(width: 22, height: 20)
-                if let figure {
-                    Text(figure).font(NotchFont.time(10, .semibold)).lineLimit(1).fixedSize()
-                }
+                Text(figure ?? " ").font(NotchFont.time(10, .semibold)).lineLimit(1).fixedSize()
+                    .opacity(figure == nil ? 0 : 1)
             }
             .frame(width: style == .disc ? 50 : 48, height: style == .disc ? 50 : 47)
         case .band:

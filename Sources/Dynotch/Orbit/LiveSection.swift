@@ -81,8 +81,9 @@ enum LiveFeed {
                 title: "\(pomodoro.phase.title) · round \(pomodoro.completedSessions + 1)",
                 subtitle: pomodoro.isRunning ? next : "Paused",
                 status: pomodoro.isRunning ? "Running" : "Paused", statusColor: pomodoro.isRunning ? theme.live : nil,
-                actions: [RowAction(title: "Skip") { pomodoro.skip() },
-                          RowAction(title: pomodoro.isRunning ? "Pause" : "Resume", role: .primary) { pomodoro.toggle() }],
+                actions: [RowAction.icon("forward.end.fill", "Skip") { pomodoro.skip() },
+                          RowAction.icon(pomodoro.isRunning ? "pause.fill" : "play.fill", pomodoro.isRunning ? "Pause" : "Resume",
+                                         role: .primary) { pomodoro.toggle() }],
                 opens: .focus))
         }
 
@@ -94,8 +95,9 @@ enum LiveFeed {
                 time: Format.duration(left), symbol: "hourglass", title: countdown.name.isEmpty ? "Timer" : countdown.name,
                 subtitle: countdown.endDate.map { "Ends at \($0.formatted(date: .omitted, time: .shortened))" } ?? "Paused",
                 status: countdown.isRunning ? "Running" : "Paused", statusColor: countdown.isRunning ? theme.live : nil,
-                actions: [RowAction(title: "Cancel") { timers.cancel(countdown) },
-                          RowAction(title: countdown.isRunning ? "Pause" : "Resume", role: .primary) { timers.togglePause(countdown) }],
+                actions: [RowAction.icon("xmark", "Cancel") { timers.cancel(countdown) },
+                          RowAction.icon(countdown.isRunning ? "pause.fill" : "play.fill", countdown.isRunning ? "Pause" : "Resume",
+                                         role: .primary) { timers.togglePause(countdown) }],
                 opens: .focus))
         }
         if !timers.stopwatch.isReset {
@@ -104,8 +106,9 @@ enum LiveFeed {
                 time: Format.duration(timers.stopwatch.elapsed(at: now)), symbol: "stopwatch", title: "Stopwatch",
                 subtitle: timers.stopwatch.isRunning ? "Counting up" : "Stopped",
                 status: timers.stopwatch.isRunning ? "Running" : "Stopped", statusColor: timers.stopwatch.isRunning ? theme.live : nil,
-                actions: [RowAction(title: "Reset") { timers.resetStopwatch() },
-                          RowAction(title: timers.stopwatch.isRunning ? "Stop" : "Start", role: .primary) { timers.toggleStopwatch() }],
+                actions: [RowAction.icon("arrow.counterclockwise", "Reset") { timers.resetStopwatch() },
+                          RowAction.icon(timers.stopwatch.isRunning ? "pause.fill" : "play.fill",
+                                         timers.stopwatch.isRunning ? "Stop" : "Start", role: .primary) { timers.toggleStopwatch() }],
                 opens: .focus))
         }
 
@@ -116,8 +119,10 @@ enum LiveFeed {
                 id: "music", rank: .music, time: Format.duration(media.elapsed(at: now)), symbol: "music.note",
                 title: track.title, subtitle: track.artist + player,
                 status: media.isPlaying ? "Playing" : "Paused", statusColor: media.isPlaying ? theme.live : nil,
-                actions: [RowAction(title: "Next") { media.next() },
-                          RowAction(title: media.isPlaying ? "Pause" : "Play", role: .primary) { media.playPause() }],
+                actions: [RowAction.icon("backward.fill", "Previous") { media.previous() },
+                          RowAction.icon(media.isPlaying ? "pause.fill" : "play.fill", media.isPlaying ? "Pause" : "Play",
+                                         role: .primary) { media.playPause() },
+                          RowAction.icon("forward.fill", "Next") { media.next() }],
                 opens: .music))
         }
 

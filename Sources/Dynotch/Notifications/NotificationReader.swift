@@ -20,6 +20,9 @@ final class NotificationReader: @unchecked Sendable {
         let title: String
         let subtitle: String
         let body: String
+        /// Where the notification itself leads when it's clicked: the app's own link to the chat,
+        /// thread or session, when the app gave one. See `NoticeAction.Kind.openLink`.
+        var link: URL? = nil
     }
 
     enum Problem: Error, Equatable {
@@ -285,8 +288,46 @@ final class NotificationReader: @unchecked Sendable {
               let bundleID = bundleID ?? plist["app"] as? String else { return nil }
         let request = plist["req"] as? [String: Any] ?? plist
         let entry = Entry(bundleID: bundleID, title: text(request["titl"]), subtitle: text(request["subt"]),
-                          body: text(request["body"]))
+                          body: text(request["body"]), link: link(in: request))
         return entry.title.isEmpty && entry.subtitle.isEmpty && entry.body.isEmpty ? nil : entry
+    }
+
+    /// The notification's default action link (`durl`), or else a link in the app's own scheme
+    /// somewhere in its user info (`usda`), which is how chat apps point a click at the conversation.
+    /// Plain web links in the user info are left alone: they're often only the site, not the place.
+    static func link(in request: [String: Any]) -> URL? {
+        if let url = url(request["durl"]) { return url }
+        var data = request["usda"] as? Data
+        if data == nil, let dict = request["usda"] as? [String: Any] {
+            data = try? PropertyListSerialization.data(fromPropertyList: dict, format: .binary, options: 0)
+        }
+        guard let data, let info = try? PropertyListSerialization.propertyList(from: data, format: nil) else { return nil }
+        return appLink(in: info, depth: 0)
+    }
+
+    private static func url(_ value: Any?) -> URL? {
+        if let url = value as? URL { return url.scheme == nil ? nil : url }
+        guard let string = value as? String, let url = URL(string: string.trimmingCharacters(in: .whitespaces)),
+              let scheme = url.scheme, !scheme.isEmpty, url.absoluteString.count < 2048 else { return nil }
+        return url
+    }
+
+    private static func appLink(in value: Any, depth: Int) -> URL? {
+        guard depth < 6 else { return nil }
+        if let url = url(value), let scheme = url.scheme?.lowercased(),
+           !["http", "https", "file", "mailto", "data", "javascript"].contains(scheme) {
+            return url
+        }
+        if let dict = value as? [String: Any] {
+            for key in dict.keys.sorted() {
+                if let found = appLink(in: dict[key]!, depth: depth + 1) { return found }
+            }
+        } else if let array = value as? [Any] {
+            for item in array {
+                if let found = appLink(in: item, depth: depth + 1) { return found }
+            }
+        }
+        return nil
     }
 
     /// A field as one line of text.

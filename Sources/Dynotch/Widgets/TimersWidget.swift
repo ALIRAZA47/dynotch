@@ -31,9 +31,11 @@ struct TimerRows: View {
             subtitle: ends ?? "Paused · \(TimerText.describe(countdown.duration)) timer",
             status: running ? "Running" : "Paused", statusColor: running ? theme.live : nil,
             actions: [
-                RowAction(title: running ? "Pause" : "Resume") { store.togglePause(countdown) },
-                RowAction(title: "Cancel") {
+                RowAction.icon("xmark", "Cancel") {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { store.cancel(countdown) }
+                },
+                RowAction.icon(running ? "pause.fill" : "play.fill", running ? "Pause" : "Resume", role: .primary) {
+                    store.togglePause(countdown)
                 },
             ])
             .help(countdown.name)
@@ -43,10 +45,11 @@ struct TimerRows: View {
         let stopwatch = store.stopwatch
         var actions: [RowAction] = []
         if !stopwatch.isReset {
-            actions.append(RowAction(title: "Reset", perform: store.resetStopwatch))
+            actions.append(RowAction.icon("arrow.counterclockwise", "Reset", perform: store.resetStopwatch))
         }
-        actions.append(RowAction(title: stopwatch.isRunning ? "Pause" : stopwatch.isReset ? "Start" : "Resume",
-                                 perform: store.toggleStopwatch))
+        actions.append(RowAction.icon(stopwatch.isRunning ? "pause.fill" : "play.fill",
+                                      stopwatch.isRunning ? "Pause" : stopwatch.isReset ? "Start" : "Resume",
+                                      role: .primary, perform: store.toggleStopwatch))
         return OrbitRow(
             id: "stopwatch", time: Format.duration(stopwatch.elapsed(at: store.now)), title: "Stopwatch",
             subtitle: stopwatch.isRunning ? "Counting up" : stopwatch.isReset ? "Ready" : "Paused",

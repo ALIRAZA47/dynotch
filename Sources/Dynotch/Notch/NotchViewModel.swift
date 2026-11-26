@@ -61,7 +61,13 @@ struct ClosedLayout: Equatable {
     /// How wide each ear must be for a notice's second row to fit, measured in the row's font.
     private static func rowEarWidth(for activity: ClosedActivity, notch: CGSize) -> CGFloat {
         let text: CGFloat
-        if case .lyrics(let rowWidth) = activity {
+        if case .notice(let notice) = activity, notice.isPeek {
+            // Orbit's peek: the sender over the message, each measured in its own font.
+            let font = { (size: CGFloat, weight: NSFont.Weight, string: String) in
+                (string as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: size, weight: weight)]).width
+            }
+            text = max(font(13, .semibold, notice.text), font(12.5, .regular, notice.detail ?? ""))
+        } else if case .lyrics(let rowWidth) = activity {
             text = rowWidth
         } else if case .notice(let notice) = activity, case .info = notice.kind, let detail = notice.detail {
             text = (detail as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .medium)]).width
@@ -125,6 +131,10 @@ struct ClosedLayout: Equatable {
             case .meter:
                 earWidth = 96
                 rowHeight = 0
+            case .info where notice.isPeek:
+                // The app's icon on the left, "now" on the right, the sender and the message underneath.
+                earWidth = 46
+                rowHeight = 44
             case .info:
                 earWidth = max(56, CGFloat(notice.text.count) * 7.5 + 22)
                 rowHeight = notice.detail == nil ? 0 : 26
