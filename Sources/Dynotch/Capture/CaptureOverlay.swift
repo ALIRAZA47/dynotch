@@ -130,6 +130,16 @@ private final class CaptureHostingView<Content: View>: NSHostingView<Content> {
 struct CaptureOverlayView: View {
     let display: CaptureDisplay
     @ObservedObject var editor: CaptureEditor
+    @Environment(\.colorScheme) private var systemScheme
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    /// The open notch's look, light or dark as Settings and the system say, its lines a step
+    /// stronger with Increase Contrast.
+    private var theme: NotchTheme {
+        var theme = AppSettings.shared.theme(systemIsDark: systemScheme == .dark)
+        theme.isHighContrast = contrast == .increased
+        return theme
+    }
 
     var body: some View {
         let isActive = editor.activeDisplay == display.id
@@ -172,7 +182,8 @@ struct CaptureOverlayView: View {
         }
         .frame(width: display.size.width, height: display.size.height, alignment: .topLeading)
         .coordinateSpace(name: "overlay")
-        .environment(\.colorScheme, .dark)
+        .environment(\.notchTheme, theme)
+        .environment(\.colorScheme, theme.colorScheme)
     }
 }
 

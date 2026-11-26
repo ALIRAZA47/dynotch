@@ -220,12 +220,16 @@ final class NotchViewModel: ObservableObject {
             LiveActivityCenter.shared.glanceChanged(isGlancing: phase == .glance)
         }
     }
-    /// The Tray's two sides: its files, and what's been copied.
+    /// The Tray's two sides from before Clipboard was a section of its own: its files, and what's
+    /// been copied. The Tray with its clipboard side showing is the Clipboard section now.
     enum TraySide: Hashable {
         case files, clipboard
     }
 
-    @Published var tab: NotchTab = .live
+    @Published var tab: NotchTab = .live {
+        // Another section drops the old clipboard side, so the Tray shows its files next time.
+        didSet { if tab != oldValue, traySide == .clipboard { traySide = .files } }
+    }
     @Published var traySide = TraySide.files
     /// What's typed in the Clipboard side's search field.
     @Published var clipSearch = ""
@@ -409,6 +413,7 @@ final class NotchViewModel: ObservableObject {
     /// The tab on screen: the tray while files are dragged in, otherwise the chosen one if it's enabled.
     var visibleTab: NotchTab {
         if isDraggingFiles { return .tray }
+        if tab == .tray, traySide == .clipboard, AppSettings.shared.enabledTabs.contains(.clipboard) { return .clipboard }
         return AppSettings.shared.enabledTabs.contains(tab) ? tab : .live
     }
 

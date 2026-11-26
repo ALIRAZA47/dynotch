@@ -1,65 +1,66 @@
 import SwiftUI
 
-/// Searches the shelf, from the right of the Tray's toolbar. With the history off and nothing pinned
-/// there's nothing to search.
-struct ClipboardSearchField: View {
-    @ObservedObject var viewModel: NotchViewModel
-    @ObservedObject private var store = ClipboardStore.shared
-    @ObservedObject private var settings = AppSettings.shared
-
-    var body: some View {
-        if settings.clipboardHistory || !store.clips.isEmpty {
-            CardField(placeholder: "Search clips", text: $viewModel.clipSearch, symbol: "magnifyingglass") {}
-                .frame(width: 170)
-        }
-    }
-}
-
-/// The Clipboard side's shelf: the same pane of glass as the files, with a card for each clip, pinned
-/// first, then newest. Any note about the history being off, or macOS refusing, comes before them.
-struct ClipboardShelf: View {
+/// The Clipboard section: a search field, then a row for each clip, pinned first, then newest.
+/// Code shows in mono, a color as its swatch, a link by its host. Copy, Pin and Remove are the row's
+/// actions, shown as Settings › Appearance › Row actions says. Any note about the history being off,
+/// or macOS refusing, comes before them.
+struct ClipboardSection: View {
     @ObservedObject var viewModel: NotchViewModel
     @ObservedObject private var store = ClipboardStore.shared
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.notchTheme) private var theme
+    @Environment(\.isSnapshot) private var isSnapshot
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        GeometryReader { proxy in
-            let clips = store.clips(matching: viewModel.clipSearch)
-            // More cards than fit scroll sideways, as far as the shelf's rim, as the files do.
-            ViewThatFits(in: .horizontal) {
-                strip(clips, height: proxy.size.height)
-                    .padding(.horizontal, theme.controlRadius)
-                Scroller(.horizontal) {
-                    strip(clips, height: proxy.size.height)
-                        .padding(.horizontal, theme.controlRadius)
-                }
+        let clips = store.clips(matching: viewModel.clipSearch)
+        VStack(spacing: 8) {
+            if settings.clipboardHistory || !store.clips.isEmpty {
+                ClipboardSearchField(text: $viewModel.clipSearch)
             }
-        }
-        .padding(.vertical, theme.controlRadius)
-        .clipShape(RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous).inset(by: 1))
-        .background(CardSurface())
-    }
-
-    private func strip(_ clips: [ClipboardStore.Clip], height: CGFloat) -> some View {
-        HStack(spacing: 6) {
-            if viewModel.clipSearch.isEmpty, let note {
-                ClipNote(message: note.message, buttonTitle: note.buttonTitle, isAlone: clips.isEmpty, action: note.action)
+            if viewModel.clipSearch.isEmpty, let note, clips.isEmpty {
+                ClipNote(message: note.message, buttonTitle: note.buttonTitle, isAlone: true, action: note.action)
             } else if clips.isEmpty {
                 Text(viewModel.clipSearch.isEmpty ? "Nothing copied yet. What you copy shows up here." : "No clips match.")
-                    .font(NotchFont.footnote)
+                    .font(NotchFont.body)
                     .foregroundStyle(theme.secondary)
-                    .lineLimit(1)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            ForEach(clips) { clip in
-                ClipCard(clip: clip, height: height, viewModel: viewModel)
-                    .transition(reduceMotion ? AnyTransition.opacity : .scale(scale: 0.6).combined(with: .opacity))
+            } else {
+                if viewModel.clipSearch.isEmpty, let note {
+                    ClipNote(message: note.message, buttonTitle: note.buttonTitle, isAlone: false, action: note.action)
+                }
+                Scroller(.vertical, fadesOverflow: true) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(clips.enumerated()), id: \.element.id) { index, clip in
+                            if index > 0 { OrbitRowDivider() }
+                            ClipRow(clip: clip, now: now, forcesHover: isSnapshot && TraySnapshot.hoveredClip == index, viewModel: viewModel)
+                                .transition(reduceMotion ? AnyTransition.opacity : .opacity.combined(with: .move(edge: .top)))
+                        }
+                    }
+                    .accessibilityElement(children: .contain)
+                }
+                .frame(maxHeight: .infinity, alignment: .top)
             }
         }
-        .accessibilityElement(children: .contain)
-        .frame(maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .orbitHeader("Clipboard", subtitle: subtitle(matching: clips.count)) {
+            if store.clips.contains(where: { !$0.isPinned }) {
+                OrbitButton(title: "Clear", style: .ghost, help: "Clear the clipboard history, all but what's pinned") { store.clear() }
+            }
+        }
+    }
+
+    private var now: Date { isSnapshot ? SnapshotClock.now : .now }
+
+    /// "38 copies · 2 pinned", "3 of 38 match", "History off".
+    private func subtitle(matching count: Int) -> String {
+        let total = store.clips.count
+        if !viewModel.clipSearch.isEmpty { return "\(count) of \(total) match" }
+        guard total > 0 else { return settings.clipboardHistory ? "Nothing yet" : "History off" }
+        var parts = [total == 1 ? "1 copy" : "\(total) copies"]
+        let pinned = store.clips.filter(\.isPinned).count
+        if pinned > 0 { parts.append("\(pinned) pinned") }
+        return parts.joined(separator: " · ")
     }
 
     /// What's in the way of new clips, and the button that does something about it.
@@ -71,8 +72,56 @@ struct ClipboardShelf: View {
     }
 }
 
-/// Says why the shelf isn't filling up. Alone, it has the shelf to itself; beside the clips, it's a
-/// column of its own.
+/// Searches the clips, across the top of the section.
+struct ClipboardSearchField: View {
+    @Binding var text: String
+    @Environment(\.notchTheme) private var theme
+    @Environment(\.isSnapshot) private var isSnapshot
+    @FocusState private var isFocused: Bool
+    @ViewState private var hovering = false
+
+    var body: some View {
+        let shape = theme.controlShape
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(isFocused ? theme.accentText : theme.secondary)
+            if isSnapshot {
+                Text(text.isEmpty ? "Search what you copied" : text)
+                    .font(NotchFont.body)
+                    .foregroundStyle(text.isEmpty ? theme.secondary : theme.primary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                TextField("Search what you copied", text: $text, prompt: Text(""))
+                    .textFieldStyle(.plain)
+                    .font(NotchFont.body)
+                    .fieldPlaceholder("Search what you copied", isEmpty: text.isEmpty, font: NotchFont.body, color: theme.secondary)
+                    .focused($isFocused)
+            }
+            if !text.isEmpty {
+                Button { text = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 11))
+                        .foregroundStyle(theme.secondary)
+                }
+                .buttonStyle(PressableButtonStyle())
+                .help("Clear the search")
+                .accessibilityLabel("Clear the search")
+            }
+        }
+        .padding(.horizontal, 10)
+        .frame(height: 32)
+        .background(shape.fill(theme.field))
+        .overlay(shape.strokeBorder(isFocused ? theme.accent : hovering ? theme.controlHover : theme.line, lineWidth: isFocused ? 1.5 : 1))
+        .contentShape(shape)
+        .onHover { hovering = $0 }
+        .animation(.notchHighlight, value: isFocused)
+    }
+}
+
+/// Says why the list isn't filling up, with the button that fixes it. Alone, it has the section to
+/// itself; above the clips, it's a card of its own.
 private struct ClipNote: View {
     let message: String
     let buttonTitle: String
@@ -81,128 +130,240 @@ private struct ClipNote: View {
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
-        VStack(spacing: 6) {
-            Text(message)
-                .font(NotchFont.footnote)
-                .foregroundStyle(theme.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-            PillButton(title: buttonTitle, action: action)
+        if isAlone {
+            VStack(spacing: 12) {
+                glyph
+                Text(message)
+                    .font(NotchFont.body)
+                    .foregroundStyle(theme.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                PillButton(title: buttonTitle, action: action)
+            }
+            .padding(.horizontal, 24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .accessibilityElement(children: .contain)
+        } else {
+            HStack(spacing: 12) {
+                glyph
+                Text(message)
+                    .font(NotchFont.subheadline)
+                    .foregroundStyle(theme.secondary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                PillButton(title: buttonTitle, action: action)
+            }
+            .padding(.horizontal, 10)
+            .frame(height: NotchTheme.rowHeight)
+            .background(theme.controlShape.fill(theme.raised).overlay(theme.controlShape.strokeBorder(theme.line)))
+            .accessibilityElement(children: .contain)
         }
-        .padding(.horizontal, 10)
-        .frame(width: isAlone ? nil : 170)
-        .frame(maxWidth: isAlone ? .infinity : nil, maxHeight: .infinity)
-        .accessibilityElement(children: .contain)
+    }
+
+    private var glyph: some View {
+        Image(systemName: "doc.on.clipboard")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(theme.secondary)
+            .frame(width: 30, height: 30)
+            .background(theme.controlShape.fill(theme.hover))
+            .accessibilityHidden(true)
     }
 }
 
-/// A clip on the shelf, as tall as a file's tile: a few lines of it, a swatch for a hex color, the
-/// host for a link. A click copies it back and closes the notch.
-private struct ClipCard: View {
+/// A clip as a row: its glyph, or a swatch for a color, the clip in a line, what it is and when, and
+/// Pinned or how long ago on the right until its actions show. A click copies it back and closes
+/// the notch.
+private struct ClipRow: View {
     let clip: ClipboardStore.Clip
-    /// The shelf's, which is how many lines there's room for.
-    let height: CGFloat
+    let now: Date
+    /// Drawn as under the pointer, for snapshots.
+    var forcesHover = false
     let viewModel: NotchViewModel
+    @ObservedObject private var settings = AppSettings.shared
     @Environment(\.notchTheme) private var theme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @ViewState private var hovering = false
+    @Environment(\.rowActionHost) private var host
+    @ViewState private var isPointedAt = false
 
-    private static let width: CGFloat = 150
-    private static let padding: CGFloat = 8
-    /// A pinned card's text starts under the pin, which sits where it does on a file's tile.
-    private static let pinRow: CGFloat = 12
-    private static let lineHeight: CGFloat = 14.5
+    private var hovering: Bool { isPointedAt || forcesHover }
 
-    private var topPadding: CGFloat { Self.padding + (clip.isPinned ? Self.pinRow : 0) }
-    private var lines: Int { max(1, Int((height - topPadding - Self.padding) / Self.lineHeight)) }
+    private var actions: [RowAction] {
+        [
+            RowAction(title: clip.isPinned ? "Unpin" : "Pin") { ClipboardStore.shared.togglePin(clip) },
+            RowAction(title: "Remove") { ClipboardStore.shared.remove(clip) },
+            RowAction(title: "Copy", role: .primary, perform: copy),
+        ]
+    }
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: theme.controlRadius, style: .continuous)
-        Button(action: copy) {
-            face
-                .padding(EdgeInsets(top: topPadding, leading: 10, bottom: Self.padding, trailing: 10))
-                .frame(width: Self.width, alignment: .leading)
-                .frame(maxHeight: .infinity, alignment: .topLeading)
-                .background(GlassSurface(depth: .pane, shape: shape, isLit: hovering))
-                .contentShape(shape)
+        HStack(spacing: 12) {
+            glyph
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(isMono ? .system(size: 12.5, weight: .semibold, design: .monospaced) : NotchFont.headline)
+                    .foregroundStyle(theme.primary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Text(subtitle)
+                    .font(NotchFont.subheadline)
+                    .foregroundStyle(theme.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            trailing
         }
-        .buttonStyle(PressableButtonStyle(scale: 0.97))
+        .padding(.horizontal, 10)
+        .frame(height: NotchTheme.rowHeight)
+        .background {
+            if hovering {
+                theme.controlShape.fill(theme.raised)
+                    .overlay(theme.controlShape.strokeBorder(theme.line))
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture(perform: copy)
+        .onHover { inside in
+            isPointedAt = inside
+            if inside { host?.setHot(.init(id: clip.id.uuidString, title: title, actions: actions)) }
+        }
+        .animation(.notchHighlight, value: isPointedAt)
+        .contextMenu { ClipMenu(clip: clip, copy: copy, close: viewModel.close) }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(clip.spokenTitle)
         .accessibilityValue(clip.isPinned ? "Pinned" : "")
         .accessibilityHint("Copies it and closes the notch")
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction(.default, copy)
         .accessibilityAction(named: clip.isPinned ? "Unpin" : "Pin") { ClipboardStore.shared.togglePin(clip) }
         .accessibilityAction(named: "Remove") { ClipboardStore.shared.remove(clip) }
-        .overlay(alignment: .topLeading) {
-            if clip.isPinned {
-                Image(systemName: "pin.fill")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(theme.accent)
-                    .padding(7)
-                    .help("Pinned: stays when the history is cleared")
-                    // The card says so itself.
-                    .accessibilityHidden(true)
-            }
+    }
+
+    private var isMono: Bool {
+        switch clip.kind {
+        case .code, .color: true
+        case .text, .link: false
         }
-        .overlay(alignment: .topTrailing) {
-            if hovering {
-                Button { ClipboardStore.shared.remove(clip) } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 14))
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(Color.black, Color.white.opacity(0.85))
-                }
-                .buttonStyle(PressableButtonStyle())
-                .help("Remove from the clipboard history")
-                .accessibilityLabel("Remove")
-                .transition(reduceMotion ? AnyTransition.opacity : .scale(scale: 0.6).combined(with: .opacity))
-            }
+    }
+
+    /// The link's host, or the clip's first line.
+    private var title: String {
+        if case .link(let url) = clip.kind, let host = url.host { return host }
+        return clip.title
+    }
+
+    /// "Code · 2 min ago", "/launch/checklist · 3 min ago", "3 lines · 1 h ago".
+    private var subtitle: String {
+        let when = ClipAge.long(from: clip.copiedAt, to: now)
+        let what: String
+        switch clip.kind {
+        case .code: what = "Code"
+        case .color: what = "Color"
+        case .link(let url):
+            let rest = url.path + (url.query.map { "?\($0)" } ?? "")
+            what = rest.isEmpty || rest == "/" ? "Link" : rest
+        case .text:
+            let lines = clip.preview.split(separator: "\n", omittingEmptySubsequences: true).count
+            what = lines > 1 ? "\(lines) lines" : "Text"
         }
-        .onHover { hovering = $0 }
-        .animation(.notchHighlight, value: hovering)
-        .contextMenu { ClipMenu(clip: clip, copy: copy, close: viewModel.close) }
+        return "\(what) · \(when)"
     }
 
     @ViewBuilder
-    private var face: some View {
+    private var glyph: some View {
+        let shape = theme.controlShape
         switch clip.kind {
-        case .text, .code:
-            Text(clip.preview)
-                .font(clip.kind == .code ? NotchFont.mono : NotchFont.body)
-                .foregroundStyle(theme.primary)
-                .lineLimit(lines)
         case .color(let red, let green, let blue, let opacity):
-            let swatch = RoundedRectangle(cornerRadius: max(theme.controlRadius - 3, 3), style: .continuous)
-            VStack(alignment: .leading, spacing: 6) {
-                swatch.fill(Color(.sRGB, red: red, green: green, blue: blue, opacity: opacity))
-                    .overlay(swatch.strokeBorder(.white.opacity(0.18)))
-                Text(clip.title)
-                    .font(NotchFont.mono)
-                    .foregroundStyle(theme.primary)
-                    .lineLimit(1)
+            shape.fill(Color(.sRGB, red: red, green: green, blue: blue, opacity: opacity))
+                .overlay(shape.strokeBorder(theme.line))
+                .frame(width: 30, height: 30)
+                .accessibilityHidden(true)
+        default:
+            Image(systemName: symbol)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(theme.secondary)
+                .frame(width: 30, height: 30)
+                .background(shape.fill(theme.hover))
+                .accessibilityHidden(true)
+        }
+    }
+
+    private var symbol: String {
+        switch clip.kind {
+        case .code: "terminal"
+        case .link: "link"
+        case .text, .color: "text.alignleft"
+        }
+    }
+
+    @ViewBuilder
+    private var trailing: some View {
+        let mode = settings.rowActionMode
+        let shown: [RowAction] = switch mode {
+        case .always: actions
+        case .hover: hovering ? actions : []
+        case .primary: hovering ? actions : RowAction.main(of: actions).map { [$0] } ?? []
+        case .bar, .band, .menu: []
+        }
+        HStack(spacing: 6) {
+            if shown.isEmpty || mode == .primary && !hovering {
+                status
             }
-        case .link(let url):
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 4) {
-                    Image(systemName: "link")
-                        .font(.system(size: 9.5, weight: .bold))
-                        .foregroundStyle(theme.accent)
-                    Text(url.host ?? clip.title)
-                        .font(NotchFont.bodyStrong)
-                        .foregroundStyle(theme.primary)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
+            ForEach(shown) { action in
+                RowActionButton(action: action)
+            }
+            if mode == .menu {
+                MenuButton(help: "Actions") { hot in
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(hot ? theme.primary : theme.secondary)
+                        .frame(width: 28, height: 26)
+                        .background(theme.controlShape.fill(hot ? theme.controlHover : theme.hover))
+                } items: {
+                    actions.map { action in MenuEntry.item(action.title, action: action.perform) }
                 }
-                Text(clip.preview)
-                    .font(NotchFont.caption)
-                    .foregroundStyle(theme.secondary)
-                    .lineLimit(max(lines - 1, 1))
             }
+        }
+        .fixedSize()
+    }
+
+    @ViewBuilder
+    private var status: some View {
+        if clip.isPinned {
+            HStack(spacing: 5) {
+                Image(systemName: "pin.fill").font(.system(size: 9, weight: .bold))
+                Text("Pinned")
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(theme.accentText)
+            .help("Pinned: stays when the history is cleared")
+        } else {
+            Text(ClipAge.short(from: clip.copiedAt, to: now))
+                .font(NotchFont.time(12, .medium))
+                .foregroundStyle(theme.secondary)
         }
     }
 
     private func copy() {
         ClipboardStore.shared.copy(clip)
         viewModel.close()
+    }
+}
+
+/// How long ago something was copied.
+enum ClipAge {
+    /// "now", "2 min", "1 h", "3 d".
+    static func short(from date: Date, to now: Date) -> String {
+        let minutes = Int(max(0, now.timeIntervalSince(date)) / 60)
+        if minutes < 1 { return "now" }
+        if minutes < 60 { return "\(minutes) min" }
+        if minutes < 24 * 60 { return "\(minutes / 60) h" }
+        return "\(minutes / (24 * 60)) d"
+    }
+
+    /// "just now", "2 min ago".
+    static func long(from date: Date, to now: Date) -> String {
+        let short = short(from: date, to: now)
+        return short == "now" ? "just now" : "\(short) ago"
     }
 }
 

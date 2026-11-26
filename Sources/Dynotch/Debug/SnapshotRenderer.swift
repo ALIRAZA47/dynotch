@@ -468,7 +468,7 @@ enum SnapshotRenderer {
             }),
         ] + lyricsScenes() + clipboardScenes() + sizeScenes() + edgeScenes(virtualNotch: virtualNotch)
             + orbitMusicScenes() + orbitWidgetsScenes()
-            + orbitFocusNotesCalendarScenes(focusMode: work)
+            + orbitFocusNotesCalendarScenes(focusMode: work) + orbitTrayScenes()
 
         let settings = AppSettings.shared
         let savedTheme = NotchTheme()
@@ -567,9 +567,12 @@ enum SnapshotRenderer {
         editor.tool = .arrow
         RunLoop.main.run(until: .now + 1.0)
         if save(window, to: folder.appendingPathComponent("capture-2-editor-dark.png")) { count += 1 }
+        // The chrome follows the notch's look, Light here.
+        apply(NotchTheme(isDark: false))
         window.appearance = NSAppearance(named: .aqua)
         RunLoop.main.run(until: .now + 0.8)
         if save(window, to: folder.appendingPathComponent("capture-2-editor-light.png")) { count += 1 }
+        apply(NotchTheme())
         window.appearance = NSAppearance(named: .darkAqua)
 
         // A text mark being typed, in the color and width picked. Typed through the window, as a
@@ -591,6 +594,7 @@ enum SnapshotRenderer {
             for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
                 let pin = PinnedCaptureWindow(output: output, frame: CGRect(x: -21_000, y: -61_000, width: output.pointSize.width,
                                                                               height: output.pointSize.height))
+                apply(NotchTheme(isDark: appearance == .darkAqua))
                 pin.appearance = NSAppearance(named: appearance)
                 pin.orderFrontRegardless()
                 RunLoop.main.run(until: .now + 1.0)
@@ -598,6 +602,7 @@ enum SnapshotRenderer {
                 pin.orderOut(nil)
                 pin.close()
             }
+            apply(NotchTheme())
         }
         count += renderCaptureHover(into: folder)
         print("Wrote \(count) capture snapshots to \(folder.path)")
@@ -1001,6 +1006,8 @@ enum SnapshotRenderer {
         CIMonitor.shared.clearSample()
         QuickToggles.shared.loadSample(awakeUntil: nil)
         TrayStore.shared.loadSample(pinned: nil)
+        TraySnapshot.hoveredFile = nil
+        TraySnapshot.hoveredClip = nil
         ScreenRecorder.shared.loadSample(.idle)
         loadClips([], isOn: false)
         CommandHistory.forget()
@@ -1108,7 +1115,26 @@ enum SnapshotRenderer {
             FileManager.default.createFile(atPath: url.path, contents: Data())
         }
         TrayStore.shared.loadSample(urls)
+        // Orbit's Tray shows each file's size: empty files of these sizes, which take no room on disk.
+        let sized: [(String, UInt64)] = [("Screenshot 10.14.02.png", 2_100_000), ("Recording 10.09.mov", 31_800_000),
+                                         ("Invoice-Nov.pdf", 412_000), ("Dynotch-1.5.0.zip", 6_300_000),
+                                         ("NotchBoard.swift", 18_000), ("notes.md", 4_000), ("Hero shot.png", 1_200_000),
+                                         ("Q3 Report.pdf", 860_000)]
+        let orbit = folder.appendingPathComponent("tray-samples-orbit", isDirectory: true)
+        try? FileManager.default.createDirectory(at: orbit, withIntermediateDirectories: true)
+        orbitTrayURLs = sized.map { name, size in
+            let url = orbit.appendingPathComponent(name)
+            FileManager.default.createFile(atPath: url.path, contents: Data())
+            if let handle = try? FileHandle(forWritingTo: url) {
+                try? handle.truncate(atOffset: size)
+                try? handle.close()
+            }
+            return url
+        }
     }
+
+    /// Files with sizes, for the Orbit Tray's scenes.
+    private static var orbitTrayURLs: [URL] = []
 
     /// A week of focus, whichever day of it the render lands on.
     private static let sampleFocusDays = [50, 75, 25, 100, 50, 125, 25]
@@ -1412,6 +1438,67 @@ enum SnapshotRenderer {
                 Scene(name: "command-13-clip-search", phase: .open, command: "clip build", setUp: { loadClips(sampleClips) }),
                 Scene(name: "command-14-clip-off", phase: .open, command: "clip", setUp: { loadClips([], isOn: false) }),
             ]
+    }
+
+    /// Orbit's Tray and Clipboard sections in both themes, at the smallest and largest open sizes,
+    /// empty, with files held over them, and with a tile or a row drawn under the pointer. Last, as
+    /// the Tray's scenes load their own files.
+    private static func orbitTrayScenes() -> [Scene] {
+        let light = NotchTheme(isDark: false)
+        let smallest = CGSize(width: 640, height: 300), largest = CGSize(width: 880, height: 460)
+        func files(pinned: Int? = 2, selected: Int? = nil, hovered: Int? = nil) -> @MainActor () -> Void {
+            {
+                TrayStore.shared.loadSample(orbitTrayURLs)
+                TrayStore.shared.loadSample(pinned: pinned)
+                TrayStore.shared.select(selected.map { TrayStore.shared.items[$0] })
+                TraySnapshot.hoveredFile = hovered
+            }
+        }
+        func clips(hovered: Int? = nil) -> @MainActor () -> Void {
+            {
+                loadClips(sampleClips)
+                TraySnapshot.hoveredClip = hovered
+            }
+        }
+        let pins = Array(sampleClips.prefix(1))
+        return [
+            Scene(name: "o-tray-dark", phase: .open, tab: .tray, setUp: files(selected: 4, hovered: 1)),
+            Scene(name: "o-tray-light", phase: .open, tab: .tray, theme: light, setUp: files(selected: 4, hovered: 1)),
+            Scene(name: "o-tray-smallest", phase: .open, tab: .tray, openSize: smallest, setUp: files(hovered: 0)),
+            Scene(name: "o-tray-smallest-light", phase: .open, tab: .tray, theme: light, openSize: smallest, setUp: files()),
+            Scene(name: "o-tray-largest", phase: .open, tab: .tray, openSize: largest, setUp: files(selected: 0)),
+            Scene(name: "o-tray-largest-light", phase: .open, tab: .tray, theme: light, openSize: largest, setUp: files()),
+            Scene(name: "o-tray-few", phase: .open, tab: .tray, setUp: {
+                TrayStore.shared.loadSample(Array(orbitTrayURLs.prefix(3)))
+            }),
+            Scene(name: "o-tray-dropping", phase: .open, tab: .tray, draggingFiles: true, setUp: files()),
+            Scene(name: "o-tray-dropping-light", phase: .open, tab: .tray, draggingFiles: true, theme: light, setUp: files()),
+            Scene(name: "o-tray-dropping-image", phase: .open, tab: .tray, draggingFiles: true, draggingImages: true,
+                  targetsDrop: true, setUp: files()),
+            Scene(name: "o-tray-dropping-image-smallest-light", phase: .open, tab: .tray, draggingFiles: true, draggingImages: true,
+                  theme: light, openSize: smallest, setUp: files()),
+            Scene(name: "o-tray-target", phase: .open, tab: .tray, targetsDrop: true, setUp: files()),
+            Scene(name: "o-tray-empty", phase: .open, tab: .tray, setUp: { TrayStore.shared.loadSample([]) }),
+            Scene(name: "o-tray-empty-light", phase: .open, tab: .tray, theme: light, openSize: smallest,
+                  setUp: { TrayStore.shared.loadSample([]) }),
+            Scene(name: "o-clipboard-dark", phase: .open, tab: .clipboard, setUp: clips(hovered: 1)),
+            Scene(name: "o-clipboard-light", phase: .open, tab: .clipboard, theme: light, setUp: clips(hovered: 1)),
+            Scene(name: "o-clipboard-smallest", phase: .open, tab: .clipboard, openSize: smallest, setUp: clips(hovered: 0)),
+            Scene(name: "o-clipboard-smallest-light", phase: .open, tab: .clipboard, theme: light, openSize: smallest, setUp: clips()),
+            Scene(name: "o-clipboard-largest", phase: .open, tab: .clipboard, openSize: largest, setUp: clips()),
+            Scene(name: "o-clipboard-largest-light", phase: .open, tab: .clipboard, theme: light, openSize: largest, setUp: clips(hovered: 2)),
+            Scene(name: "o-clipboard-search", phase: .open, tab: .clipboard, clipSearch: "git", setUp: clips()),
+            Scene(name: "o-clipboard-no-match", phase: .open, tab: .clipboard, clipSearch: "lunch", setUp: clips()),
+            Scene(name: "o-clipboard-empty", phase: .open, tab: .clipboard, setUp: { loadClips([]) }),
+            Scene(name: "o-clipboard-empty-light", phase: .open, tab: .clipboard, theme: light, setUp: { loadClips([]) }),
+            Scene(name: "o-clipboard-off", phase: .open, tab: .clipboard, setUp: { loadClips([], isOn: false) }),
+            Scene(name: "o-clipboard-off-pins", phase: .open, tab: .clipboard, theme: light, setUp: { loadClips(pins, isOn: false) }),
+            Scene(name: "o-clipboard-refused", phase: .open, tab: .clipboard, setUp: { loadClips(sampleClips, access: .asks) }),
+            Scene(name: "o-clipboard-refused-empty", phase: .open, tab: .clipboard, theme: light,
+                  setUp: { loadClips([], access: .denied) }),
+            Scene(name: "o-clipboard-dropping", phase: .open, tab: .clipboard, draggingFiles: true, setUp: clips()),
+            Scene(name: "o-clipboard-from-tray-side", phase: .open, tab: .tray, traySide: .clipboard, setUp: clips()),
+        ]
     }
 
     /// Each tab at the smallest and the largest open size the settings allow, with more in every

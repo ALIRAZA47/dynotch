@@ -84,17 +84,18 @@ private final class PinnedHostingView<Content: View>: NSHostingView<Content> {
     override var mouseDownCanMoveWindow: Bool { true }
 }
 
-/// The capture with square corners, which keep all of it, and an edge that catches the light along
-/// the top. Under the pointer, a close button sits in its corner: a disc of dark glass.
+/// The capture with square corners, which keep all of it, and a hairline round it. Under the
+/// pointer, a close button sits in its corner: a square of the open notch's flat surface.
 private struct PinnedCaptureView: View {
     let image: NSImage
     let close: () -> Void
     @ViewState private var hovering = false
+    @Environment(\.colorScheme) private var systemScheme
     @Environment(\.colorSchemeContrast) private var contrast
 
-    /// The notch's light, for the close button's glass, its lit edge a step brighter with Increase Contrast.
+    /// The open notch's look, light or dark as Settings and the system say.
     private var theme: NotchTheme {
-        var theme = NotchTheme.standard
+        var theme = AppSettings.shared.theme(systemIsDark: systemScheme == .dark)
         theme.isHighContrast = contrast == .increased
         return theme
     }
@@ -103,24 +104,17 @@ private struct PinnedCaptureView: View {
         Image(nsImage: image)
             .resizable()
             .aspectRatio(contentMode: .fit)
-            .overlay(Rectangle().strokeBorder(LinearGradient(colors: [.white.opacity(0.35), .white.opacity(0.06)],
-                                                             startPoint: .top, endPoint: .bottom)))
+            .overlay(Rectangle().strokeBorder(theme.line, lineWidth: 1))
             .overlay(alignment: .topTrailing) {
                 Button(action: close) {
                     Image(systemName: "xmark")
-                        .font(.system(size: 9.5, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 22, height: 22)
-                        .background {
-                            // Dark enough for the white glyph over any capture, lit like the notch's controls.
-                            Circle().fill(Color.black.opacity(0.6))
-                                .overlay(Circle().fill(LinearGradient(colors: [.white.opacity(theme.sheen(.control)), .clear],
-                                                                      startPoint: .top, endPoint: .center)))
-                                .overlay(Circle().strokeBorder(theme.rim(.control)))
-                        }
-                        .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(theme.primary)
+                        .frame(width: 24, height: 24)
+                        .background(theme.controlShape.fill(theme.background))
+                        .overlay(theme.controlShape.strokeBorder(theme.edge, lineWidth: 1))
                         .padding(6)
-                        .contentShape(Circle())
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(PressableButtonStyle())
                 .opacity(hovering ? 1 : 0)
