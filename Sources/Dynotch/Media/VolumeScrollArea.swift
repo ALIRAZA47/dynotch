@@ -52,31 +52,27 @@ final class VolumeScrollView: NSView {
 }
 
 /// The volume over the artwork for a moment after it changes. While the notch is open, the closed
-/// notch's meter is out of sight.
+/// notch's meter is out of sight. A flat dark veil over the cover, in Orbit's dark ink whatever the
+/// panel's light or dark, as it sits on the art.
 struct ArtworkVolumeOverlay: View {
     var cornerRadius: CGFloat
     @ObservedObject private var volume = VolumeMonitor.shared
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+        let ink = NotchTheme.standard
         ZStack {
             if volume.isChanging {
-                shape
-                    .fill(.ultraThinMaterial)
-                    .overlay(shape.fill(Color.black.opacity(0.45)))
-                    // The art's glass rim stays lit over the frosting, so the volume reads as the
-                    // same pane of glass, frosted for a moment.
-                    .overlay(shape.strokeBorder(LinearGradient(colors: [.white.opacity(0.4), .white.opacity(0.05)],
-                                                               startPoint: .top, endPoint: .bottom), lineWidth: 1))
+                shape.fill(ink.background.opacity(0.84))
                 VStack(spacing: 9) {
                     Image(systemName: volume.symbol)
                         .font(.system(size: 21, weight: .semibold))
                         .contentTransition(.symbolEffect(.replace))
                         .frame(height: 26)
-                    LevelBar(level: volume.isMuted ? 0 : Double(volume.volume))
+                    LevelBar(level: volume.isMuted ? 0 : Double(volume.volume), color: ink.primary)
                         .frame(width: 50, height: 5)
                 }
-                .foregroundStyle(.white)
+                .foregroundStyle(ink.primary)
             }
         }
         .animation(.easeOut(duration: 0.18), value: volume.isChanging)

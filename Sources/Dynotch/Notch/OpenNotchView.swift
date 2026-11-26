@@ -51,8 +51,8 @@ struct OpenNotchView: View {
         } else {
             switch viewModel.visibleTab {
             case .live: LiveSectionView(viewModel: viewModel)
-            case .music: MediaPlayerView().orbitHeader("Music")
-            case .home: HomeTabView(viewModel: viewModel).orbitHeader("Widgets")
+            case .music: MediaPlayerView()
+            case .home: WidgetsSection()
             case .tray: TrayTabView(viewModel: viewModel).orbitHeader("Tray")
             case .clipboard: ClipboardShelf(viewModel: viewModel).orbitHeader("Clipboard")
             case .focus: FocusTabView().orbitHeader("Focus")
@@ -197,37 +197,6 @@ private struct MoreMenu: View {
 }
 
 // MARK: Tabs
-
-/// Widgets: the stack picked in Settings.
-struct HomeTabView: View {
-    @ObservedObject var viewModel: NotchViewModel
-    @ObservedObject private var settings = AppSettings.shared
-
-    var body: some View {
-        NookStack(widgets: settings.homeWidgets, turns: viewModel.stackTurns)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .accessibilityElement(children: .contain)
-    }
-}
-
-struct HomeWidgetView: View {
-    let widget: HomeWidget
-
-    var body: some View {
-        switch widget {
-        case .calendar: CalendarWidget()
-        case .mirror: MirrorWidget()
-        case .shortcuts: ShortcutsWidget()
-        case .timer: PomodoroWidget()
-        case .devices: DevicesWidget()
-        case .toggles: QuickTogglesWidget()
-        case .notes: NotesWidget()
-        case .weather: WeatherWidget()
-        case .clock: WorldClockWidget()
-        case .none: EmptyView()
-        }
-    }
-}
 
 /// The timers on the left, the reminders or the notes on the right.
 struct FocusTabView: View {

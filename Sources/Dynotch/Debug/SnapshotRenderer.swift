@@ -466,6 +466,7 @@ enum SnapshotRenderer {
                 FocusHistory.shared.loadSample(days: [])
             }),
         ] + lyricsScenes() + clipboardScenes() + sizeScenes() + edgeScenes(virtualNotch: virtualNotch)
+            + orbitMusicScenes() + orbitWidgetsScenes()
 
         let settings = AppSettings.shared
         let savedTheme = NotchTheme()
@@ -1361,6 +1362,92 @@ enum SnapshotRenderer {
             Scene(name: "o-control-low-battery", phase: .open, tab: .stats, prepare: lowKeyboard),
             Scene(name: "o-control-low-battery-light", phase: .open, tab: .stats, theme: NotchTheme(isDark: false),
                   prepare: lowKeyboard),
+        ]
+    }
+
+    // MARK: Orbit · Music and Widgets
+
+    /// Orbit's smallest and largest open sizes.
+    private static let orbitSmall = CGSize(width: 640, height: 300)
+    private static let orbitLarge = CGSize(width: 880, height: 460)
+
+    /// The Music section in both themes and at both ends of the size range: playing, with lyrics,
+    /// with Artwork tint off, on covers from white to none, nothing playing, and the outputs. Each
+    /// scene sets the Artwork tint itself, so none leaks into the next.
+    private static func orbitMusicScenes() -> [Scene] {
+        let light = NotchTheme(isDark: false)
+        let track = NowPlayingService.Track(title: "Midnight City", artist: "M83", album: "Hurry Up, We're Dreaming", duration: 243)
+        func set(tint: Bool = true, lyricsAt elapsed: TimeInterval? = nil, cover: NSImage?? = nil,
+                 outputs: Bool = false) -> @MainActor () -> Void {
+            {
+                AppSettings.shared.artworkTint = tint
+                if let cover {
+                    NowPlayingService.shared.loadSample(track, artwork: cover, playing: true, elapsed: elapsed ?? 81)
+                }
+                if let elapsed {
+                    LyricsService.shared.loadSample(sampleLyrics)
+                    if cover == nil {
+                        NowPlayingService.shared.loadSample(track, artwork: sampleArtwork(), playing: true, elapsed: elapsed)
+                    }
+                }
+                if outputs { loadOutputs(pickerShown: true) }
+            }
+        }
+        let white = solidCover(.white), yellow = solidCover(NSColor(srgbRed: 1, green: 0.86, blue: 0.2, alpha: 1))
+        return [
+            Scene(name: "o-music-dark", phase: .open, tab: .music, setUp: set()),
+            Scene(name: "o-music-light", phase: .open, tab: .music, theme: light, setUp: set()),
+            Scene(name: "o-music-small", phase: .open, tab: .music, openSize: orbitSmall, setUp: set()),
+            Scene(name: "o-music-small-light", phase: .open, tab: .music, theme: light, openSize: orbitSmall, setUp: set()),
+            Scene(name: "o-music-large", phase: .open, tab: .music, openSize: orbitLarge, setUp: set()),
+            Scene(name: "o-music-large-light", phase: .open, tab: .music, theme: light, openSize: orbitLarge, setUp: set()),
+            Scene(name: "o-music-lyrics", phase: .open, tab: .music, setUp: set(lyricsAt: 81)),
+            Scene(name: "o-music-lyrics-light", phase: .open, tab: .music, theme: light, setUp: set(lyricsAt: 81)),
+            Scene(name: "o-music-lyrics-small", phase: .open, tab: .music, openSize: orbitSmall, setUp: set(lyricsAt: 115)),
+            Scene(name: "o-music-lyrics-large-light", phase: .open, tab: .music, theme: light, openSize: orbitLarge,
+                  setUp: set(lyricsAt: 81)),
+            Scene(name: "o-music-plain", phase: .open, tab: .music, setUp: set(tint: false)),
+            Scene(name: "o-music-plain-light", phase: .open, tab: .music, theme: light, setUp: set(tint: false, lyricsAt: 81)),
+            Scene(name: "o-music-cover-white", phase: .open, tab: .music, setUp: set(cover: .some(white))),
+            Scene(name: "o-music-cover-yellow-light", phase: .open, tab: .music, theme: light, setUp: set(cover: .some(yellow))),
+            Scene(name: "o-music-no-cover-light", phase: .open, tab: .music, theme: light, setUp: set(cover: .some(nil))),
+            Scene(name: "o-music-empty", phase: .open, tab: .music, hasTrack: false, setUp: set()),
+            Scene(name: "o-music-empty-light", phase: .open, tab: .music, hasTrack: false, theme: light, setUp: set()),
+            Scene(name: "o-music-empty-small", phase: .open, tab: .music, hasTrack: false, openSize: orbitSmall, setUp: set()),
+            Scene(name: "o-music-outputs", phase: .open, tab: .music, setUp: set(outputs: true)),
+        ]
+    }
+
+    /// The Widgets section: the picked widgets side by side, in both themes and at both ends of
+    /// the size range, one widget alone, and the weather waiting for a city. Last, as they change
+    /// the picked widgets.
+    private static func orbitWidgetsScenes() -> [Scene] {
+        let light = NotchTheme(isDark: false)
+        func pick(_ first: HomeWidget, _ second: HomeWidget, raining: Bool = false, place: String = "Lisbon") -> @MainActor () -> Void {
+            {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (first, second)
+                AppSettings.shared.pinnedShortcuts = ["Morning routine", "Log a glass of water", "Focus playlist", "Start the day"]
+                AppSettings.shared.worldClockCities = ["London", "New York", "Tokyo", "Sydney"]
+                WeatherService.shared.loadSample(place: place, conditions: place.isEmpty ? nil : .init(
+                    temperature: 18.4, high: 21.2, low: 12.6, code: raining ? 63 : 2, isDay: true, isRaining: raining,
+                    rainStart: raining ? nil : .now.addingTimeInterval(20 * 60), isHeavyRain: false))
+            }
+        }
+        return [
+            Scene(name: "o-widgets-weather-clock", phase: .open, tab: .home, setUp: pick(.weather, .clock)),
+            Scene(name: "o-widgets-weather-clock-light", phase: .open, tab: .home, theme: light, setUp: pick(.weather, .clock)),
+            Scene(name: "o-widgets-small", phase: .open, tab: .home, openSize: orbitSmall, setUp: pick(.weather, .clock)),
+            Scene(name: "o-widgets-small-light", phase: .open, tab: .home, theme: light, openSize: orbitSmall,
+                  setUp: pick(.shortcuts, .mirror)),
+            Scene(name: "o-widgets-large", phase: .open, tab: .home, openSize: orbitLarge, setUp: pick(.calendar, .weather)),
+            Scene(name: "o-widgets-large-light", phase: .open, tab: .home, theme: light, openSize: orbitLarge,
+                  setUp: pick(.clock, .shortcuts)),
+            Scene(name: "o-widgets-shortcuts-mirror", phase: .open, tab: .home, setUp: pick(.shortcuts, .mirror)),
+            Scene(name: "o-widgets-shortcuts-mirror-light", phase: .open, tab: .home, theme: light, setUp: pick(.shortcuts, .mirror)),
+            Scene(name: "o-widgets-calendar-timer", phase: .open, tab: .home, setUp: pick(.calendar, .timer)),
+            Scene(name: "o-widgets-rain-light", phase: .open, tab: .home, theme: light, setUp: pick(.weather, .none, raining: true)),
+            Scene(name: "o-widgets-one", phase: .open, tab: .home, setUp: pick(.clock, .none)),
+            Scene(name: "o-widgets-weather-setup", phase: .open, tab: .home, setUp: pick(.weather, .mirror, place: "")),
         ]
     }
 

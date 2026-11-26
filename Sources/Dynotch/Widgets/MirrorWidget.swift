@@ -82,28 +82,31 @@ struct MirrorWidget: View {
     @ViewState private var hovering = false
 
     var body: some View {
-        let shape = RoundedRectangle(cornerRadius: theme.cardRadius, style: .continuous)
+        let shape = theme.cardShape
         ZStack {
             if camera.isRunning {
-                // Set into the pane like a picture in a frame, its corners following the card's. The
-                // card's own padding leaves the stack's pager dots on the frame, clear of the picture.
+                // Set into the card like a picture in a frame, its corners following the buttons'.
                 CameraPreview(session: camera.session, cornerRadius: theme.controlRadius)
                     .padding(NotchTheme.cardPadding)
                     .transition(.opacity)
             } else {
-                VStack(spacing: 6) {
+                VStack(spacing: 0) {
+                    // Orbit's glyph square, a size up: the accent's wash under the pointer.
                     Image(systemName: "person.crop.square")
-                        .font(.system(size: 24, weight: .regular))
-                        .foregroundStyle(hovering ? theme.primary : theme.secondary)
-                        .frame(height: 28)
+                        .font(.system(size: 20, weight: .medium))
+                        .foregroundStyle(hovering ? theme.accentText : theme.secondary)
+                        .frame(width: 44, height: 44)
+                        .background(theme.controlShape.fill(hovering ? theme.accentSoft : theme.hover))
                     Text("Mirror")
                         .font(NotchFont.headline)
                         .foregroundStyle(theme.primary)
+                        .padding(.top, 10)
                     Text("Check yourself before a call")
-                        .font(NotchFont.caption)
-                        .foregroundStyle(theme.tertiary)
+                        .font(NotchFont.subheadline)
+                        .foregroundStyle(theme.secondary)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
                 }
                 .padding(12)
             }

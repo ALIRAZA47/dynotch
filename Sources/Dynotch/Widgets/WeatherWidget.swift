@@ -37,6 +37,8 @@ struct WeatherWidget: View {
     }
 }
 
+/// Now in a big SF Mono figure with the sky beside it, a few words for it, today's high and low,
+/// and rain on the way in the accent at the foot.
 private struct ConditionsView: View {
     let conditions: WeatherService.Conditions
     let units: TemperatureUnits
@@ -44,43 +46,54 @@ private struct ConditionsView: View {
 
     var body: some View {
         let sky = Sky(code: conditions.code, isDay: conditions.isDay)
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 8) {
-                Image(systemName: sky.symbol)
-                    .symbolRenderingMode(.multicolor)
-                    .font(.system(size: 26))
-                    .frame(width: 34)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 10) {
                 Text(WeatherService.format(conditions.temperature, units: units))
-                    .font(NotchFont.figure(30))
+                    .font(NotchFont.figure(40))
                     .foregroundStyle(theme.primary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .minimumScaleFactor(0.6)
+                Spacer(minLength: 0)
+                Image(systemName: sky.symbol)
+                    .symbolRenderingMode(.hierarchical)
+                    .font(.system(size: 28, weight: .medium))
+                    .foregroundStyle(theme.primary)
+                    .accessibilityHidden(true)
             }
             Text(sky.description)
-                .font(NotchFont.body)
+                .font(NotchFont.headline)
+                .foregroundStyle(theme.primary)
+                .lineLimit(1)
+                .padding(.top, 4)
+            Text("High \(WeatherService.format(conditions.high, units: units)) · Low \(WeatherService.format(conditions.low, units: units))")
+                .font(NotchFont.time(11.5, .medium))
                 .foregroundStyle(theme.secondary)
                 .lineLimit(1)
-            Text("H \(WeatherService.format(conditions.high, units: units))  L \(WeatherService.format(conditions.low, units: units))")
-                .font(NotchFont.numeric(10.5))
-                .foregroundStyle(theme.tertiary)
-            Spacer(minLength: 0)
+                .padding(.top, 2)
+            Spacer(minLength: 6)
             rain
         }
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
     private var rain: some View {
         if let start = conditions.rainStart {
             TimelineView(.periodic(from: .now, by: 30)) { context in
-                Label("Rain \(Format.countdown(to: start, from: context.date))", systemImage: "umbrella.fill")
+                rainLine("Rain \(Format.countdown(to: start, from: context.date))")
             }
-            .font(.system(size: 10.5, weight: .semibold))
-            .foregroundStyle(.cyan)
-            .lineLimit(1)
         } else if conditions.isRaining {
-            Label("Raining now", systemImage: "umbrella.fill")
-                .font(.system(size: 10.5, weight: .semibold))
-                .foregroundStyle(.cyan)
+            rainLine("Raining now")
+        }
+    }
+
+    /// A hairline, then the umbrella and when, in the accent: rain is the thing to look at.
+    private func rainLine(_ text: String) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            theme.line.frame(height: 1)
+            Label(text, systemImage: "umbrella.fill")
+                .font(NotchFont.bodyStrong)
+                .foregroundStyle(theme.accentText)
                 .lineLimit(1)
         }
     }
