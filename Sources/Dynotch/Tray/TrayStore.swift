@@ -297,7 +297,7 @@ enum TrayDrop {
                 if let data = await loadData(provider, type: .url),
                    let link = URL(dataRepresentation: data, relativeTo: nil),
                    let plist = try? PropertyListSerialization.data(fromPropertyList: ["URL": link.absoluteString], format: .xml, options: 0),
-                   let url = save(plist, named: "\(link.host ?? "Link").webloc") {
+                   let url = save(plist, named: "\(Self.fileName(forLinkTo: link.host)).webloc") {
                     urls.append(url)
                 }
             } else if provider.hasItemConformingToTypeIdentifier(UTType.plainText.identifier) {
@@ -333,5 +333,14 @@ enum TrayDrop {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd 'at' HH.mm.ss"
         return formatter.string(from: .now)
+    }
+
+    /// A name for a dropped link's file, from its host. Only what a host name is made of gets
+    /// through, so a link can't name its way out of the Tray's folder.
+    static func fileName(forLinkTo host: String?) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-"))
+        let name = String((host ?? "").unicodeScalars.filter(allowed.contains).map(Character.init).prefix(80))
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        return name.isEmpty ? "Link" : name
     }
 }

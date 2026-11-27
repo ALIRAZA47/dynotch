@@ -1006,7 +1006,7 @@ struct NookSettings: View {
                     CardDivider()
                     SectionRow(tab: .tray, detail: "Files you're working with", isOn: $settings.showTrayTab)
                     CardDivider()
-                    SectionRow(tab: .focus, detail: "Timer, reminders and notes", isOn: $settings.showFocusTab)
+                    SectionRow(tab: .focus, detail: "The focus timer, your timers and reminders", isOn: $settings.showFocusTab)
                     CardDivider()
                     SectionRow(tab: .agents, detail: "Claude Code and your scripts, while they run", isOn: $settings.liveAgents)
                     CardDivider()
@@ -1025,8 +1025,7 @@ struct NookSettings: View {
                                 WidgetSlotPicker(title: "First widget", selection: $settings.homeWidgetA)
                                 WidgetSlotPicker(title: "Second widget", selection: $settings.homeWidgetB)
                             }
-                            Text("One shows at a time. The stack turns by itself to whichever matters now: the calendar "
-                                + "shortly before an event, the weather before rain, the batteries when one runs low.")
+                            Text("They sit side by side in Widgets. Pick None for one of them to give the other the whole width.")
                                 .font(.system(size: 11.5))
                                 .foregroundStyle(Palette.secondaryText)
                                 .fixedSize(horizontal: false, vertical: true)
@@ -1045,7 +1044,9 @@ struct NookSettings: View {
                               symbol: "quote.bubble.fill", tint: .pink, isOn: $settings.showsLyrics)
                     if settings.showsLyrics {
                         CardDivider()
-                        SwitchRow(title: "In the closed notch", detail: "On a second row under the camera",
+                        SwitchRow(title: "In the closed notch",
+                                  detail: settings.closedNotchShows == .activities ? "On a second row under the camera"
+                                      : "Only while Closed notch shows is set to Icon and figure",
                                   symbol: "rectangle.topthird.inset.filled", tint: .pink, isOn: $settings.lyricsInClosedNotch)
                     }
                 }

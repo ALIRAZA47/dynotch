@@ -241,7 +241,9 @@ final class CalendarService: ObservableObject, EventAdding {
         guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return nil }
         for text in [event.url?.absoluteString, event.location, event.notes].compactMap({ $0 }) {
             for match in detector.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
-                guard let url = match.url, let host = url.host?.lowercased() else { continue }
+                // A call's link is a web link. Anything else with a call service's name in it, like a
+                // file:// link in an invitation, isn't one to open from a button.
+                guard let url = match.url, url.scheme?.lowercased() == "https", let host = url.host?.lowercased() else { continue }
                 if meetingHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }) { return url }
             }
         }

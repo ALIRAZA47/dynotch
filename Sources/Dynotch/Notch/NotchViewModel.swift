@@ -168,6 +168,8 @@ struct ClosedDots: Equatable {
         let id: String
         let tone: Tone
         let tab: NotchTab
+        /// What it stands for, for VoiceOver: a color alone says nothing there.
+        let label: String
     }
 
     static let size: CGFloat = 6
@@ -189,34 +191,35 @@ struct ClosedDots: Equatable {
     static func current() -> ClosedDots {
         let settings = AppSettings.shared
         var dots: [Dot] = []
-        if ScreenRecorder.shared.isActive { dots.append(Dot(id: "recording", tone: .alert, tab: .live)) }
+        if ScreenRecorder.shared.isActive { dots.append(Dot(id: "recording", tone: .alert, tab: .live, label: "Recording the screen")) }
         let music = settings.liveMusic && NowPlayingService.shared.isPlaying && NowPlayingService.shared.track != nil
         if !DownloadMonitor.shared.downloads.isEmpty, settings.liveDownloads {
-            dots.append(Dot(id: "download", tone: .running, tab: .tray))
+            dots.append(Dot(id: "download", tone: .running, tab: .tray, label: "Downloading"))
         }
         let timers = TimerStore.shared
         if (settings.liveTimer && PomodoroTimer.shared.isRunning)
             || (settings.liveCountdowns && (timers.countdowns.contains(where: \.isRunning) || timers.stopwatch.isRunning)) {
-            dots.append(Dot(id: "timer", tone: .running, tab: .focus))
+            dots.append(Dot(id: "timer", tone: .running, tab: .focus, label: "A timer is running"))
         }
         if settings.liveAgents {
             let deck = AgentDeck.shared
             if !deck.approvals.isEmpty || deck.waitingCount > 0 {
-                dots.append(Dot(id: "agents", tone: .needsYou, tab: .agents))
+                dots.append(Dot(id: "agents", tone: .needsYou, tab: .agents, label: "An agent is waiting for you"))
             } else if deck.sessions.contains(where: { if case .working = $0.state { true } else { false } }) {
-                dots.append(Dot(id: "agents", tone: .running, tab: .agents))
+                dots.append(Dot(id: "agents", tone: .running, tab: .agents, label: "An agent is working"))
             }
         }
-        if settings.liveCI, CIMonitor.shared.run != nil { dots.append(Dot(id: "ci", tone: .running, tab: .agents)) }
+        if settings.liveCI, CIMonitor.shared.run != nil { dots.append(Dot(id: "ci", tone: .running, tab: .agents, label: "A CI run is going")) }
         if settings.liveScripts, !ScriptActivityStore.shared.activities.isEmpty {
-            dots.append(Dot(id: "script", tone: .running, tab: .agents))
+            dots.append(Dot(id: "script", tone: .running, tab: .agents, label: "A script is running"))
         }
-        if settings.liveKeepAwake, QuickToggles.shared.isKeepingAwake { dots.append(Dot(id: "awake", tone: .running, tab: .stats)) }
-        if settings.liveMicMuted, MicMonitor.shared.isMuted { dots.append(Dot(id: "mic", tone: .running, tab: .stats)) }
+        if settings.liveKeepAwake, QuickToggles.shared.isKeepingAwake { dots.append(Dot(id: "awake", tone: .running, tab: .stats, label: "Keeping the Mac awake")) }
+        if settings.liveMicMuted, MicMonitor.shared.isMuted { dots.append(Dot(id: "mic", tone: .running, tab: .stats, label: "Microphone muted")) }
         let now = Date.now
-        if let event = CalendarService.shared.events.first(where: { !$0.isAllDay && $0.end > now }),
-           event.start.timeIntervalSince(now) < 10 * 60 {
-            dots.append(Dot(id: "event", tone: event.meetingURL != nil ? .needsYou : .running, tab: .calendar))
+        if settings.liveEvents,
+           let event = CalendarService.shared.events.first(where: { !$0.isAllDay && $0.start > now && $0.start.timeIntervalSince(now) < 10 * 60 }) {
+            dots.append(Dot(id: "event", tone: event.meetingURL != nil ? .needsYou : .running, tab: .calendar,
+                            label: "\(event.title) starts soon"))
         }
         // Strip order, split where the strip splits.
         let order = NotchTab.allCases
@@ -261,6 +264,16 @@ final class NotchViewModel: ObservableObject {
     }
     /// An image is among them, so the tray offers what can be done with one. It ends with the drag.
     @Published var isDraggingImages = false
+    /// How many rows Live has, and the closed notch's dots. Kept here, and only changed when they
+    /// really change, so the panel's size, the area the pointer counts as inside and what's drawn all
+    /// go by the same numbers. See `refreshLive`.
+    @Published private(set) var liveRows = 0
+    @Published private(set) var dots = ClosedDots()
+    private var liveClock: Timer?
+
+    deinit {
+        liveClock?.invalidate()
+    }
     @Published private(set) var activity: ClosedActivity
     /// A second activity, shown as a glyph at the end of the right ear.
     @Published private(set) var secondary: CompactActivity?
@@ -317,11 +330,52 @@ final class NotchViewModel: ObservableObject {
         AgentDeck.shared.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        // Whatever Live lists or the dots show. Timers tick every second, so changes are taken a
+        // tenth of a second apart at most, and nothing is published unless the rows or dots changed.
+        let sources: [AnyPublisher<Void, Never>] = [
+            Self.changes(in: LiveActivityCenter.shared), Self.changes(in: NowPlayingService.shared),
+            Self.changes(in: PomodoroTimer.shared), Self.changes(in: TimerStore.shared),
+            Self.changes(in: AgentDeck.shared), Self.changes(in: CalendarService.shared),
+            Self.changes(in: DownloadMonitor.shared), Self.changes(in: CIMonitor.shared),
+            Self.changes(in: ScreenRecorder.shared), Self.changes(in: QuickToggles.shared),
+            Self.changes(in: MicMonitor.shared), Self.changes(in: ScriptActivityStore.shared),
+            Self.changes(in: FocusMonitor.shared), Self.changes(in: AppSettings.shared),
+        ]
+        Publishers.MergeMany(sources)
+            .throttle(for: .milliseconds(100), scheduler: RunLoop.main, latest: true)
+            // @Published fires before the value changes; read it on the next turn.
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.refreshLive() }
+            .store(in: &cancellables)
+        // An event coming up changes Live and the dots with nothing else happening.
+        let clock = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshLive() }
+        }
+        clock.tolerance = 10
+        RunLoop.main.add(clock, forMode: .common)
+        liveClock = clock
+        refreshLive()
         // Review was for those waiting then. The next to come waits for a recording like any other.
         AgentDeck.shared.$approvals
             .filter(\.isEmpty)
             .sink { [weak self] _ in self?.isReviewing = false }
             .store(in: &cancellables)
+    }
+
+    private static func changes<Source: ObservableObject>(in source: Source) -> AnyPublisher<Void, Never>
+    where Source.ObjectWillChangePublisher.Failure == Never {
+        source.objectWillChange.map { _ in () }.eraseToAnyPublisher()
+    }
+
+    /// Counts Live's rows and works out the dots again, and publishes what changed.
+    func refreshLive() {
+        let rows = LiveFeed.items(at: .now, viewModel: nil, theme: .standard).count
+        let next = AppSettings.shared.closedNotchShows == .dots ? ClosedDots.current() : ClosedDots()
+        guard rows != liveRows || next != dots else { return }
+        withAnimation(.notchActivity) {
+            if rows != liveRows { liveRows = rows }
+            if next != dots { dots = next }
+        }
     }
 
     var isOpen: Bool { phase == .open }
@@ -396,29 +450,9 @@ final class NotchViewModel: ObservableObject {
             + NotchTheme.commandFieldHeight + 14
     }
 
-    /// Room the section buttons take outside the panel, for the placement in Settings. The panel's
-    /// window is sized for the most any placement needs, so this only moves the hit area.
-    static func stripInsets(for placement: SectionPlacement) -> EdgeInsets {
-        switch placement {
-        case .under: EdgeInsets(top: 0, leading: 0, bottom: SectionStrip.underHeight, trailing: 0)
-        case .sides: EdgeInsets(top: 0, leading: SectionStrip.sideWidth, bottom: 0, trailing: SectionStrip.sideWidth)
-        case .left: EdgeInsets(top: 0, leading: SectionStrip.sideWidth, bottom: 0, trailing: 0)
-        case .right: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: SectionStrip.sideWidth)
-        case .arc: EdgeInsets(top: 0, leading: SectionStrip.arcOverhang, bottom: SectionStrip.arcDepth,
-                              trailing: SectionStrip.arcOverhang)
-        case .band, .hidden: EdgeInsets()
-        }
-    }
-
     /// The room around the open panel the strip needs at most, whatever the placement.
     static let stripRoom = EdgeInsets(top: 0, leading: SectionStrip.arcOverhang, bottom: SectionStrip.arcDepth,
                                       trailing: SectionStrip.arcOverhang)
-
-    /// The strip's room outside the panel, now. Nothing unless the panel is open and the strip shows.
-    var stripInsets: EdgeInsets {
-        guard phase == .open, !isCommandMode else { return EdgeInsets() }
-        return Self.stripInsets(for: AppSettings.shared.sectionPlacement)
-    }
 
     /// The band beside the camera, where the section's title and actions sit: as tall as the menu
     /// bar, and never shorter than its buttons need.
@@ -429,7 +463,7 @@ final class NotchViewModel: ObservableObject {
     /// The tallest the open notch gets, so its panel always has room.
     static func tallestOpenHeight(closedHeight: CGFloat) -> CGFloat {
         max(AppSettings.shared.openHeight, commandHeight(rows: CommandEngine.maximumResults, closedHeight: closedHeight),
-            LiveSectionView.preferredHeight(rows: LiveFeed.mostShown, band: bandHeight(closedHeight: closedHeight)))
+            LiveSectionView.preferredHeight(rows: LiveFeed.mostShown, band: bandHeight(closedHeight: closedHeight), actionBar: true))
     }
 
     /// The tab on screen: the tray while files are dragged in, otherwise the chosen one if it's enabled.
@@ -453,9 +487,7 @@ final class NotchViewModel: ObservableObject {
     }
 
     /// The dots, or none when the setting says Nothing.
-    var closedDots: ClosedDots {
-        AppSettings.shared.closedNotchShows == .dots ? ClosedDots.current() : ClosedDots()
-    }
+    var closedDots: ClosedDots { dots }
 
     var closedLayout: ClosedLayout {
         if showsDots { return ClosedLayout(dots: closedDots, notch: geometry.closedSize) }
@@ -471,8 +503,8 @@ final class NotchViewModel: ObservableObject {
                 height = max(height, Self.commandHeight(rows: commandResults.count, closedHeight: geometry.closedSize.height))
             } else if visibleTab == .live {
                 // Live grows with what's in it.
-                let rows = LiveFeed.items(at: .now, viewModel: nil, theme: .standard).count
-                height = LiveSectionView.preferredHeight(rows: rows, band: Self.bandHeight(closedHeight: geometry.closedSize.height))
+                height = LiveSectionView.preferredHeight(rows: liveRows, band: Self.bandHeight(closedHeight: geometry.closedSize.height),
+                                                         actionBar: settings.rowActionMode == .bar)
             }
             return NotchMetrics(width: settings.openWidth, height: height,
                                 topRadius: NotchTheme.panelTopRadius, bottomRadius: NotchTheme.panelBottomRadius)
@@ -530,6 +562,15 @@ final class NotchViewModel: ObservableObject {
     /// Turns the glance to the recent list.
     func showRecent() {
         LiveActivityCenter.shared.markRecentsSeen()
+        if phase == .open {
+            // From Live's Recent button: the open notch turns to the glance, as it does for a tool call.
+            onTurnToGlance?()
+            withAnimation(.notchGlance) {
+                phase = .glance
+                isShowingRecent = true
+            }
+            return
+        }
         glance()
         withAnimation(.notchGlance) { isShowingRecent = true }
     }
@@ -657,5 +698,6 @@ final class NotchViewModel: ObservableObject {
         isDraggingImages = draggingImages
         isCommandMode = command != nil
         commandQuery = command ?? ""
+        refreshLive()
     }
 }

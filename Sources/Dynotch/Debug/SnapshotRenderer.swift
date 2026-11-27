@@ -223,6 +223,14 @@ enum SnapshotRenderer {
                   setUp: { VolumeMonitor.shared.loadSample(volume: 0, changing: false, canMute: true) }),
             Scene(name: "o-control-awake", phase: .open, tab: .stats, micMuted: true,
                   setUp: { QuickToggles.shared.loadSample(awakeUntil: sampleTime.addingTimeInterval(102 * 60)) }),
+            Scene(name: "o-place-left", phase: .open, tab: .live, setUp: { AppSettings.shared.sectionPlacement = .left }),
+            Scene(name: "o-place-sides", phase: .open, tab: .live, setUp: { AppSettings.shared.sectionPlacement = .sides }),
+            Scene(name: "o-place-arc", phase: .open, tab: .music, setUp: { AppSettings.shared.sectionPlacement = .arc }),
+            Scene(name: "o-place-band", phase: .open, tab: .calendar, setUp: { AppSettings.shared.sectionPlacement = .band }),
+            Scene(name: "o-place-band-small", phase: .open, tab: .notes, openSize: CGSize(width: 640, height: 300),
+                  setUp: { AppSettings.shared.sectionPlacement = .band }),
+            Scene(name: "o-rows-bar-live", phase: .open, tab: .live, setUp: { AppSettings.shared.rowActionMode = .bar }),
+            Scene(name: "o-rows-bar-focus", phase: .open, tab: .focus, setUp: { AppSettings.shared.rowActionMode = .bar }),
             Scene(name: "o-music", phase: .open, tab: .music),
             Scene(name: "o-clipboard", phase: .open, tab: .clipboard),
             Scene(name: "o-notes", phase: .open, tab: .notes),
@@ -1076,6 +1084,9 @@ enum SnapshotRenderer {
     /// The volume, output and equalizer state every scene starts from, with nothing recent and
     /// Keep Awake off.
     private static func resetAudioSamples() {
+        // A scene that moved the section buttons or the row buttons leaves them moved otherwise.
+        if AppSettings.shared.sectionPlacement != .under { AppSettings.shared.sectionPlacement = .under }
+        if AppSettings.shared.rowActionMode != .hover { AppSettings.shared.rowActionMode = .hover }
         VolumeMonitor.shared.loadSample(volume: 0.62, changing: false)
         loadOutputs(pickerShown: false)
         AudioLevels.shared.loadSample(nil)

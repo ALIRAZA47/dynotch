@@ -73,7 +73,7 @@ enum LiveFeed {
         }
 
         let pomodoro = PomodoroTimer.shared
-        if pomodoro.isRunning || pomodoro.progress > 0 {
+        if settings.liveTimer, pomodoro.isRunning || pomodoro.progress > 0 {
             let next = pomodoro.endDate.map { "Ends at \($0.formatted(date: .omitted, time: .shortened))" }
             items.append(LiveItem(
                 id: "pomodoro", rank: .timer, order: pomodoro.endDate?.timeIntervalSince(now) ?? .greatestFiniteMagnitude,
@@ -88,7 +88,7 @@ enum LiveFeed {
         }
 
         let timers = TimerStore.shared
-        for countdown in timers.countdowns {
+        for countdown in settings.liveCountdowns ? timers.countdowns : [] {
             let left = countdown.remaining(at: now)
             items.append(LiveItem(
                 id: "countdown-\(countdown.id)", rank: .timer, order: left,
@@ -100,7 +100,7 @@ enum LiveFeed {
                                          role: .primary) { timers.togglePause(countdown) }],
                 opens: .focus))
         }
-        if !timers.stopwatch.isReset {
+        if settings.liveCountdowns, !timers.stopwatch.isReset {
             items.append(LiveItem(
                 id: "stopwatch", rank: .timer, order: .greatestFiniteMagnitude,
                 time: Format.duration(timers.stopwatch.elapsed(at: now)), symbol: "stopwatch", title: "Stopwatch",
@@ -158,27 +158,57 @@ enum LiveFeed {
             }
         }
 
-        // The next event, from a little before it starts until it ends, if it's within three hours.
+        // A script's progress, as `dynotch progress` reports it.
+        if settings.liveScripts {
+            for activity in ScriptActivityStore.shared.activities {
+                items.append(LiveItem(
+                    id: "script-\(activity.key)", rank: .running, order: 1, time: activity.percentText ?? "", symbol: "terminal",
+                    title: activity.key, subtitle: activity.detail, status: "Running", statusColor: theme.primary))
+            }
+        }
+
+        // The event going on now, and the next one within three hours. Each gets its own row, so a
+        // meeting about to start isn't hidden behind one that's running over.
         let calendar = CalendarService.shared
-        if let event = calendar.events.first(where: { !$0.isAllDay && $0.end > now && $0.start.timeIntervalSince(now) < 3 * 3600 }) {
-            let soon = event.start.timeIntervalSince(now) < 15 * 60
-            let when = event.isHappening(at: now) ? "Happening now" : "Starts \(Format.countdown(to: event.start, from: now))"
+        let upcoming = settings.liveEvents ? calendar.events.filter { !$0.isAllDay && $0.end > now } : []
+        let current = upcoming.first { $0.isHappening(at: now) }
+        let next = upcoming.first { $0.start > now && $0.start.timeIntervalSince(now) < 3 * 3600 }
+        for event in [current, next].compactMap({ $0 }) {
+            let isNow = event.isHappening(at: now)
+            let untilStart = event.start.timeIntervalSince(now)
+            // Worth an interruption: about to start, or only just started, with a call to join.
+            let isSoon = !isNow && untilStart < 15 * 60
+            let justStarted = isNow && now.timeIntervalSince(event.start) < 10 * 60
+            let needsYou = event.meetingURL != nil && (isSoon || justStarted)
             var actions: [RowAction] = []
             if let url = event.meetingURL {
                 actions.append(RowAction(title: "Join", role: .primary) { NSWorkspace.shared.open(url) })
             }
             items.append(LiveItem(
-                id: "event-\(event.id)", rank: soon && event.meetingURL != nil ? .needsYou : .event,
-                order: event.start.timeIntervalSince(now),
-                time: event.start.formatted(date: .omitted, time: .shortened), symbol: "calendar",
-                title: event.title, subtitle: when, status: soon ? "Soon" : nil, statusColor: soon ? theme.accent : nil,
-                needsYou: soon && event.meetingURL != nil, actions: actions, opens: .calendar))
+                id: "event-\(event.id)", rank: needsYou ? .needsYou : .event, order: untilStart,
+                time: event.start.formatted(date: .omitted, time: .shortened), symbol: "calendar", title: event.title,
+                subtitle: isNow ? "Until \(event.end.formatted(date: .omitted, time: .shortened))"
+                    : "Starts \(Format.countdown(to: event.start, from: now))",
+                status: isNow ? "Now" : isSoon ? "Soon" : nil, statusColor: isNow ? theme.live : isSoon ? theme.accent : nil,
+                needsYou: needsYou, actions: actions, opens: .calendar))
+        }
+
+        if settings.liveMicMuted, MicMonitor.shared.isMuted {
+            items.append(LiveItem(
+                id: "mic", rank: .status, order: 0, time: "", symbol: "mic.slash", title: "Microphone muted",
+                subtitle: "Nothing you say is heard", status: "Muted",
+                actions: [RowAction(title: "Unmute") { MicMonitor.shared.setMuted(false) }], opens: .stats))
+        }
+        if settings.liveFocus, let focus = FocusMonitor.shared.mode {
+            items.append(LiveItem(
+                id: "focus-mode", rank: .status, order: 1, time: "", symbol: focus.symbol, title: "\(focus.name) Focus",
+                subtitle: "Notifications are quiet", status: "On"))
         }
 
         let toggles = QuickToggles.shared
         if settings.liveKeepAwake, toggles.isKeepingAwake {
             items.append(LiveItem(
-                id: "awake", rank: .status, time: "", symbol: "cup.and.saucer", title: "Keeping the Mac awake",
+                id: "awake", rank: .status, order: 2, time: "", symbol: "cup.and.saucer", title: "Keeping the Mac awake",
                 subtitle: toggles.keepAwakeDescription, status: "On",
                 actions: [RowAction(title: "Turn Off") { toggles.stopKeepingAwake() }], opens: .stats))
         }
@@ -199,6 +229,10 @@ struct LiveSectionView: View {
     @ObservedObject private var ci = CIMonitor.shared
     @ObservedObject private var recorder = ScreenRecorder.shared
     @ObservedObject private var toggles = QuickToggles.shared
+    @ObservedObject private var center = LiveActivityCenter.shared
+    @ObservedObject private var scripts = ScriptActivityStore.shared
+    @ObservedObject private var mic = MicMonitor.shared
+    @ObservedObject private var focus = FocusMonitor.shared
     @Environment(\.notchTheme) private var theme
     @Environment(\.isSnapshot) private var isSnapshot
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -230,7 +264,15 @@ struct LiveSectionView: View {
             }
             .animation(.notchActivity, value: shown.map(\.id))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-            .orbitHeader("Live now", subtitle: subtitle(count: items.count, at: now))
+            .orbitHeader("Live now", subtitle: subtitle(count: items.count, at: now)) {
+                // The notices that have come and gone. They're listed in the glance.
+                if !center.recents.isEmpty {
+                    OrbitButton(title: center.unseenRecents > 0 ? "Recent · \(center.unseenRecents)" : "Recent", symbol: "bell",
+                                style: .ghost, help: "Recent notices") {
+                        viewModel.showRecent()
+                    }
+                }
+            }
         }
     }
 
@@ -240,9 +282,10 @@ struct LiveSectionView: View {
     }
 
     /// Rows plus the band and the command field: Live grows with what's in it.
-    static func preferredHeight(rows: Int, band: CGFloat) -> CGFloat {
+    static func preferredHeight(rows: Int, band: CGFloat, actionBar: Bool = false) -> CGFloat {
         let rows = CGFloat(min(max(rows, 2), LiveFeed.mostShown))
         return band + 8 + rows * NotchTheme.rowHeight + (rows - 1) + 12
+            + (actionBar ? RowActionBar.height + 8 : 0)
             + NotchTheme.commandFieldHeight + NotchTheme.commandFieldGap + 14
     }
 }

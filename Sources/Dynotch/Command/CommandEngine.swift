@@ -549,19 +549,25 @@ enum CommandEngine {
     private static func tabs(matching text: String) -> [CommandResult] {
         let settings = AppSettings.shared
         let words: [NotchTab: [String]] = [
-            .home: ["nook", "home", "player", "music"],
+            .live: ["live", "now"],
+            .music: ["music", "player"],
+            .home: ["widgets", "nook", "home"],
             .tray: ["tray", "files"],
-            .focus: ["focus", "timers", "reminders", "notes"],
+            .clipboard: ["clipboard", "copied"],
+            .focus: ["focus", "timers", "reminders"],
+            .notes: ["notes"],
+            .calendar: ["calendar", "events", "agenda"],
             .stats: ["control", "toggles", "batteries", "stats", "volume", "brightness"],
             .agents: ["agents", "claude", "sessions"],
         ]
+        // `clip` and `cal` are commands of their own, so those two sections wait for a letter more.
+        let shortest: [String: Int] = ["clipboard": 5, "calendar": 4]
         return settings.enabledTabs.compactMap { tab in
-            guard let tabWords = words[tab], let word = tabWords.first(where: { $0.hasPrefix(text) || text == $0 }) else {
+            guard let tabWords = words[tab],
+                  tabWords.contains(where: { $0.hasPrefix(text) && text.count >= shortest[$0, default: 0] }) else {
                 return nil
             }
             return CommandResult(id: "tab-\(tab.rawValue)", symbol: tab.symbol, tint: .white, title: "Open \(tab.title)") { model in
-                if word == "notes" { settings.focusShowsNotes = true }
-                if word == "reminders" { settings.focusShowsNotes = false }
                 model.tab = tab
                 return .stay
             }
@@ -641,8 +647,8 @@ enum CommandEngine {
             .map { note in
                 CommandResult(id: "note-\(note.id)", symbol: "note.text", tint: .yellow, title: note.title, hint: "note") { model in
                     NotesStore.shared.select(note.id)
-                    AppSettings.shared.focusShowsNotes = true
-                    model.tab = .focus
+                    // The Notes section, or the note's file if that section is turned off.
+                    model.tab = AppSettings.shared.enabledTabs.contains(.notes) ? .notes : model.tab
                     return .stay
                 }
             }

@@ -300,9 +300,9 @@ struct NotchTheme: Equatable {
     /// Titles, values and selected text.
     var primary: Color { isDark ? Self.hex(0xF5F5F7) : Self.hex(0x1D1D1F) }
     /// Second lines, labels and idle controls.
-    var secondary: Color { isDark ? Self.hex(isHighContrast ? 0xC7C7CC : 0xA1A1A6) : Self.hex(isHighContrast ? 0x48484C : 0x6E6E73) }
+    var secondary: Color { isDark ? Self.hex(isHighContrast ? 0xC7C7CC : 0xA1A1A6) : Self.hex(isHighContrast ? 0x48484C : 0x636368) }
     /// Hints, placeholders, and the counts beside rows.
-    var tertiary: Color { isDark ? Self.hex(isHighContrast ? 0xAEAEB2 : 0x8A8A90) : Self.hex(isHighContrast ? 0x48484C : 0x6E6E73) }
+    var tertiary: Color { isDark ? Self.hex(isHighContrast ? 0xAEAEB2 : 0x98989E) : Self.hex(isHighContrast ? 0x48484C : 0x636368) }
     /// The empty part of a scrubber or a level bar.
     var track: Color { hover }
     /// A line between the parts of a card.

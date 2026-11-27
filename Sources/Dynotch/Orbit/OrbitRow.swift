@@ -223,6 +223,10 @@ struct OrbitRow: View {
             hovering = inside
             if inside { host?.setHot(.init(id: id, title: title, actions: actions)) }
         }
+        // What the buttons say can change under a still pointer: Pause becomes Resume.
+        .onChange(of: actions.map(\.title)) {
+            if hovering { host?.setHot(.init(id: id, title: title, actions: actions)) }
+        }
         .animation(.notchHighlight, value: hovering)
         .accessibilityElement(children: .combine)
         .accessibilityActions {
@@ -285,6 +289,8 @@ struct RowActionBar: View {
     @ObservedObject var host: RowActionHost
     @Environment(\.notchTheme) private var theme
 
+    static let height: CGFloat = 38
+
     var body: some View {
         HStack(spacing: 8) {
             if let hot = host.hot, !hot.actions.isEmpty {
@@ -304,7 +310,7 @@ struct RowActionBar: View {
             }
         }
         .padding(.horizontal, 10)
-        .frame(height: 38)
+        .frame(height: Self.height)
         .background(theme.controlShape.fill(theme.raised).overlay(theme.controlShape.strokeBorder(theme.line)))
     }
 }

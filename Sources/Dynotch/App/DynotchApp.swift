@@ -83,7 +83,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #endif
 
         // Before any service starts: a second copy would share the keys, the socket and the files.
-        guard SingleCopy.claim() else {
+        // The capture test is a second copy on purpose, and starts nothing the first one holds.
+        guard arguments.contains("--capture-test") || SingleCopy.claim() else {
             NSApp.terminate(nil)
             return
         }

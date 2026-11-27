@@ -72,6 +72,38 @@ struct SectionStrip: View {
     /// Where the side columns start, below the band.
     static let sideTop: CGFloat = 40
 
+    /// How tall a column of `count` buttons is, with its padding.
+    static func columnHeight(_ count: Int) -> CGFloat {
+        count == 0 ? 0 : CGFloat(count) * 47 + CGFloat(count - 1) * 3 + 12
+    }
+
+    /// Where the buttons are, for the pointer: rectangles measured from the panel's top center, x to
+    /// the right and y down. The window controller counts the pointer as on the notch inside these,
+    /// and lets clicks through everywhere else, so they have to cover what `placed` draws and no more.
+    static func frames(placement: SectionPlacement, count: Int, panel: CGSize) -> [CGRect] {
+        guard count > 0 else { return [] }
+        let half = (count + 1) / 2
+        switch placement {
+        case .under:
+            let width = CGFloat(count) * 48 + CGFloat(count - 1) * 3 + 12
+            return [CGRect(x: -width / 2, y: panel.height - 1, width: width, height: underHeight)]
+        case .sides:
+            return [CGRect(x: -panel.width / 2 - sideWidth, y: sideTop, width: sideWidth, height: columnHeight(half)),
+                    CGRect(x: panel.width / 2, y: sideTop, width: sideWidth, height: columnHeight(count - half))]
+        case .left:
+            return [CGRect(x: -panel.width / 2 - sideWidth, y: sideTop, width: sideWidth, height: columnHeight(count))]
+        case .right:
+            return [CGRect(x: panel.width / 2, y: sideTop, width: sideWidth, height: columnHeight(count))]
+        case .arc:
+            // One band under the panel that holds every disc: the gaps between discs count, so the
+            // pointer can cross from one to the next without the notch closing.
+            let reach = panel.width / 2 + arcOverhang - 40 + 25
+            return [CGRect(x: -reach, y: panel.height - 1, width: reach * 2, height: arcDepth + 1)]
+        case .band, .hidden:
+            return []
+        }
+    }
+
     var body: some View {
         let tabs = settings.enabledTabs
         TimelineView(.periodic(from: .now, by: 1)) { context in
@@ -129,12 +161,14 @@ struct SectionStrip: View {
             // Beside the camera, half each side, in place of the title and the actions.
             let half = (buttons.count + 1) / 2
             let camera = viewModel.geometry.closedSize.width
+            // With their figures where those fit beside the camera, as icons alone where they don't.
+            let side = (panel.width - camera) / 2 - 14
             HStack(spacing: 0) {
-                HStack(spacing: 2) { ForEach(Array(buttons.prefix(half))) { $0 } }
-                    .frame(width: (panel.width - camera) / 2 - 10, alignment: .trailing)
+                bandRow(Array(buttons.prefix(half)))
+                    .frame(width: side, alignment: .trailing)
                 Color.clear.frame(width: camera + 20)
-                HStack(spacing: 2) { ForEach(Array(buttons.dropFirst(half))) { $0 } }
-                    .frame(width: (panel.width - camera) / 2 - 10, alignment: .leading)
+                bandRow(Array(buttons.dropFirst(half)))
+                    .frame(width: side, alignment: .leading)
             }
             .frame(height: max(viewModel.geometry.closedSize.height, 32))
             .padding(.top, 1)
@@ -143,6 +177,13 @@ struct SectionStrip: View {
             arc(buttons)
         case .hidden:
             EmptyView()
+        }
+    }
+
+    private func bandRow(_ buttons: [SectionButton]) -> some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 2) { ForEach(buttons) { $0 } }
+            HStack(spacing: 2) { ForEach(buttons) { $0.withoutFigure } }
         }
     }
 
@@ -216,11 +257,17 @@ struct SectionButton: View, Identifiable {
     let needsYou: Bool
     let isSelected: Bool
     let style: Style
+    var hidesFigure = false
     let action: () -> Void
     @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
 
     var id: NotchTab { tab }
+
+    /// The icon alone, where there's no room for the figure. VoiceOver still reads it.
+    var withoutFigure: SectionButton {
+        SectionButton(tab: tab, figure: figure, needsYou: needsYou, isSelected: isSelected, style: style, hidesFigure: true, action: action)
+    }
 
     var body: some View {
         Button(action: action) {
@@ -262,7 +309,7 @@ struct SectionButton: View, Identifiable {
             HStack(spacing: 3) {
                 Image(systemName: tab.symbol)
                     .font(.system(size: 11.5, weight: .medium))
-                if let figure {
+                if let figure, !hidesFigure {
                     Text(figure).font(NotchFont.time(9.5, .semibold)).lineLimit(1).fixedSize()
                 }
             }

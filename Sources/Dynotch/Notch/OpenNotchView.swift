@@ -11,8 +11,12 @@ struct OpenNotchView: View {
 
     var body: some View {
         let band = NotchViewModel.bandHeight(closedHeight: viewModel.geometry.closedSize.height)
+        // With the section buttons beside the camera, the title and the section's own buttons move
+        // to a line of their own under the band, so nothing is lost to that placement.
+        let stripInBand = settings.sectionPlacement == .band && !viewModel.isCommandMode
+        let headerHeight: CGFloat = stripInBand ? 30 : band
         VStack(spacing: 0) {
-            Color.clear.frame(height: band)
+            Color.clear.frame(height: stripInBand ? band + headerHeight : band)
             content
                 .id(viewModel.isCommandMode ? "command" : viewModel.visibleTab.rawValue)
                 // The old section fades out quickly, so the two don't muddle together on the way.
@@ -24,7 +28,7 @@ struct OpenNotchView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             if !viewModel.isCommandMode {
                 VStack(spacing: 8) {
-                    if settings.rowActionMode == .bar, viewModel.visibleTab == .live || viewModel.visibleTab == .agents {
+                    if settings.rowActionMode == .bar, Self.sectionsWithRows.contains(viewModel.visibleTab) {
                         RowActionBar(host: host)
                     }
                     CommandFoot(viewModel: viewModel)
@@ -35,13 +39,17 @@ struct OpenNotchView: View {
         .padding(.horizontal, NotchTheme.inset)
         .padding(.bottom, 14)
         .overlayPreferenceValue(OrbitHeaderKey.self) { header in
-            BandHeader(viewModel: viewModel, header: header, host: host)
-                .frame(height: band)
+            BandHeader(viewModel: viewModel, header: header, host: host, isInline: stripInBand)
+                .frame(height: headerHeight)
+                .padding(.top, stripInBand ? band : 0)
                 .frame(maxHeight: .infinity, alignment: .top)
         }
         .environment(\.rowActionHost, host)
         .onChange(of: viewModel.visibleTab) { host.clear() }
     }
+
+    /// The sections made of rows with buttons, which the action bar serves.
+    static let sectionsWithRows: Set<NotchTab> = [.live, .agents, .focus, .calendar, .clipboard]
 
     @ViewBuilder
     private var content: some View {
@@ -66,20 +74,21 @@ struct OpenNotchView: View {
 
 /// The band beside the camera: the section's title and its second line left of the housing, its
 /// buttons and ··· right of it. With Row actions set to Beside the camera, the row under the
-/// pointer's buttons take the right side; with the section buttons there, they take both.
+/// pointer's buttons take the right side. With the section buttons beside the camera it's drawn
+/// as a line under the band instead (`isInline`), with nothing to leave room for in the middle.
 struct BandHeader: View {
     @ObservedObject var viewModel: NotchViewModel
     let header: OrbitHeader?
     @ObservedObject var host: RowActionHost
+    var isInline = false
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
         // Each side gets what's left of the width once the camera housing is excluded.
-        let side = max(0, (settings.openWidth - 36 - viewModel.geometry.closedSize.width) / 2 - 12)
-        if settings.sectionPlacement == .band, !viewModel.isCommandMode {
-            Color.clear
-        } else {
+        let camera = isInline ? 0 : viewModel.geometry.closedSize.width + 24
+        let side = max(0, (settings.openWidth - 36 - camera) / 2)
+        do {
             HStack(spacing: 0) {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Text(header?.title ?? viewModel.visibleTab.title)

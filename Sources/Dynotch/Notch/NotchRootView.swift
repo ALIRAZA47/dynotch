@@ -182,9 +182,7 @@ struct ClosedNotchView: View {
         .onTapGesture { viewModel.activate() }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(dots.isEmpty ? "Notch"
-            : [dots.music ? "Music playing" : nil,
-               dots.left.count + dots.right.count > 0 ? "\(dots.left.count + dots.right.count) more live" : nil]
-                .compactMap { $0 }.joined(separator: ", "))
+            : ((dots.music ? ["Music playing"] : []) + (dots.left + dots.right).map(\.label)).joined(separator: ", "))
     }
 
     private func dotRow(_ dots: [ClosedDots.Dot]) -> some View {
