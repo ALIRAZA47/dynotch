@@ -1,4 +1,5 @@
 import AudioToolbox
+import Combine
 import CoreAudio
 import Foundation
 
@@ -13,6 +14,8 @@ final class VolumeMonitor: ObservableObject {
     /// The volume changed a moment ago. The open player shows it over the artwork,
     /// since the closed notch's meter is out of sight then.
     @Published private(set) var isChanging = false
+    /// The default output changed, so what can be set may have too. The key tap goes by it.
+    let outputChanged = PassthroughSubject<Void, Never>()
 
     private var device = AudioObjectID(kAudioObjectUnknown)
     private var deviceListener: AudioObjectPropertyListenerBlock?
@@ -60,11 +63,13 @@ final class VolumeMonitor: ObservableObject {
     var canSetVolume: Bool { isSettable(&Self.volumeAddress) }
     var canMute: Bool { sampleCanMute || isSettable(&Self.muteAddress) }
 
-    /// One press of a volume key: a sixteenth, or a sixty-fourth with ⇧⌥, as in macOS. Unmutes, and
-    /// shows the meter even when the volume is already at either end.
-    func step(up: Bool, fine: Bool) {
+    /// A run of volume key presses the tap took, as one change: each steps from where the last left
+    /// it, and the volume is written once. Holding the key with the app busy then costs one write,
+    /// not one for each repeat.
+    func step(_ presses: [KeyPress]) {
+        guard !presses.isEmpty else { return }
         if isMuted { setMuted(false) }
-        writeVolume(MediaKeyTap.step(from: readVolume() ?? volume, up: up, fine: fine))
+        writeVolume(MediaKeyTap.level(from: readVolume() ?? volume, after: presses) { $0 == .soundUp })
         reread()
         announce()
     }
@@ -136,6 +141,7 @@ final class VolumeMonitor: ObservableObject {
         var size = UInt32(MemoryLayout<AudioObjectID>.size)
         AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &Self.defaultDeviceAddress, 0, nil, &size, &id)
         device = id
+        if id == kAudioObjectUnknown { outputChanged.send() }
         // Switching outputs (say, to AirPods) isn't a volume change worth announcing.
         volume = readVolume() ?? 0
         isMuted = readMuted() ?? false
@@ -151,6 +157,7 @@ final class VolumeMonitor: ObservableObject {
             AudioObjectAddPropertyListenerBlock(id, &Self.muteAddress, .main, listener)
         }
         valueListener = listener
+        outputChanged.send()
     }
 
     private func valuesChanged() {

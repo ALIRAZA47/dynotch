@@ -82,6 +82,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         #endif
 
+        // Before any service starts: a second copy would share the keys, the socket and the files.
+        guard SingleCopy.claim() else {
+            NSApp.terminate(nil)
+            return
+        }
         NSApp.mainMenu = Self.makeMainMenu()
         // Paces every service's polls, so it knows from the start whether anyone's looking.
         EnergyCoordinator.shared.start()
