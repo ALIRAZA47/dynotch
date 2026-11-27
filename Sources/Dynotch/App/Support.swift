@@ -210,27 +210,98 @@ extension Animation {
 }
 
 enum Shell {
-    /// Runs a command off the main thread and returns its standard output.
+    /// How long a command may run unless its caller says otherwise.
+    static let defaultTimeout: TimeInterval = 15
+    /// Between asking a command that ran out of time to stop and making it.
+    static let killGrace: TimeInterval = 2
+    /// The status for a command that couldn't start or ran out of time.
+    static let failed: Int32 = -1
+
+    /// Runs a command off the main thread and returns its standard output. One still running after
+    /// `timeout` seconds is sent SIGTERM, then SIGKILL `killGrace` later, and fails; nil waits for
+    /// as long as it takes, for work whose length is the user's, like zipping their files.
     @discardableResult
-    static func run(_ executable: String, _ arguments: [String]) async -> (status: Int32, output: String) {
+    static func run(_ executable: String, _ arguments: [String],
+                    timeout: TimeInterval? = defaultTimeout) async -> (status: Int32, output: String) {
         await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                let process = Process()
-                process.executableURL = URL(fileURLWithPath: executable)
-                process.arguments = arguments
-                let pipe = Pipe()
-                process.standardOutput = pipe
-                process.standardError = FileHandle.nullDevice
-                do {
-                    try process.run()
-                } catch {
-                    continuation.resume(returning: (-1, ""))
-                    return
-                }
-                let data = pipe.fileHandleForReading.readDataToEndOfFile()
-                process.waitUntilExit()
-                continuation.resume(returning: (process.terminationStatus, String(decoding: data, as: UTF8.self)))
+                continuation.resume(returning: runWaiting(executable, arguments, timeout: timeout))
             }
+        }
+    }
+
+    private static func runWaiting(_ executable: String, _ arguments: [String],
+                                   timeout: TimeInterval?) -> (status: Int32, output: String) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = arguments
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        let output = OutputBuffer()
+        let reader = pipe.fileHandleForReading
+        reader.readabilityHandler = { handle in
+            let chunk = handle.availableData
+            if chunk.isEmpty {
+                handle.readabilityHandler = nil
+                output.finish()
+            } else {
+                output.append(chunk)
+            }
+        }
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
+        do {
+            try process.run()
+        } catch {
+            reader.readabilityHandler = nil
+            return (failed, "")
+        }
+        let finished: () -> (status: Int32, output: String) = {
+            let text = output.take(waitingUpTo: 5)
+            reader.readabilityHandler = nil
+            return (process.terminationStatus, text)
+        }
+        guard let timeout else {
+            exited.wait()
+            return finished()
+        }
+        guard exited.wait(timeout: .now() + timeout) == .timedOut else { return finished() }
+        process.terminate()
+        if exited.wait(timeout: .now() + killGrace) == .timedOut, process.isRunning {
+            kill(process.processIdentifier, SIGKILL)
+            // Bounded too: a process stuck in the kernel can outlive even that.
+            _ = exited.wait(timeout: .now() + killGrace)
+        }
+        // Something the command started may still hold the pipe open, so don't wait for its end.
+        _ = output.take(waitingUpTo: 0.2)
+        reader.readabilityHandler = nil
+        return (failed, "")
+    }
+
+    /// A command's output as it arrives, and whether all of it has.
+    private final class OutputBuffer: @unchecked Sendable {
+        private let lock = NSLock()
+        private var data = Data()
+        private let ended = DispatchSemaphore(value: 0)
+
+        func append(_ chunk: Data) {
+            lock.lock()
+            data.append(chunk)
+            lock.unlock()
+        }
+
+        func finish() {
+            ended.signal()
+        }
+
+        /// What arrived, once the pipe has ended or `seconds` have passed, as when something the
+        /// command left running still holds it.
+        func take(waitingUpTo seconds: TimeInterval) -> String {
+            _ = ended.wait(timeout: .now() + seconds)
+            lock.lock()
+            defer { lock.unlock() }
+            return String(decoding: data, as: UTF8.self)
         }
     }
 }

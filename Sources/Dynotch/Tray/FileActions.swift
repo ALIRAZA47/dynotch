@@ -87,7 +87,8 @@ enum FileActions {
         let name = urls.count == 1 ? first.deletingPathExtension().lastPathComponent : "Archive"
         let archive = uniqueURL(for: outputFolder(near: first).appendingPathComponent(name + ".zip"))
         if urls.count == 1 {
-            let result = await Shell.run("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", first.path, archive.path])
+            let result = await Shell.run("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", first.path, archive.path],
+                                         timeout: nil)
             return result.status == 0 ? archive : nil
         }
         // ditto archives a single item, so gather them in a folder first (APFS clones, so it's cheap).
@@ -102,14 +103,15 @@ enum FileActions {
         } catch {
             return nil
         }
-        let result = await Shell.run("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", bundle.path, archive.path])
+        let result = await Shell.run("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", bundle.path, archive.path],
+                                     timeout: nil)
         return result.status == 0 ? archive : nil
     }
 
     static func extract(_ archive: URL) async -> URL? {
         let destination = uniqueURL(for: outputFolder(near: archive)
             .appendingPathComponent(archive.deletingPathExtension().lastPathComponent, isDirectory: true))
-        let result = await Shell.run("/usr/bin/ditto", ["-x", "-k", archive.path, destination.path])
+        let result = await Shell.run("/usr/bin/ditto", ["-x", "-k", archive.path, destination.path], timeout: nil)
         return result.status == 0 ? destination : nil
     }
 

@@ -10,7 +10,8 @@ final class ShortcutsService: ObservableObject {
     /// What `runInTurn` has yet to finish, the one running first.
     private var queued: [String] = []
     /// Runs a Shortcut and says whether it finished. A test stands in for it.
-    var runner: @MainActor (String) async -> Bool = { await Shell.run("/usr/bin/shortcuts", ["run", $0]).status == 0 }
+    /// No time limit: a Shortcut can wait on the user as long as it likes.
+    var runner: @MainActor (String) async -> Bool = { await Shell.run("/usr/bin/shortcuts", ["run", $0], timeout: nil).status == 0 }
 
     private init() {}
 

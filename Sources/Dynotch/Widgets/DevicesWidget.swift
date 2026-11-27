@@ -60,7 +60,9 @@ struct DevicesWidget: View {
                 }
             }
         }
-        .onAppear { Task { await monitor.refresh() } }
+        // The levels are polled only while a view showing them is on screen.
+        .onAppear { monitor.addViewer() }
+        .onDisappear { monitor.removeViewer() }
     }
 
     private func rows(compact: Bool) -> some View {
@@ -333,7 +335,8 @@ struct ControlBatteries: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .onAppear { Task { await monitor.refresh() } }
+        .onAppear { monitor.addViewer() }
+        .onDisappear { monitor.removeViewer() }
     }
 
     @ViewBuilder
