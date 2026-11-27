@@ -62,6 +62,8 @@ final class CaptureController: ObservableObject {
     /// Whether nobody can see the screen (the displays sleep, it's locked, another user has the Mac),
     /// each time that changes. Nil is `EnergyCoordinator`'s; a test sends its own.
     var quietChanges: AnyPublisher<Bool, Never>?
+    /// The displays as they are now; see `displayLayout()`. Tests give it their own.
+    var currentDisplays: () -> [String] = { CaptureController.displayLayout() }
 
     /// Who has Esc for the overlay now, to give it back to.
     private var escapeHeldBy: EscapeHolding?
@@ -253,8 +255,14 @@ final class CaptureController: ObservableObject {
             .filter { $0 }
             .sink { [weak self] _ in self?.cancel() }
             .store(in: &guards)
+        // macOS sends this for the Dock or the menu bar changing size too. Only a display coming,
+        // going, moving or changing resolution leaves the frozen picture wrong.
+        let displays = currentDisplays()
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
-            .sink { [weak self] _ in self?.cancel() }
+            .sink { [weak self] _ in
+                guard let self, self.currentDisplays() != displays else { return }
+                self.cancel()
+            }
             .store(in: &guards)
 
         idleWatch = Task { [weak self] in
@@ -475,5 +483,12 @@ final class CaptureController: ObservableObject {
     private static func text(_ string: String, at point: NSPoint, size: CGFloat, weight: NSFont.Weight, color: NSColor) {
         NSAttributedString(string: string, attributes: [.font: NSFont.systemFont(ofSize: size, weight: weight), .foregroundColor: color])
             .draw(at: point)
+    }
+}
+
+extension CaptureController {
+    /// Each display and its frame, which a Dock or menu bar change leaves as they are.
+    static func displayLayout() -> [String] {
+        NSScreen.screens.map { "\($0.displayID) \(NSStringFromRect($0.frame)) \($0.backingScaleFactor)" }
     }
 }

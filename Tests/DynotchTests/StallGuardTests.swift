@@ -122,9 +122,12 @@ struct CaptureWaysOutTests {
         controller.escapeHolder = escape
         controller.idleLimit = idleLimit
         controller.quietChanges = quiet.eraseToAnyPublisher()
+        let savedDisplays = controller.currentDisplays
+        controller.currentDisplays = { ["the display as it was"] }
         defer {
             controller.cancel()
             (controller.placesOverlaysOffScreen, controller.escapeHolder, controller.idleLimit, controller.quietChanges) = saved
+            controller.currentDisplays = savedDisplays
         }
         controller.beginTest(displays: [display])
         let editor = try #require(controller.editor)
@@ -176,9 +179,20 @@ struct CaptureWaysOutTests {
 
     @Test func theDisplaysChangingCancelsIt() async throws {
         try await withCapture { controller, _, escape, _ in
+            controller.currentDisplays = { ["a display that came"] }
             NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
             #expect(!controller.isActive)
             #expect(escape.releases == 1)
+        }
+    }
+
+    /// macOS sends the same notice when the Dock or the menu bar changes size. The displays are as
+    /// they were, so the picture is still right and the capture stays.
+    @Test func theDockChangingLeavesIt() async throws {
+        try await withCapture { controller, _, escape, _ in
+            NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
+            #expect(controller.isActive)
+            #expect(escape.releases == 0)
         }
     }
 
