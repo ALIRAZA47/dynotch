@@ -132,6 +132,46 @@ final class ScreenRecorder: ObservableObject {
         return max(now.timeIntervalSince(since), 0)
     }
 
+    // MARK: Left behind
+
+    /// A recording's hidden name while it's written: `.recording-<UUID>.mp4`, and nothing like it.
+    nonisolated static func isStagedName(_ name: String) -> Bool {
+        let prefix = ".recording-", suffix = ".mp4"
+        guard name.hasPrefix(prefix), name.hasSuffix(suffix) else { return false }
+        let middle = name.dropFirst(prefix.count).dropLast(suffix.count)
+        return middle.count == 36 && UUID(uuidString: String(middle)) != nil
+    }
+
+    /// Hidden recordings in `folder` that a crash left: plain files by that name, untouched for
+    /// `minimumAge`, and none of `keeping`. A recording being written changes all the time.
+    nonisolated static func staleStagedFiles(in folder: URL, keeping: Set<String>, now: Date = .now,
+                                             minimumAge: TimeInterval = 60) -> [URL] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []
+        return names.filter(isStagedName).map { folder.appendingPathComponent($0) }.filter { url in
+            guard !keeping.contains(url.standardizedFileURL.path) else { return false }
+            var info = stat()
+            guard lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFREG else { return false }
+            let modified = Date(timeIntervalSince1970: TimeInterval(info.st_mtimespec.tv_sec))
+            return now.timeIntervalSince(modified) >= minimumAge
+        }
+    }
+
+    /// At launch: takes away what a recording cut short by a crash left in the Tray's folder, off the
+    /// main thread. Not the one being written, nor one the Tray points at, which is where a recording
+    /// stays when it couldn't be moved.
+    @discardableResult
+    func removeStaleStagedFiles(now: Date = .now) -> Task<Void, Never> {
+        var keeping = Set(tray.urls.map(\.standardizedFileURL.path))
+        if let staged = session?.staged { keeping.insert(staged.standardizedFileURL.path) }
+        let folder = tray.folder
+        return Task.detached(priority: .utility) {
+            for url in Self.staleStagedFiles(in: folder, keeping: keeping, now: now) {
+                NSLog("Dynotch: removing a recording left unfinished: %@", url.lastPathComponent)
+                try? FileManager.default.removeItem(at: url)
+            }
+        }
+    }
+
     // MARK: Starting
 
     func start(_ request: RecordingRequest) {

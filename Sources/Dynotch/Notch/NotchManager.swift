@@ -9,8 +9,10 @@ final class NotchManager {
 
     private(set) var controllers: [NotchWindowController] = []
     private var monitors: [Any] = []
+    private let dragPasteboard = NSPasteboard(name: .drag)
     /// The drag pasteboard's change count at the last click; a new drag bumps it.
     private var dragChangeCount = NSPasteboard(name: .drag).changeCount
+    private var fileDrag = FileDragCheck()
     private var dragImages = DragImageCheck()
     /// The drag `isDraggingFiles` last found holds an image, so the tray offers what it can do with one.
     private(set) var isDraggingImages = false
@@ -19,6 +21,9 @@ final class NotchManager {
     /// Esc, held while a notch is open. The keyboard stays with the app in front, so a key monitor
     /// here wouldn't see it, and a global one would need Accessibility.
     private var escapeKey: HotKey?
+    /// Who has Esc while the capture overlay is up. It goes there instead of to a notch, through the
+    /// same hot key, so there's only ever one.
+    private var heldEscape: (@MainActor () -> Void)?
     private var cancellables = Set<AnyCancellable>()
 
     private init() {}
@@ -90,12 +95,18 @@ final class NotchManager {
     /// Esc is the notch's only while one is open with nothing hanging off it. Otherwise it stays with
     /// whatever needs it: the app in front, a menu, a drag, AirPlay's device list.
     func updateEscapeKey() {
-        let wanted = controllers.contains { $0.wantsEscape }
+        let wanted = heldEscape != nil || controllers.contains { $0.wantsEscape }
         guard wanted != (escapeKey != nil) else { return }
         escapeKey?.unregister()
-        escapeKey = wanted
-            ? HotKey(keyCode: kVK_Escape, modifiers: 0) { [weak self] in self?.controllers.first { $0.wantsEscape }?.escape() }
-            : nil
+        escapeKey = wanted ? HotKey(keyCode: kVK_Escape, modifiers: 0) { [weak self] in self?.escapePressed() } : nil
+    }
+
+    private func escapePressed() {
+        if let heldEscape {
+            heldEscape()
+        } else {
+            controllers.first { $0.wantsEscape }?.escape()
+        }
     }
 
     // MARK: Private
@@ -176,10 +187,10 @@ final class NotchManager {
         case .mouseMoved:
             controllers.forEach { $0.mouseMoved(to: point) }
         case .leftMouseDragged:
-            let files = isDraggingFiles()
-            controllers.forEach { $0.mouseDragged(to: point, carryingFiles: files) }
+            // Asked only by a notch that would open for it, so most drags never reach the pasteboard.
+            controllers.forEach { $0.mouseDragged(to: point, carryingFiles: isDraggingFiles) }
         case .leftMouseDown, .rightMouseDown:
-            dragChangeCount = NSPasteboard(name: .drag).changeCount
+            dragChangeCount = dragPasteboard.changeCount
             controllers.forEach { $0.mouseDown(at: point) }
         case .leftMouseUp:
             controllers.forEach { $0.mouseUp(at: point) }
@@ -196,13 +207,26 @@ final class NotchManager {
         return true
     }
 
-    /// True while a drag that started after the last click carries something the tray accepts.
+    /// True while a drag that started after the last click carries something the tray accepts. The
+    /// pasteboard's types and items come from the app the drag started in, so each is asked once a drag.
     private func isDraggingFiles() -> Bool {
-        let pasteboard = NSPasteboard(name: .drag)
-        guard pasteboard.changeCount != dragChangeCount else { return false }
-        let types = pasteboard.types ?? []
-        guard types.contains(.fileURL) || types.contains(.png) || types.contains(.tiff) else { return false }
-        isDraggingImages = dragImages.holdsImages(on: pasteboard)
+        let pasteboard = dragPasteboard
+        let changeCount = pasteboard.changeCount
+        guard changeCount != dragChangeCount,
+              fileDrag.carriesFiles(changeCount: changeCount, types: { pasteboard.types ?? [] }) else { return false }
+        isDraggingImages = dragImages.holdsImages(on: pasteboard, changeCount: changeCount)
         return true
+    }
+}
+
+extension NotchManager: EscapeHolding {
+    func holdEscape(_ action: @escaping @MainActor () -> Void) {
+        heldEscape = action
+        updateEscapeKey()
+    }
+
+    func releaseEscape() {
+        heldEscape = nil
+        updateEscapeKey()
     }
 }

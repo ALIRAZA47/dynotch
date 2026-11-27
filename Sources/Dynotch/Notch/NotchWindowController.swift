@@ -195,13 +195,13 @@ final class NotchWindowController {
         }
     }
 
-    func mouseDragged(to point: CGPoint, carryingFiles: Bool) {
-        guard carryingFiles, !viewModel.isDraggingOut, AppSettings.shared.trayOpensOnDrag else {
-            mouseMoved(to: point)
-            return
-        }
+    /// `carryingFiles` reads the drag pasteboard, which asks the app the drag started in, so it's only
+    /// called for a drag that would open the Tray here: with the setting on and the pointer in reach.
+    func mouseDragged(to point: CGPoint, carryingFiles: () -> Bool) {
         let reach = viewModel.isOpen ? notchRect.insetBy(dx: -24, dy: -24) : notchRect.insetBy(dx: -80, dy: -70)
-        if reach.contains(point) {
+        let opens = Self.opensTrayOnDrag(at: point, reach: reach, isEnabled: AppSettings.shared.trayOpensOnDrag,
+                                         isDraggingOut: viewModel.isDraggingOut, carryingFiles: carryingFiles)
+        if opens {
             cancelClose()
             setInteractive(true)
             let images = NotchManager.shared.isDraggingImages
@@ -211,11 +211,21 @@ final class NotchWindowController {
                 Haptics.tap()
                 viewModel.open(tab: .tray)
             }
-        } else if viewModel.isDraggingFiles {
+        } else if viewModel.isDraggingFiles, !reach.contains(point) {
             viewModel.isDraggingFiles = false
             viewModel.close()
             setInteractive(false)
+        } else {
+            mouseMoved(to: point)
         }
+    }
+
+    /// Whether a drag at `point` opens the Tray. The cheap tests come first: the pasteboard is only read
+    /// with the setting on, nothing being dragged out of the notch and the pointer within `reach`.
+    static func opensTrayOnDrag(at point: CGPoint, reach: CGRect, isEnabled: Bool, isDraggingOut: Bool,
+                                carryingFiles: () -> Bool) -> Bool {
+        guard isEnabled, !isDraggingOut, reach.contains(point) else { return false }
+        return carryingFiles()
     }
 
     func scrolled(_ event: NSEvent, at point: CGPoint) {

@@ -57,7 +57,7 @@ enum URLCommands {
         case "profile":
             ProfileStore.shared.switchTo(named: value("name") ?? "")
         case "capture":
-            CaptureController.shared.begin()
+            CaptureController.shared.begin(fromScript: true)
         default:
             // Only the command, since the query may carry text that shouldn't end up in a log.
             NSLog("Dynotch: ignoring dynotch://%@", path.joined(separator: "/"))

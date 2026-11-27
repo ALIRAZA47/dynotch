@@ -19,6 +19,9 @@ final class ScreenshotWatcher: ObservableObject {
         let source: DispatchSourceFileSystemObject
         var seen: Set<String>
         var isRetrying = false
+        /// A look at the folder is under way off the main thread; another change waits for it.
+        var isScanning = false
+        var needsScan = false
 
         init(folder: URL, source: DispatchSourceFileSystemObject, seen: Set<String>) {
             self.folder = folder
@@ -126,23 +129,70 @@ final class ScreenshotWatcher: ObservableObject {
         locationPoll = nil
     }
 
-    private func scan(_ watch: Watch) {
-        guard let names = files(in: Self.list(watch.folder)) else { return }
+    /// What a look at a folder found, among the names that weren't there before.
+    private struct Scan {
+        var listing: Listing
+        /// New screenshots and recordings.
         var fresh: [URL] = []
+        /// The one new capture is a screen recording.
+        var isRecording = false
+        /// New names that aren't captures, and won't become one.
+        var settled: [String] = []
+        /// A new file is too young to say: its tag can arrive a moment after it.
         var waiting = false
-        for name in names where !watch.seen.contains(name) {
-            let url = watch.folder.appendingPathComponent(name)
-            if Self.isScreenCapture(url) {
-                watch.seen.insert(name)
-                fresh.append(url)
-            } else if Self.age(of: url) < 10 {
-                // The tag can arrive a moment after the file; look again shortly.
-                waiting = true
-            } else {
-                watch.seen.insert(name)
+    }
+
+    /// The listing and each new name's attributes are read on `queue`: the folder is the Desktop by
+    /// default, which changes all the time, and it can be on a disk that answers slowly.
+    private func scan(_ watch: Watch) {
+        guard !watch.isScanning else {
+            watch.needsScan = true
+            return
+        }
+        watch.isScanning = true
+        let folder = watch.folder, seen = watch.seen, started = generation, id = ObjectIdentifier(watch)
+        queue.async {
+            let scan = Self.look(in: folder, seen: seen)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    // Gone if watching stopped or started over meanwhile.
+                    guard started == self.generation, let watch = self.watches.first(where: { ObjectIdentifier($0) == id }) else { return }
+                    watch.isScanning = false
+                    self.apply(scan, to: watch)
+                    if watch.needsScan {
+                        watch.needsScan = false
+                        self.scan(watch)
+                    }
+                }
             }
         }
+    }
+
+    nonisolated private static func look(in folder: URL, seen: Set<String>) -> Scan {
+        let listing = list(folder)
+        var scan = Scan(listing: listing)
+        guard case .names(let names) = listing else { return scan }
+        for name in names where !seen.contains(name) {
+            let url = folder.appendingPathComponent(name)
+            if isScreenCapture(url) {
+                scan.fresh.append(url)
+            } else if age(of: url) < 10 {
+                scan.waiting = true
+            } else {
+                scan.settled.append(name)
+            }
+        }
+        scan.isRecording = scan.fresh.count == 1 && isScreenRecording(scan.fresh[0])
+        return scan
+    }
+
+    private func apply(_ scan: Scan, to watch: Watch) {
+        guard let names = files(in: scan.listing) else { return }
+        let fresh = scan.fresh
+        watch.seen.formUnion(fresh.map(\.lastPathComponent))
+        watch.seen.formUnion(scan.settled)
         watch.seen.formIntersection(names)
+        let waiting = scan.waiting
         if waiting, !watch.isRetrying {
             watch.isRetrying = true
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self, weak watch] in
@@ -155,7 +205,7 @@ final class ScreenshotWatcher: ObservableObject {
         }
         guard !fresh.isEmpty else { return }
         TrayStore.shared.add(fresh, automatically: true)
-        let recording = fresh.count == 1 && Self.isScreenRecording(fresh[0])
+        let recording = scan.isRecording
         let text = fresh.count > 1 ? "\(fresh.count) captures" : recording ? "Screen recording" : "Screenshot"
         var actions = [NoticeAction(title: "Show", kind: .openTab(.tray))]
         if fresh.count == 1 { actions.append(NoticeAction(title: "Open", kind: .openFile(fresh[0]))) }
@@ -202,19 +252,19 @@ final class ScreenshotWatcher: ObservableObject {
     }
 
     /// macOS tags screenshots with kMDItemIsScreenCapture and screen recordings with kMDItemIsScreenRecording.
-    private static func isScreenCapture(_ url: URL) -> Bool {
+    nonisolated private static func isScreenCapture(_ url: URL) -> Bool {
         hasAttribute("com.apple.metadata:kMDItemIsScreenCapture", url) || isScreenRecording(url)
     }
 
-    private static func isScreenRecording(_ url: URL) -> Bool {
+    nonisolated private static func isScreenRecording(_ url: URL) -> Bool {
         hasAttribute("com.apple.metadata:kMDItemIsScreenRecording", url)
     }
 
-    private static func hasAttribute(_ name: String, _ url: URL) -> Bool {
+    nonisolated private static func hasAttribute(_ name: String, _ url: URL) -> Bool {
         getxattr(url.path, name, nil, 0, 0, 0) > 0
     }
 
-    private static func age(of url: URL) -> TimeInterval {
+    nonisolated private static func age(of url: URL) -> TimeInterval {
         let created = (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .distantPast
         return Date.now.timeIntervalSince(created)
     }

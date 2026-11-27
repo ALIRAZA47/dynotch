@@ -50,6 +50,8 @@ private struct TrayContentView: View {
             if !isSnapshot { QuickLookAnchor(viewModel: viewModel) }
         }
         .orbitHeader("Tray", subtitle: subtitle) { actions }
+        // Sizes are read off the main thread and kept; a file may have changed since they were.
+        .onAppear { if !isSnapshot { tray.refreshFiles() } }
     }
 
     /// "6 files · 41.2 MB · 2 new".
@@ -57,7 +59,7 @@ private struct TrayContentView: View {
         let items = tray.items
         guard !items.isEmpty else { return "Empty" }
         var parts = [items.count == 1 ? "1 file" : "\(items.count) files"]
-        let bytes = items.compactMap { TrayFileInfo.bytes(of: $0.url) }.reduce(0, +)
+        let bytes = items.compactMap { $0.info?.bytes }.reduce(0, +)
         if bytes > 0 { parts.append(ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)) }
         let new = items.filter { TrayFileInfo.isNew($0, now: now) }.count
         if new > 0 { parts.append("\(new) new") }
@@ -177,20 +179,42 @@ enum TraySnapshot {
 }
 
 /// What the Tray knows about a file without opening it.
-enum TrayFileInfo {
+/// What a Tray file is. `TrayStore` reads it off the main thread and keeps it on the item, since a
+/// tile draws it many times a second and the file can be on a disk that has gone away.
+struct TrayFileInfo: Equatable, Sendable {
+    var exists: Bool
+    var isFolder = false
+    var isPackage = false
+    var fileSize: Int64?
+
+    init(exists: Bool, isFolder: Bool = false, isPackage: Bool = false, fileSize: Int64? = nil) {
+        self.exists = exists
+        self.isFolder = isFolder
+        self.isPackage = isPackage
+        self.fileSize = fileSize
+    }
+
+    /// Reads the disk, so never on the main thread but for a snapshot's samples.
+    init(reading url: URL) {
+        exists = FileManager.default.fileExists(atPath: url.path)
+        // A URL keeps the values it was asked for, and these are read again when the Tray reopens.
+        let url = URL(fileURLWithPath: url.path)
+        guard exists, let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey, .fileSizeKey]) else { return }
+        isFolder = values.isDirectory == true
+        isPackage = values.isPackage == true
+        fileSize = values.fileSize.map(Int64.init)
+    }
+
     /// Its size in bytes; nothing for a folder or a package, whose size would take a walk through it.
-    static func bytes(of url: URL) -> Int64? {
-        let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey, .fileSizeKey])
-        if values?.isPackage == true || values?.isDirectory == true { return nil }
-        return values?.fileSize.map(Int64.init)
+    var bytes: Int64? {
+        isPackage || isFolder ? nil : fileSize
     }
 
     /// The file's size, or that it's a folder.
-    static func detail(for url: URL) -> String? {
-        let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isPackageKey, .fileSizeKey])
-        if values?.isPackage == true { return nil }
-        if values?.isDirectory == true { return "Folder" }
-        return values?.fileSize.map { ByteCountFormatter.string(fromByteCount: Int64($0), countStyle: .file) }
+    var detail: String? {
+        if isPackage { return nil }
+        if isFolder { return "Folder" }
+        return fileSize.map { ByteCountFormatter.string(fromByteCount: $0, countStyle: .file) }
     }
 
     /// Came by itself, a screenshot or a download, in the last ten minutes.
@@ -321,7 +345,7 @@ private struct TrayTile: View {
         .help(item.url.path)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(item.url.lastPathComponent)
-        .accessibilityValue([TrayFileInfo.detail(for: item.url), item.isPinned ? "Pinned" : nil, isNew ? "New" : nil]
+        .accessibilityValue([item.info?.detail, item.isPinned ? "Pinned" : nil, isNew ? "New" : nil]
             .compactMap { $0 }.joined(separator: ", "))
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityAction(named: "Quick Look", quickLook)
@@ -331,7 +355,7 @@ private struct TrayTile: View {
 
     /// "2.1 MB", "Folder". A pin on the thumbnail says it's pinned.
     private var sizeLine: String {
-        TrayFileInfo.detail(for: item.url) ?? " "
+        item.info?.detail ?? " "
     }
 
     private var thumbnail: some View {

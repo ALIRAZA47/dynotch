@@ -94,6 +94,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // First, so a profile a rule picks is in place before the services read their settings.
         ProfileStore.shared.start()
         TrayStore.shared.load()
+        // After the Tray, whose items say which hidden recordings are still wanted.
+        ScreenRecorder.shared.removeStaleStagedFiles()
         ClipboardStore.shared.start()
         NotesStore.shared.start()
         FocusHistory.shared.load()

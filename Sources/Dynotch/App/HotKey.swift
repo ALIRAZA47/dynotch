@@ -44,3 +44,13 @@ final class HotKey {
         }, 1, &eventType, nil, nil)
     }
 }
+
+/// Holds Esc system-wide for a while, whichever window has the keyboard. The notch's manager does it,
+/// as it owns the app's one Esc hot key: two registrations of the same key would fight. Tests stand in
+/// for it, so they never take the real keyboard's Esc.
+@MainActor
+protocol EscapeHolding: AnyObject {
+    /// Esc goes to `action`, and nowhere else, until `releaseEscape`.
+    func holdEscape(_ action: @escaping @MainActor () -> Void)
+    func releaseEscape()
+}

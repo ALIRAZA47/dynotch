@@ -20,6 +20,8 @@ final class CaptureOverlayWindow: NSPanel {
     /// Off screen for a test or a snapshot. It acts key, for what's drawn and what's typed through
     /// `sendEvent`, and never takes the keyboard from whoever is at the Mac.
     var isParked = false
+    /// Told of every press, move and drag over the window, so a capture nobody is at can go by itself.
+    var onActivity: (() -> Void)?
 
     /// `isSnapshot` draws the chrome's glass as a plain dark stand-in, for `--snapshot`.
     init(display: CaptureDisplay, editor: CaptureEditor, isSnapshot: Bool = false) {
@@ -52,6 +54,12 @@ final class CaptureOverlayWindow: NSPanel {
     override func constrainFrameRect(_ frameRect: NSRect, to screen: NSScreen?) -> NSRect { frameRect }
 
     override func sendEvent(_ event: NSEvent) {
+        switch event.type {
+        case .leftMouseDown, .leftMouseDragged, .leftMouseUp, .mouseMoved, .rightMouseDown, .otherMouseDown, .scrollWheel, .keyDown, .flagsChanged:
+            onActivity?()
+        default:
+            break
+        }
         switch event.type {
         case .leftMouseDown:
             let point = localPoint(event)
