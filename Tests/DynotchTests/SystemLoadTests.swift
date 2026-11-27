@@ -192,10 +192,14 @@ struct BluetoothBatteryPollTests {
 
     @Test func aBurstOfConnectsAndDisconnectsReadsOnce() async {
         let monitor = monitor()
+        // Long enough that a slow machine can't let it run out in the middle of the burst
+        // (CI once took over 40 ms for a 5 ms sleep and read twice).
+        monitor.settleDelay = .milliseconds(400)
         var last: Task<Void, Never>?
         for _ in 0..<6 {
             last = monitor.deviceCameOrWent()
-            try? await Task.sleep(for: .milliseconds(5))
+            // Let the task just started begin its wait before the next event replaces it.
+            await Task.yield()
         }
         await last?.value
         #expect(fake.reads == 1)
