@@ -62,8 +62,9 @@ final class CalendarService: ObservableObject, EventAdding {
     var hasReminderAccess: Bool { reminderAccess == .fullAccess }
 
     func start() {
+        // A sync posts this many times in a row. One read, a second after the last of them.
         observer = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: store, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reload() }
+            MainActor.assumeIsolated { self?.reloadSoon() }
         }
         reload()
         poll = EnergyCoordinator.shared.schedule(.eventAlerts) { [weak self] in self?.tick() }
@@ -91,9 +92,23 @@ final class CalendarService: ObservableObject, EventAdding {
         }
     }
 
+    private var pendingReload: Task<Void, Never>?
+
+    private func reloadSoon() {
+        pendingReload?.cancel()
+        pendingReload = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            self?.reload()
+        }
+    }
+
     func reload() {
-        eventAccess = EKEventStore.authorizationStatus(for: .event)
-        reminderAccess = EKEventStore.authorizationStatus(for: .reminder)
+        let eventStatus = EKEventStore.authorizationStatus(for: .event)
+        let reminderStatus = EKEventStore.authorizationStatus(for: .reminder)
+        // Only what changed is published, so a read that finds nothing new redraws nothing.
+        if eventStatus != eventAccess { eventAccess = eventStatus }
+        if reminderStatus != reminderAccess { reminderAccess = reminderStatus }
         loadedDay = Calendar.current.startOfDay(for: .now)
         if hasEventAccess { loadEvents() }
         if hasReminderAccess { loadReminders() }
@@ -171,7 +186,7 @@ final class CalendarService: ObservableObject, EventAdding {
         guard let end = calendar.date(byAdding: .day, value: 7, to: start) else { return }
         let showAllDay = AppSettings.shared.showAllDayEvents
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
-        events = store.events(matching: predicate)
+        let loaded = store.events(matching: predicate)
             .filter { event in
                 event.status != .canceled
                     && (showAllDay || !event.isAllDay)
@@ -188,6 +203,7 @@ final class CalendarService: ObservableObject, EventAdding {
                       meetingURL: Self.meetingURL(in: event),
                       location: event.location.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 })
             }
+        if loaded != events { events = loaded }
     }
 
     private func loadReminders() {
@@ -206,7 +222,9 @@ final class CalendarService: ObservableObject, EventAdding {
                 default: false
                 }
             }
-            Task { @MainActor in self?.reminders = reminders }
+            Task { @MainActor in
+                if let self, reminders != self.reminders { self.reminders = reminders }
+            }
         }
     }
 

@@ -35,6 +35,9 @@ final class ShortcutsService: ObservableObject {
     /// so a quick skip can't leave a Focus on, or set two running against each other. It says nothing
     /// unless one fails.
     func runInTurn(_ name: String) {
+        // Never a long line of them: past a few, the ones still waiting give way to the newest, which
+        // is the one that says how things should end up. The one running is left to finish.
+        if queued.count >= 4 { queued.removeSubrange(1...) }
         queued.append(name)
         guard queued.count == 1 else { return }
         Task {

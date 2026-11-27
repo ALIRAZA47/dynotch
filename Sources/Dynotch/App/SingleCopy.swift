@@ -1,4 +1,5 @@
 import AppKit
+import Security
 
 /// One copy of Dynotch at a time. Two would each draw a notch, take the volume keys, listen on the
 /// same socket and write the same Tray, notes and clipboard files; that happens when a copy opened
@@ -20,6 +21,17 @@ enum SingleCopy {
         }
     }
 
+    /// Whether `app` is signed as this copy is. Anything can carry Dynotch's bundle identifier, and
+    /// this copy only gives way to the real thing. An unsigned build of this one has nothing to go
+    /// by, and takes the identifier's word.
+    private static func isDynotch(_ app: NSRunningApplication) -> Bool {
+        guard let requirement = UpdateInstaller.ownRequirement() else { return true }
+        var code: SecCode?
+        let attributes = [kSecGuestAttributePid: app.processIdentifier] as CFDictionary
+        guard SecCodeCopyGuestWithAttributes(nil, attributes, [], &code) == errSecSuccess, let code else { return false }
+        return SecCodeCheckValidity(code, [], requirement) == errSecSuccess
+    }
+
     /// False if a newer copy is already running and this one should quit without starting anything.
     static func claim() -> Bool {
         // A bare build has no bundle, and nothing to tell its copies by.
@@ -28,7 +40,7 @@ enum SingleCopy {
         let mine = Start(date: me.launchDate, pid: me.processIdentifier)
         let others = NSRunningApplication.runningApplications(withBundleIdentifier: id)
             .filter { $0.processIdentifier != me.processIdentifier && !$0.isTerminated }
-        if others.contains(where: { mine.isOlder(than: Start(date: $0.launchDate, pid: $0.processIdentifier)) }) {
+        if others.contains(where: { mine.isOlder(than: Start(date: $0.launchDate, pid: $0.processIdentifier)) && isDynotch($0) }) {
             return false
         }
         // Older copies quit the way the menu's Quit does, so a recording gets finished. Wait a
@@ -44,7 +56,9 @@ enum SingleCopy {
             guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                   app.bundleIdentifier == id, app.processIdentifier != mine.pid,
                   mine.isOlder(than: Start(date: app.launchDate, pid: app.processIdentifier)) else { return }
-            MainActor.assumeIsolated { NSApp.terminate(nil) }
+            MainActor.assumeIsolated {
+                if isDynotch(app) { NSApp.terminate(nil) }
+            }
         }
         return true
     }

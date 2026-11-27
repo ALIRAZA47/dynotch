@@ -84,9 +84,34 @@ struct ApprovalLine: Equatable {
         return count
     }
 
+    /// The longest a row is. A line longer than this, like a minified file or a pasted blob, is cut
+    /// into rows of this length: all of it still shows and scrolls, but no one row has megabytes to
+    /// lay out as the glance opens.
+    static let longestRow = 2000
+
+    /// `lines` with any line over `longestRow` cut into rows.
+    static func rows(_ lines: [ApprovalLine]) -> [ApprovalLine] {
+        guard lines.contains(where: { $0.text.utf8.count > longestRow }) else { return lines }
+        return lines.flatMap { line -> [ApprovalLine] in
+            guard line.text.utf8.count > longestRow else { return [line] }
+            var rows: [ApprovalLine] = []
+            var start = line.text.startIndex
+            while start < line.text.endIndex {
+                let end = line.text.index(start, offsetBy: longestRow, limitedBy: line.text.endIndex) ?? line.text.endIndex
+                rows.append(ApprovalLine(text: String(line.text[start..<end]), tone: line.tone))
+                start = end
+            }
+            return rows
+        }
+    }
+
     /// What a tool would do: the command for Bash, the path and what would change for Write and
     /// Edit, and the whole input for anything else, under the tool's full name if the header has a shorter one.
     static func lines(tool: String, input: [String: Any]) -> [ApprovalLine] {
+        rows(wholeLines(tool: tool, input: input))
+    }
+
+    private static func wholeLines(tool: String, input: [String: Any]) -> [ApprovalLine] {
         var rest = input
         var lines: [ApprovalLine] = []
         switch tool {

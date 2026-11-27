@@ -514,6 +514,9 @@ final class NotchViewModel: ObservableObject {
             var width = closed.width + GlanceContent.earWidth * 2
             // A command shows whole, so the more room it has the fewer lines it takes.
             if case .approval = content { width = max(width, ApprovalGlance.width) }
+            // Never narrower than the closed notch it grew from, a wide notification's most of all: a
+            // pointer resting on that one's edge would be outside its glance, and the two would trade places.
+            width = max(width, closedLayout.totalWidth + 14)
             return NotchMetrics(width: min(settings.openWidth, width), height: closed.height + content.extraHeight,
                                 topRadius: 8, bottomRadius: 22)
         case .closed, .hovering:

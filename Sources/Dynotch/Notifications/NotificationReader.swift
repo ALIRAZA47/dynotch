@@ -307,8 +307,10 @@ final class NotificationReader: @unchecked Sendable {
 
     private static func url(_ value: Any?) -> URL? {
         if let url = value as? URL { return url.scheme == nil ? nil : url }
-        guard let string = value as? String, let url = URL(string: string.trimmingCharacters(in: .whitespaces)),
-              let scheme = url.scheme, !scheme.isEmpty, url.absoluteString.count < 2048 else { return nil }
+        // Strictly a link: text like "note: call me" isn't one, though macOS would encode it into one.
+        guard let string = (value as? String)?.trimmingCharacters(in: .whitespaces), string.count < 2048, string.contains("://"),
+              let url = URL(string: string, encodingInvalidCharacters: false),
+              let scheme = url.scheme, !scheme.isEmpty else { return nil }
         return url
     }
 
