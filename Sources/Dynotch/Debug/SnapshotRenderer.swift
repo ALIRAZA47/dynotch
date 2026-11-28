@@ -1,4 +1,5 @@
 import AppKit
+import EventKit
 import SwiftUI
 
 /// `Dynotch --snapshot <folder>` renders the notch in each state with sample data,
@@ -102,6 +103,7 @@ enum SnapshotRenderer {
         NotchAccent.checkContrast()
         #endif
         only = prefixes
+        SnapshotClock.now = sampleTime
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         PowerMonitor.shared.start()
         loadSamples(in: folder)
@@ -203,6 +205,36 @@ enum SnapshotRenderer {
             Scene(name: "09-closed-notification", phase: .closed, activity: .notice(message)),
             Scene(name: "09-closed-notification-private", phase: .closed, activity: .notice(privateMessage)),
             Scene(name: "09-closed-notification-other-app", phase: .closed, activity: .notice(otherAppMessage)),
+            Scene(name: "o-live", phase: .open, tab: .live),
+            Scene(name: "o-live-light", phase: .open, tab: .live, theme: NotchTheme(isDark: false)),
+            // Control: tiles, the thick sliders, actions and batteries, at the smallest and largest sizes.
+            Scene(name: "o-control", phase: .open, tab: .stats),
+            Scene(name: "o-control-light", phase: .open, tab: .stats, theme: NotchTheme(isDark: false)),
+            Scene(name: "o-control-small", phase: .open, tab: .stats, openSize: CGSize(width: 640, height: 300)),
+            Scene(name: "o-control-small-light", phase: .open, tab: .stats, theme: NotchTheme(isDark: false),
+                  openSize: CGSize(width: 640, height: 300)),
+            Scene(name: "o-control-large", phase: .open, tab: .stats, openSize: CGSize(width: 880, height: 460)),
+            Scene(name: "o-control-large-light", phase: .open, tab: .stats, theme: NotchTheme(isDark: false),
+                  openSize: CGSize(width: 880, height: 460)),
+            // The sound at nothing, with a mute: the speaker shows muted. Keep Awake on, the mic muted.
+            Scene(name: "o-control-muted", phase: .open, tab: .stats,
+                  setUp: { VolumeMonitor.shared.loadSample(volume: 0, changing: false, canMute: true) }),
+            Scene(name: "o-control-muted-light", phase: .open, tab: .stats, theme: NotchTheme(isDark: false),
+                  setUp: { VolumeMonitor.shared.loadSample(volume: 0, changing: false, canMute: true) }),
+            Scene(name: "o-control-awake", phase: .open, tab: .stats, micMuted: true,
+                  setUp: { QuickToggles.shared.loadSample(awakeUntil: sampleTime.addingTimeInterval(102 * 60)) }),
+            Scene(name: "o-place-left", phase: .open, tab: .live, setUp: { AppSettings.shared.sectionPlacement = .left }),
+            Scene(name: "o-place-sides", phase: .open, tab: .live, setUp: { AppSettings.shared.sectionPlacement = .sides }),
+            Scene(name: "o-place-arc", phase: .open, tab: .music, setUp: { AppSettings.shared.sectionPlacement = .arc }),
+            Scene(name: "o-place-band", phase: .open, tab: .calendar, setUp: { AppSettings.shared.sectionPlacement = .band }),
+            Scene(name: "o-place-band-small", phase: .open, tab: .notes, openSize: CGSize(width: 640, height: 300),
+                  setUp: { AppSettings.shared.sectionPlacement = .band }),
+            Scene(name: "o-rows-bar-live", phase: .open, tab: .live, setUp: { AppSettings.shared.rowActionMode = .bar }),
+            Scene(name: "o-rows-bar-focus", phase: .open, tab: .focus, setUp: { AppSettings.shared.rowActionMode = .bar }),
+            Scene(name: "o-music", phase: .open, tab: .music),
+            Scene(name: "o-clipboard", phase: .open, tab: .clipboard),
+            Scene(name: "o-notes", phase: .open, tab: .notes),
+            Scene(name: "o-calendar", phase: .open, tab: .calendar),
             Scene(name: "10-open-nook", phase: .open, tab: .home),
             Scene(name: "11-open-nook-empty", phase: .open, tab: .home, hasTrack: false),
             Scene(name: "12-open-tray", phase: .open, tab: .tray),
@@ -421,7 +453,7 @@ enum SnapshotRenderer {
                 QuickToggles.shared.loadSample(awakeUntil: sampleTime.addingTimeInterval(102 * 60))
             }),
             Scene(name: "79-open-tray-pinned", phase: .open, tab: .tray, setUp: { TrayStore.shared.loadSample(pinned: 1) }),
-        ] + scriptScenes(tea: tea) + agentScenes() + usageScenes() + ciScenes() + terminalScenes() + widgetScenes() + [
+        ] + scriptScenes(tea: tea) + agentScenes() + orbitAgentGlanceCommandScenes() + usageScenes() + ciScenes() + terminalScenes() + widgetScenes() + [
             // The other widgets beside the player, busy cards and empty ones. These change the samples, so they go last.
             Scene(name: "96-open-nook-timer-toggles", phase: .open, tab: .home, prepare: {
                 (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.timer, .toggles)
@@ -443,15 +475,19 @@ enum SnapshotRenderer {
                 FocusHistory.shared.loadSample(days: [])
             }),
         ] + lyricsScenes() + clipboardScenes() + sizeScenes() + edgeScenes(virtualNotch: virtualNotch)
+            + orbitMusicScenes() + orbitWidgetsScenes()
+            + orbitFocusNotesCalendarScenes(focusMode: work) + orbitTrayScenes()
 
         let settings = AppSettings.shared
-        let savedTheme = settings.theme
+        let savedTheme = NotchTheme()
         let savedSize = (settings.openWidth, settings.openHeight)
         var written = 0
         for scene in scenes where wanted(scene.name) {
             apply(scene.theme ?? savedTheme)
             (settings.openWidth, settings.openHeight) = scene.openSize.map { ($0.width, $0.height) } ?? savedSize
-            let size = CGSize(width: settings.openWidth + NotchTheme.standard.topRadius * 2 + 80, height: settings.openHeight + 40)
+            let room = NotchViewModel.stripRoom
+            let size = CGSize(width: settings.openWidth + room.leading + room.trailing + 80,
+                              height: NotchViewModel.tallestOpenHeight(closedHeight: 32) + room.bottom + 40)
             scene.prepare?()
             AppSettings.shared.focusShowsNotes = scene.focusShowsNotes
             if scene.hasTrack { loadTrack() } else { NowPlayingService.shared.loadSample(nil) }
@@ -539,9 +575,12 @@ enum SnapshotRenderer {
         editor.tool = .arrow
         RunLoop.main.run(until: .now + 1.0)
         if save(window, to: folder.appendingPathComponent("capture-2-editor-dark.png")) { count += 1 }
+        // The chrome follows the notch's look, Light here.
+        apply(NotchTheme(isDark: false))
         window.appearance = NSAppearance(named: .aqua)
         RunLoop.main.run(until: .now + 0.8)
         if save(window, to: folder.appendingPathComponent("capture-2-editor-light.png")) { count += 1 }
+        apply(NotchTheme())
         window.appearance = NSAppearance(named: .darkAqua)
 
         // A text mark being typed, in the color and width picked. Typed through the window, as a
@@ -563,6 +602,7 @@ enum SnapshotRenderer {
             for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
                 let pin = PinnedCaptureWindow(output: output, frame: CGRect(x: -21_000, y: -61_000, width: output.pointSize.width,
                                                                               height: output.pointSize.height))
+                apply(NotchTheme(isDark: appearance == .darkAqua))
                 pin.appearance = NSAppearance(named: appearance)
                 pin.orderFrontRegardless()
                 RunLoop.main.run(until: .now + 1.0)
@@ -570,6 +610,7 @@ enum SnapshotRenderer {
                 pin.orderOut(nil)
                 pin.close()
             }
+            apply(NotchTheme())
         }
         count += renderCaptureHover(into: folder)
         print("Wrote \(count) capture snapshots to \(folder.path)")
@@ -606,11 +647,11 @@ enum SnapshotRenderer {
     /// Puts a theme in the settings, where the notch reads it. Only writes what differs.
     private static func apply(_ theme: NotchTheme) {
         let settings = AppSettings.shared
-        guard settings.theme != theme else { return }
-        settings.notchMaterial = theme.material
+        let appearance: NotchAppearance = theme.isDark ? .dark : .light
+        if settings.notchAppearance != appearance { settings.notchAppearance = appearance }
+        guard settings.theme(systemIsDark: true) != theme else { return }
         settings.notchAccent = theme.accentChoice
-        settings.notchTopRadius = theme.topRadius
-        settings.notchBottomRadius = theme.bottomRadius
+        settings.buttonRadius = theme.radius
     }
 
     // MARK: Welcome tour
@@ -785,6 +826,86 @@ enum SnapshotRenderer {
         }
         print("Wrote \(count) settings snapshots to \(folder.path)")
         renderSpotlights(into: folder)
+        renderOrbitSettings(into: folder)
+    }
+
+    /// Orbit's Appearance and Sections pages, light and dark, at the smallest and largest open sizes
+    /// and with other section placements, so the header's model shows them. Each puts the settings it
+    /// changed back.
+    private static func renderOrbitSettings(into folder: URL) {
+        let settings = AppSettings.shared
+        typealias Look = (appearance: NotchAppearance, placement: SectionPlacement, size: CGSize, radius: Double, accent: NotchAccent)
+        let standard: Look = (.system, .under, CGSize(width: 720, height: 360), 3, .cobalt)
+        let saved: Look = (settings.notchAppearance, settings.sectionPlacement,
+                           CGSize(width: settings.openWidth, height: settings.openHeight), settings.buttonRadius, settings.notchAccent)
+        func use(_ look: Look) {
+            settings.notchAppearance = look.appearance
+            settings.sectionPlacement = look.placement
+            (settings.openWidth, settings.openHeight) = (look.size.width, look.size.height)
+            settings.buttonRadius = look.radius
+            settings.notchAccent = look.accent
+        }
+        var large = standard
+        large.size = CGSize(width: 880, height: 460)
+        large.radius = 8
+        var small = standard
+        small.size = CGSize(width: 640, height: 300)
+        small.appearance = .light
+        var sides = standard
+        sides.placement = .sides
+        var arc = standard
+        arc.placement = .arc
+        arc.accent = .teal
+        var band = standard
+        band.placement = .band
+        band.radius = 0
+        // The variants only change the header, so only the first two of each page scroll.
+        let scenes: [(name: String, page: SettingsPage, appearance: NSAppearance.Name, look: Look, scrolls: Bool)] = [
+            ("o-settings-appearance-dark", .appearance, .darkAqua, standard, true),
+            ("o-settings-appearance-light", .appearance, .aqua, standard, true),
+            ("o-settings-appearance-large-light", .appearance, .aqua, large, false),
+            ("o-settings-appearance-small-dark", .appearance, .darkAqua, small, false),
+            ("o-settings-sections-dark", .nook, .darkAqua, standard, true),
+            ("o-settings-sections-light", .nook, .aqua, standard, true),
+            ("o-settings-sections-sides-dark", .nook, .darkAqua, sides, false),
+            ("o-settings-sections-arc-light", .nook, .aqua, arc, false),
+            ("o-settings-sections-band-dark", .nook, .darkAqua, band, false),
+        ]
+        var count = 0
+        for (index, scene) in scenes.enumerated() where wanted(scene.name) {
+            use(scene.look)
+            let window = OffscreenWindow(contentRect: NSRect(origin: .zero, size: SettingsWindowController.contentSize),
+                                         styleMask: SettingsWindowController.styleMask, backing: .buffered, defer: false)
+            let navigation = SettingsNavigation()
+            navigation.page = scene.page
+            SettingsWindowController.configure(window, navigation: navigation, isSnapshot: true)
+            window.appearance = NSAppearance(named: scene.appearance)
+            window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 1_000, y: -90_000))
+            window.orderFrontRegardless()
+            RunLoop.main.run(until: .now + 1.2)
+            if save(window, to: folder.appendingPathComponent(scene.name + ".png")) { count += 1 }
+            // The rest of the page, a screenful at a time.
+            if let scrollView = window.contentView.flatMap(overflowingScrollView), let document = scrollView.documentView,
+               document.isFlipped, scene.scrolls {
+                let viewport = scrollView.contentView.bounds.height
+                let end = document.frame.height - viewport
+                var offset = viewport - 60
+                var part = 2
+                while offset < end + viewport - 60 {
+                    scrollView.contentView.scroll(to: NSPoint(x: 0, y: min(offset, end)))
+                    scrollView.reflectScrolledClipView(scrollView.contentView)
+                    RunLoop.main.run(until: .now + 0.8)
+                    if save(window, to: folder.appendingPathComponent("\(scene.name)-\(part).png")) { count += 1 }
+                    if offset >= end { break }
+                    offset += viewport - 60
+                    part += 1
+                }
+            }
+            window.orderOut(nil)
+            window.close()
+        }
+        use(saved)
+        print("Wrote \(count) Orbit settings snapshots to \(folder.path)")
     }
 
     /// The end of the Tray page, where the Clipboard section is: the history on, and macOS in the way.
@@ -963,6 +1084,9 @@ enum SnapshotRenderer {
     /// The volume, output and equalizer state every scene starts from, with nothing recent and
     /// Keep Awake off.
     private static func resetAudioSamples() {
+        // A scene that moved the section buttons or the row buttons leaves them moved otherwise.
+        if AppSettings.shared.sectionPlacement != .under { AppSettings.shared.sectionPlacement = .under }
+        if AppSettings.shared.rowActionMode != .hover { AppSettings.shared.rowActionMode = .hover }
         VolumeMonitor.shared.loadSample(volume: 0.62, changing: false)
         loadOutputs(pickerShown: false)
         AudioLevels.shared.loadSample(nil)
@@ -973,11 +1097,16 @@ enum SnapshotRenderer {
         CIMonitor.shared.clearSample()
         QuickToggles.shared.loadSample(awakeUntil: nil)
         TrayStore.shared.loadSample(pinned: nil)
+        TraySnapshot.hoveredFile = nil
+        TraySnapshot.hoveredClip = nil
         ScreenRecorder.shared.loadSample(.idle)
         loadClips([], isOn: false)
         CommandHistory.forget()
         FocusHistory.shared.loadSample(days: sampleFocusDays)
         LyricsService.shared.loadSample(nil)
+        NotesStore.shared.loadSample(leftBehind: nil)
+        NotesStore.shared.loadSample(saveFailed: false)
+        CalendarService.shared.loadSample(eventAccess: .fullAccess, reminderAccess: .fullAccess)
     }
 
     /// A recording this long running, or its file being saved. It holds nothing.
@@ -1077,7 +1206,26 @@ enum SnapshotRenderer {
             FileManager.default.createFile(atPath: url.path, contents: Data())
         }
         TrayStore.shared.loadSample(urls)
+        // Orbit's Tray shows each file's size: empty files of these sizes, which take no room on disk.
+        let sized: [(String, UInt64)] = [("Screenshot 10.14.02.png", 2_100_000), ("Recording 10.09.mov", 31_800_000),
+                                         ("Invoice-Nov.pdf", 412_000), ("Dynotch-1.5.0.zip", 6_300_000),
+                                         ("NotchBoard.swift", 18_000), ("notes.md", 4_000), ("Hero shot.png", 1_200_000),
+                                         ("Q3 Report.pdf", 860_000)]
+        let orbit = folder.appendingPathComponent("tray-samples-orbit", isDirectory: true)
+        try? FileManager.default.createDirectory(at: orbit, withIntermediateDirectories: true)
+        orbitTrayURLs = sized.map { name, size in
+            let url = orbit.appendingPathComponent(name)
+            FileManager.default.createFile(atPath: url.path, contents: Data())
+            if let handle = try? FileHandle(forWritingTo: url) {
+                try? handle.truncate(atOffset: size)
+                try? handle.close()
+            }
+            return url
+        }
     }
+
+    /// Files with sizes, for the Orbit Tray's scenes.
+    private static var orbitTrayURLs: [URL] = []
 
     /// A week of focus, whichever day of it the render lands on.
     private static let sampleFocusDays = [50, 75, 25, 100, 50, 125, 25]
@@ -1104,6 +1252,153 @@ enum SnapshotRenderer {
                 .init(id: "c", title: "Water the plants", dueDate: nil, color: .green),
                 .init(id: "e", title: "Renew the passport", dueDate: nil, color: .purple),
             ])
+    }
+
+    // MARK: Orbit Focus, Notes and Calendar
+
+    /// Focus, Notes and Calendar in Orbit: dark and light, at the smallest and the largest open size,
+    /// empty, without permission and busy. Each scene loads its own day, notes and reminders.
+    private static func orbitFocusNotesCalendarScenes(focusMode: FocusMode) -> [Scene] {
+        let light = NotchTheme(isDark: false)
+        let small = CGSize(width: 640, height: 300), large = CGSize(width: 880, height: 460)
+        let day: @MainActor () -> Void = { loadOrbitDay(); loadOrbitNotes() }
+        let empty: @MainActor () -> Void = {
+            CalendarService.shared.loadSample(events: [], reminders: [])
+            FocusHistory.shared.loadSample(days: [])
+            NotesStore.shared.loadSample([""], created: [.now])
+        }
+        let busy: @MainActor () -> Void = {
+            loadOrbitDay(busy: true)
+            loadOrbitNotes()
+            TimerStore.shared.start("pizza 12m")
+            TimerStore.shared.start("eggs 90s")
+        }
+        let resting: @MainActor () -> Void = { PomodoroTimer.shared.loadSample(remaining: 25 * 60, running: false) }
+        let running: @MainActor () -> Void = { PomodoroTimer.shared.loadSample(remaining: 14 * 60 + 12, running: true) }
+        func both(_ first: @escaping @MainActor () -> Void, _ second: @escaping @MainActor () -> Void) -> @MainActor () -> Void {
+            { first(); second() }
+        }
+        return [
+            Scene(name: "o-focus-1-dark", phase: .open, tab: .focus, setUp: both(day, running)),
+            Scene(name: "o-focus-1-light", phase: .open, tab: .focus, theme: light, setUp: both(day, running)),
+            Scene(name: "o-focus-2-small", phase: .open, tab: .focus, openSize: small, setUp: both(day, running)),
+            Scene(name: "o-focus-2-small-light", phase: .open, tab: .focus, theme: light, openSize: small, setUp: both(day, running)),
+            Scene(name: "o-focus-3-large", phase: .open, tab: .focus, openSize: large, setUp: both(day, running)),
+            Scene(name: "o-focus-4-empty", phase: .open, tab: .focus, hasTimers: false, setUp: both(empty, resting)),
+            Scene(name: "o-focus-4-empty-light", phase: .open, tab: .focus, hasTimers: false, theme: light,
+                  setUp: both(empty, resting)),
+            Scene(name: "o-focus-5-no-permission", phase: .open, tab: .focus, setUp: both(day) {
+                CalendarService.shared.loadSample(eventAccess: .fullAccess, reminderAccess: .denied)
+            }),
+            Scene(name: "o-focus-6-busy", phase: .open, tab: .focus, focus: focusMode, setUp: both(busy, running)),
+            Scene(name: "o-focus-6-busy-light-small", phase: .open, tab: .focus, focus: focusMode, theme: light, openSize: small,
+                  setUp: both(busy, running)),
+            Scene(name: "o-focus-7-hours", phase: .open, tab: .focus, openSize: small, setUp: both(day) {
+                PomodoroTimer.shared.loadSample(remaining: 2 * 3600 - 1, running: true)
+            }),
+
+            Scene(name: "o-notes-1-dark", phase: .open, tab: .notes, setUp: day),
+            Scene(name: "o-notes-1-light", phase: .open, tab: .notes, theme: light, setUp: day),
+            Scene(name: "o-notes-2-small", phase: .open, tab: .notes, openSize: small, setUp: day),
+            Scene(name: "o-notes-3-large-light", phase: .open, tab: .notes, theme: light, openSize: large, setUp: day),
+            Scene(name: "o-notes-4-empty", phase: .open, tab: .notes, setUp: empty),
+            Scene(name: "o-notes-4-empty-light", phase: .open, tab: .notes, theme: light, setUp: empty),
+            Scene(name: "o-notes-5-left-behind", phase: .open, tab: .notes, setUp: both(day) {
+                NotesStore.shared.loadSample(leftBehind: .init(
+                    folder: URL(fileURLWithPath: "/Users/sample/Documents/Obsidian Vault"), count: 3))
+            }),
+            Scene(name: "o-notes-6-save-failed-light", phase: .open, tab: .notes, theme: light, setUp: both(day) {
+                NotesStore.shared.loadSample(saveFailed: true)
+            }),
+
+            Scene(name: "o-calendar-1-dark", phase: .open, tab: .calendar, setUp: day),
+            Scene(name: "o-calendar-1-light", phase: .open, tab: .calendar, theme: light, setUp: day),
+            Scene(name: "o-calendar-2-small", phase: .open, tab: .calendar, openSize: small, setUp: day),
+            Scene(name: "o-calendar-3-large", phase: .open, tab: .calendar, openSize: large, setUp: { loadOrbitDay(busy: true) }),
+            Scene(name: "o-calendar-4-empty", phase: .open, tab: .calendar, setUp: empty),
+            Scene(name: "o-calendar-4-empty-light", phase: .open, tab: .calendar, theme: light, setUp: empty),
+            Scene(name: "o-calendar-5-no-permission", phase: .open, tab: .calendar, setUp: {
+                CalendarService.shared.loadSample(eventAccess: .notDetermined, reminderAccess: .fullAccess)
+            }),
+            Scene(name: "o-calendar-5-no-permission-light", phase: .open, tab: .calendar, theme: light, setUp: {
+                CalendarService.shared.loadSample(eventAccess: .notDetermined, reminderAccess: .fullAccess)
+            }),
+            Scene(name: "o-calendar-6-busy", phase: .open, tab: .calendar, setUp: { loadOrbitDay(busy: true, meetingNow: true) }),
+            Scene(name: "o-calendar-6-busy-light-small", phase: .open, tab: .calendar, theme: light, openSize: small,
+                  setUp: { loadOrbitDay(busy: true, meetingNow: true) }),
+            Scene(name: "o-calendar-7-tomorrow", phase: .open, tab: .calendar, setUp: { loadOrbitDay(tomorrowOnly: true) }),
+
+            // The compact cards the Widgets section stacks.
+            Scene(name: "o-calendar-8-widgets", phase: .open, tab: .home, setUp: both(both(day, running)) {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.calendar, .timer)
+            }),
+            Scene(name: "o-calendar-8-widgets-light", phase: .open, tab: .home, theme: light, setUp: both(both(day, running)) {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.calendar, .timer)
+            }),
+            Scene(name: "o-notes-7-widget-light", phase: .open, tab: .home, theme: light, setUp: both(day) {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (.notes, .timer)
+            }),
+        ]
+    }
+
+    /// A day like the board's: a standup soon with a call, lunch somewhere, a review on Zoom, a
+    /// reminder to call; busy adds an all-day event and a crowded afternoon.
+    private static func loadOrbitDay(busy: Bool = false, meetingNow: Bool = false, tomorrowOnly: Bool = false) {
+        let now = Date.now
+        let calendar = Calendar.current
+        func at(_ minutes: Double) -> Date { now.addingTimeInterval(minutes * 60) }
+        let meet = URL(string: "https://meet.google.com/abc-defg-hij"), zoom = URL(string: "https://acme.zoom.us/j/123456")
+        let blue = Color(red: 0.18, green: 0.42, blue: 1), green = Color(red: 0.2, green: 0.78, blue: 0.35)
+        let orange = Color(red: 1, green: 0.62, blue: 0.04), purple = Color(red: 0.69, green: 0.32, blue: 0.87)
+        var events: [CalendarService.Event] = []
+        if tomorrowOnly {
+            let morning = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!.addingTimeInterval(9.5 * 3600)
+            events = [.init(id: "t", title: "Standup", start: morning, end: morning.addingTimeInterval(900), isAllDay: false,
+                            color: blue, meetingURL: meet)]
+        } else {
+            events = [
+                .init(id: "1", title: "Standup", start: at(meetingNow ? -5 : 12), end: at(meetingNow ? 10 : 27), isAllDay: false,
+                      color: blue, meetingURL: meet),
+                .init(id: "2", title: "Lunch with Sara", start: at(90), end: at(150), isAllDay: false, color: green,
+                      meetingURL: nil, location: "Café Aylanto"),
+                .init(id: "3", title: "Design review: Orbit", start: at(270), end: at(300), isAllDay: false, color: blue,
+                      meetingURL: zoom, location: "https://acme.zoom.us/j/123456"),
+                .init(id: "4", title: "Call Sam", start: at(390), end: at(405), isAllDay: false, color: orange, meetingURL: nil),
+            ]
+            if busy {
+                events.insert(.init(id: "0", title: "Mum's birthday", start: calendar.startOfDay(for: now),
+                                    end: calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!,
+                                    isAllDay: true, color: purple, meetingURL: nil), at: 0)
+                events.append(.init(id: "5", title: "Quarterly planning with the whole product team", start: at(420), end: at(480),
+                                    isAllDay: false, color: purple, meetingURL: nil, location: "Room 4.12, second floor"))
+                events.append(.init(id: "6", title: "Yoga", start: at(500), end: at(560), isAllDay: false, color: green,
+                                    meetingURL: nil))
+            }
+        }
+        var reminders: [CalendarService.Reminder] = [
+            .init(id: "a", title: "Send the invoice", dueDate: at(90), color: .orange),
+            .init(id: "b", title: "Book flights for March", dueDate: calendar.date(byAdding: .day, value: 1, to: now), color: .blue),
+            .init(id: "c", title: "Water the plants", dueDate: nil, color: .green),
+        ]
+        if busy {
+            reminders.insert(.init(id: "d", title: "Call the landlord about the leaking kitchen tap before the weekend",
+                                   dueDate: at(-1500), color: .red), at: 1)
+            reminders.append(.init(id: "e", title: "Renew the passport", dueDate: nil, color: .purple))
+        }
+        CalendarService.shared.loadSample(events: events, reminders: reminders)
+    }
+
+    /// The board's notes: a checklist part way done, opened, and three older ones. Nothing is saved.
+    private static func loadOrbitNotes() {
+        let now = Date.now
+        func daysAgo(_ days: Double) -> Date { now.addingTimeInterval(-days * 24 * 3600) }
+        NotesStore.shared.loadSample([
+            "Gift ideas\n- A good pen\n- Hojicha from the market",
+            "Teas to try\n- [x] Sencha\n- [ ] Hojicha\n- [ ] Genmaicha",
+            "Standup\nShip the board, then the glance.",
+            "Ship list\n- [x] Side strips stuck to the panel\n- [x] Button roundness setting\n- [x] Light and dark tokens\n"
+                + "- [ ] Hover actions on every row\n- [ ] Springy open animation",
+        ], created: [daysAgo(9), daysAgo(4), daysAgo(3), now.addingTimeInterval(-600)], current: 3)
     }
 
     /// Ink on each accent: the Control tab, its jewel and the Mute mic tile, which is on in every
@@ -1236,6 +1531,67 @@ enum SnapshotRenderer {
             ]
     }
 
+    /// Orbit's Tray and Clipboard sections in both themes, at the smallest and largest open sizes,
+    /// empty, with files held over them, and with a tile or a row drawn under the pointer. Last, as
+    /// the Tray's scenes load their own files.
+    private static func orbitTrayScenes() -> [Scene] {
+        let light = NotchTheme(isDark: false)
+        let smallest = CGSize(width: 640, height: 300), largest = CGSize(width: 880, height: 460)
+        func files(pinned: Int? = 2, selected: Int? = nil, hovered: Int? = nil) -> @MainActor () -> Void {
+            {
+                TrayStore.shared.loadSample(orbitTrayURLs)
+                TrayStore.shared.loadSample(pinned: pinned)
+                TrayStore.shared.select(selected.map { TrayStore.shared.items[$0] })
+                TraySnapshot.hoveredFile = hovered
+            }
+        }
+        func clips(hovered: Int? = nil) -> @MainActor () -> Void {
+            {
+                loadClips(sampleClips)
+                TraySnapshot.hoveredClip = hovered
+            }
+        }
+        let pins = Array(sampleClips.prefix(1))
+        return [
+            Scene(name: "o-tray-dark", phase: .open, tab: .tray, setUp: files(selected: 4, hovered: 1)),
+            Scene(name: "o-tray-light", phase: .open, tab: .tray, theme: light, setUp: files(selected: 4, hovered: 1)),
+            Scene(name: "o-tray-smallest", phase: .open, tab: .tray, openSize: smallest, setUp: files(hovered: 0)),
+            Scene(name: "o-tray-smallest-light", phase: .open, tab: .tray, theme: light, openSize: smallest, setUp: files()),
+            Scene(name: "o-tray-largest", phase: .open, tab: .tray, openSize: largest, setUp: files(selected: 0)),
+            Scene(name: "o-tray-largest-light", phase: .open, tab: .tray, theme: light, openSize: largest, setUp: files()),
+            Scene(name: "o-tray-few", phase: .open, tab: .tray, setUp: {
+                TrayStore.shared.loadSample(Array(orbitTrayURLs.prefix(3)))
+            }),
+            Scene(name: "o-tray-dropping", phase: .open, tab: .tray, draggingFiles: true, setUp: files()),
+            Scene(name: "o-tray-dropping-light", phase: .open, tab: .tray, draggingFiles: true, theme: light, setUp: files()),
+            Scene(name: "o-tray-dropping-image", phase: .open, tab: .tray, draggingFiles: true, draggingImages: true,
+                  targetsDrop: true, setUp: files()),
+            Scene(name: "o-tray-dropping-image-smallest-light", phase: .open, tab: .tray, draggingFiles: true, draggingImages: true,
+                  theme: light, openSize: smallest, setUp: files()),
+            Scene(name: "o-tray-target", phase: .open, tab: .tray, targetsDrop: true, setUp: files()),
+            Scene(name: "o-tray-empty", phase: .open, tab: .tray, setUp: { TrayStore.shared.loadSample([]) }),
+            Scene(name: "o-tray-empty-light", phase: .open, tab: .tray, theme: light, openSize: smallest,
+                  setUp: { TrayStore.shared.loadSample([]) }),
+            Scene(name: "o-clipboard-dark", phase: .open, tab: .clipboard, setUp: clips(hovered: 1)),
+            Scene(name: "o-clipboard-light", phase: .open, tab: .clipboard, theme: light, setUp: clips(hovered: 1)),
+            Scene(name: "o-clipboard-smallest", phase: .open, tab: .clipboard, openSize: smallest, setUp: clips(hovered: 0)),
+            Scene(name: "o-clipboard-smallest-light", phase: .open, tab: .clipboard, theme: light, openSize: smallest, setUp: clips()),
+            Scene(name: "o-clipboard-largest", phase: .open, tab: .clipboard, openSize: largest, setUp: clips()),
+            Scene(name: "o-clipboard-largest-light", phase: .open, tab: .clipboard, theme: light, openSize: largest, setUp: clips(hovered: 2)),
+            Scene(name: "o-clipboard-search", phase: .open, tab: .clipboard, clipSearch: "git", setUp: clips()),
+            Scene(name: "o-clipboard-no-match", phase: .open, tab: .clipboard, clipSearch: "lunch", setUp: clips()),
+            Scene(name: "o-clipboard-empty", phase: .open, tab: .clipboard, setUp: { loadClips([]) }),
+            Scene(name: "o-clipboard-empty-light", phase: .open, tab: .clipboard, theme: light, setUp: { loadClips([]) }),
+            Scene(name: "o-clipboard-off", phase: .open, tab: .clipboard, setUp: { loadClips([], isOn: false) }),
+            Scene(name: "o-clipboard-off-pins", phase: .open, tab: .clipboard, theme: light, setUp: { loadClips(pins, isOn: false) }),
+            Scene(name: "o-clipboard-refused", phase: .open, tab: .clipboard, setUp: { loadClips(sampleClips, access: .asks) }),
+            Scene(name: "o-clipboard-refused-empty", phase: .open, tab: .clipboard, theme: light,
+                  setUp: { loadClips([], access: .denied) }),
+            Scene(name: "o-clipboard-dropping", phase: .open, tab: .clipboard, draggingFiles: true, setUp: clips()),
+            Scene(name: "o-clipboard-from-tray-side", phase: .open, tab: .tray, traySide: .clipboard, setUp: clips()),
+        ]
+    }
+
     /// Each tab at the smallest and the largest open size the settings allow, with more in every
     /// list than fits, so content that runs over or leaves a gap shows.
     private static func sizeScenes() -> [Scene] {
@@ -1270,6 +1626,12 @@ enum SnapshotRenderer {
         let short = CGSize(width: 680, height: 218), small = CGSize(width: 600, height: 196)
         let glass = NotchTheme(material: .glass)
         let noBluetooth: @MainActor () -> Void = { DeviceBatteryMonitor.shared.loadSample([], isAuthorized: false) }
+        let lowKeyboard: @MainActor () -> Void = {
+            DeviceBatteryMonitor.shared.loadSample([
+                .init(id: "airpods", name: "AirPods Pro", kind: .earbuds, left: 60, right: 62, batteryCase: 40),
+                .init(id: "keyboard", name: "Magic Keyboard", kind: .keyboard, main: 9),
+            ])
+        }
         let mute: @MainActor () -> Void = { VolumeMonitor.shared.loadSample(volume: 0.62, changing: false, canMute: true) }
         let hours: @MainActor () -> Void = { PomodoroTimer.shared.loadSample(remaining: 2 * 3600 - 1, running: true) }
         let resting: @MainActor () -> Void = { PomodoroTimer.shared.loadSample(remaining: 25 * 60, running: false) }
@@ -1323,6 +1685,99 @@ enum SnapshotRenderer {
                 noBluetooth()
             }),
             Scene(name: "edge-no-bluetooth-control-small", phase: .open, tab: .stats, openSize: small),
+            Scene(name: "o-control-no-bluetooth", phase: .open, tab: .stats, prepare: noBluetooth),
+            Scene(name: "o-control-no-bluetooth-light", phase: .open, tab: .stats, theme: NotchTheme(isDark: false),
+                  openSize: CGSize(width: 640, height: 300), prepare: noBluetooth),
+            // A keyboard running out, in red, in both looks.
+            Scene(name: "o-control-low-battery", phase: .open, tab: .stats, prepare: lowKeyboard),
+            Scene(name: "o-control-low-battery-light", phase: .open, tab: .stats, theme: NotchTheme(isDark: false),
+                  prepare: lowKeyboard),
+        ]
+    }
+
+    // MARK: Orbit · Music and Widgets
+
+    /// Orbit's smallest and largest open sizes.
+    private static let orbitSmall = CGSize(width: 640, height: 300)
+    private static let orbitLarge = CGSize(width: 880, height: 460)
+
+    /// The Music section in both themes and at both ends of the size range: playing, with lyrics,
+    /// with Artwork tint off, on covers from white to none, nothing playing, and the outputs. Each
+    /// scene sets the Artwork tint itself, so none leaks into the next.
+    private static func orbitMusicScenes() -> [Scene] {
+        let light = NotchTheme(isDark: false)
+        let track = NowPlayingService.Track(title: "Midnight City", artist: "M83", album: "Hurry Up, We're Dreaming", duration: 243)
+        func set(tint: Bool = true, lyricsAt elapsed: TimeInterval? = nil, cover: NSImage?? = nil,
+                 outputs: Bool = false) -> @MainActor () -> Void {
+            {
+                AppSettings.shared.artworkTint = tint
+                if let cover {
+                    NowPlayingService.shared.loadSample(track, artwork: cover, playing: true, elapsed: elapsed ?? 81)
+                }
+                if let elapsed {
+                    LyricsService.shared.loadSample(sampleLyrics)
+                    if cover == nil {
+                        NowPlayingService.shared.loadSample(track, artwork: sampleArtwork(), playing: true, elapsed: elapsed)
+                    }
+                }
+                if outputs { loadOutputs(pickerShown: true) }
+            }
+        }
+        let white = solidCover(.white), yellow = solidCover(NSColor(srgbRed: 1, green: 0.86, blue: 0.2, alpha: 1))
+        return [
+            Scene(name: "o-music-dark", phase: .open, tab: .music, setUp: set()),
+            Scene(name: "o-music-light", phase: .open, tab: .music, theme: light, setUp: set()),
+            Scene(name: "o-music-small", phase: .open, tab: .music, openSize: orbitSmall, setUp: set()),
+            Scene(name: "o-music-small-light", phase: .open, tab: .music, theme: light, openSize: orbitSmall, setUp: set()),
+            Scene(name: "o-music-large", phase: .open, tab: .music, openSize: orbitLarge, setUp: set()),
+            Scene(name: "o-music-large-light", phase: .open, tab: .music, theme: light, openSize: orbitLarge, setUp: set()),
+            Scene(name: "o-music-lyrics", phase: .open, tab: .music, setUp: set(lyricsAt: 81)),
+            Scene(name: "o-music-lyrics-light", phase: .open, tab: .music, theme: light, setUp: set(lyricsAt: 81)),
+            Scene(name: "o-music-lyrics-small", phase: .open, tab: .music, openSize: orbitSmall, setUp: set(lyricsAt: 115)),
+            Scene(name: "o-music-lyrics-large-light", phase: .open, tab: .music, theme: light, openSize: orbitLarge,
+                  setUp: set(lyricsAt: 81)),
+            Scene(name: "o-music-plain", phase: .open, tab: .music, setUp: set(tint: false)),
+            Scene(name: "o-music-plain-light", phase: .open, tab: .music, theme: light, setUp: set(tint: false, lyricsAt: 81)),
+            Scene(name: "o-music-cover-white", phase: .open, tab: .music, setUp: set(cover: .some(white))),
+            Scene(name: "o-music-cover-yellow-light", phase: .open, tab: .music, theme: light, setUp: set(cover: .some(yellow))),
+            Scene(name: "o-music-no-cover-light", phase: .open, tab: .music, theme: light, setUp: set(cover: .some(nil))),
+            Scene(name: "o-music-empty", phase: .open, tab: .music, hasTrack: false, setUp: set()),
+            Scene(name: "o-music-empty-light", phase: .open, tab: .music, hasTrack: false, theme: light, setUp: set()),
+            Scene(name: "o-music-empty-small", phase: .open, tab: .music, hasTrack: false, openSize: orbitSmall, setUp: set()),
+            Scene(name: "o-music-outputs", phase: .open, tab: .music, setUp: set(outputs: true)),
+        ]
+    }
+
+    /// The Widgets section: the picked widgets side by side, in both themes and at both ends of
+    /// the size range, one widget alone, and the weather waiting for a city. Last, as they change
+    /// the picked widgets.
+    private static func orbitWidgetsScenes() -> [Scene] {
+        let light = NotchTheme(isDark: false)
+        func pick(_ first: HomeWidget, _ second: HomeWidget, raining: Bool = false, place: String = "Lisbon") -> @MainActor () -> Void {
+            {
+                (AppSettings.shared.homeWidgetA, AppSettings.shared.homeWidgetB) = (first, second)
+                AppSettings.shared.pinnedShortcuts = ["Morning routine", "Log a glass of water", "Focus playlist", "Start the day"]
+                AppSettings.shared.worldClockCities = ["London", "New York", "Tokyo", "Sydney"]
+                WeatherService.shared.loadSample(place: place, conditions: place.isEmpty ? nil : .init(
+                    temperature: 18.4, high: 21.2, low: 12.6, code: raining ? 63 : 2, isDay: true, isRaining: raining,
+                    rainStart: raining ? nil : .now.addingTimeInterval(20 * 60), isHeavyRain: false))
+            }
+        }
+        return [
+            Scene(name: "o-widgets-weather-clock", phase: .open, tab: .home, setUp: pick(.weather, .clock)),
+            Scene(name: "o-widgets-weather-clock-light", phase: .open, tab: .home, theme: light, setUp: pick(.weather, .clock)),
+            Scene(name: "o-widgets-small", phase: .open, tab: .home, openSize: orbitSmall, setUp: pick(.weather, .clock)),
+            Scene(name: "o-widgets-small-light", phase: .open, tab: .home, theme: light, openSize: orbitSmall,
+                  setUp: pick(.shortcuts, .mirror)),
+            Scene(name: "o-widgets-large", phase: .open, tab: .home, openSize: orbitLarge, setUp: pick(.calendar, .weather)),
+            Scene(name: "o-widgets-large-light", phase: .open, tab: .home, theme: light, openSize: orbitLarge,
+                  setUp: pick(.clock, .shortcuts)),
+            Scene(name: "o-widgets-shortcuts-mirror", phase: .open, tab: .home, setUp: pick(.shortcuts, .mirror)),
+            Scene(name: "o-widgets-shortcuts-mirror-light", phase: .open, tab: .home, theme: light, setUp: pick(.shortcuts, .mirror)),
+            Scene(name: "o-widgets-calendar-timer", phase: .open, tab: .home, setUp: pick(.calendar, .timer)),
+            Scene(name: "o-widgets-rain-light", phase: .open, tab: .home, theme: light, setUp: pick(.weather, .none, raining: true)),
+            Scene(name: "o-widgets-one", phase: .open, tab: .home, setUp: pick(.clock, .none)),
+            Scene(name: "o-widgets-weather-setup", phase: .open, tab: .home, setUp: pick(.weather, .mirror, place: "")),
         ]
     }
 

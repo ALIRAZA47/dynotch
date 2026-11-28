@@ -67,10 +67,10 @@ final class PermissionStatus: ObservableObject {
         let camera = CameraService.shared
         let devices = DeviceBatteryMonitor.shared
         return [
-            Item(title: "Calendar", purpose: "Upcoming events in the Nook", symbol: "calendar", tint: .red,
+            Item(title: "Calendar", purpose: "Upcoming events in Live and Calendar", symbol: "calendar", tint: .red,
                  state: state(calendar.eventAccess == .fullAccess, undetermined: calendar.eventAccess == .notDetermined),
                  action: calendar.requestEventAccess),
-            Item(title: "Reminders", purpose: "Your list on the Focus tab", symbol: "checklist", tint: .orange,
+            Item(title: "Reminders", purpose: "Your list in the Focus section", symbol: "checklist", tint: .orange,
                  state: state(calendar.reminderAccess == .fullAccess, undetermined: calendar.reminderAccess == .notDetermined),
                  action: calendar.requestReminderAccess),
             Item(title: "Camera", purpose: "The Mirror widget", symbol: "camera.fill", tint: .teal,
@@ -277,12 +277,13 @@ struct PermissionRow: View {
     }
 }
 
-/// A green check and a word in a quiet green capsule: a permission that's allowed, a profile that's
-/// on. The green is the window's shade of it, deep enough to read on the light page, and its capsule
+/// A green check and a word in a quiet green box: a permission that's allowed, a profile that's
+/// on. The green is the window's shade of it, deep enough to read on the light page, and its box
 /// is fainter there, as a selected chip's is, so the word keeps 4.5:1.
 struct CheckCapsule: ViewModifier {
     var width: CGFloat?
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.notchTheme) private var theme
 
     private static let green = WindowAccent(choice: .green).color
 
@@ -292,7 +293,7 @@ struct CheckCapsule: ViewModifier {
             .foregroundStyle(Self.green)
             .padding(.horizontal, 10)
             .frame(width: width, height: 26)
-            .background(Capsule().fill(Self.green.opacity(colorScheme == .dark ? 0.12 : 0.06)))
+            .background(theme.controlShape.fill(Self.green.opacity(colorScheme == .dark ? 0.12 : 0.06)))
     }
 }
 

@@ -10,13 +10,15 @@ struct NotchRootView: View {
     @Environment(\.colorScheme) private var menuBarScheme
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.isSnapshot) private var isSnapshot
 
-    /// The user's look, with the system's Increase Contrast and Reduce Transparency.
+    /// The user's look, with the system's Increase Contrast and Reduce Transparency. Closed, the
+    /// notch is black and its contents are drawn for dark, whatever the panel's appearance.
     private var theme: NotchTheme {
-        var theme = settings.theme
+        var theme = settings.theme(systemIsDark: menuBarScheme == .dark)
         theme.isHighContrast = contrast == .increased
         theme.reducesTransparency = reduceTransparency
-        return theme
+        return viewModel.isOpen ? theme : theme.dark
     }
 
     var body: some View {
@@ -46,9 +48,7 @@ struct NotchRootView: View {
             .frame(width: metrics.width, height: metrics.height, alignment: .top)
             .padding(.horizontal, metrics.topRadius)
             .background {
-                NotchSurface(isGlass: viewModel.isOpen && theme.isGlass, topRadius: metrics.topRadius,
-                             bottomRadius: metrics.bottomRadius, bandHeight: viewModel.geometry.closedSize.height,
-                             chamfer: viewModel.isOpen)
+                NotchSurface(isOpen: viewModel.isOpen, topRadius: metrics.topRadius, bottomRadius: metrics.bottomRadius)
                 // Black fades into a light menu bar; a dark one needs the line a shade lighter than itself.
                 if isLine, menuBarScheme == .dark {
                     Color.white.opacity(0.55)
@@ -63,17 +63,33 @@ struct NotchRootView: View {
                                                 removal: .opacity.animation(.easeOut(duration: 0.2))))
                 }
             }
+            .overlay(alignment: .top) {
+                // The section buttons sit outside the panel's outline, so they're drawn over it unclipped.
+                if viewModel.isOpen, !viewModel.isCommandMode {
+                    SectionStrip(viewModel: viewModel, panel: CGSize(width: metrics.width, height: metrics.height))
+                        .frame(width: metrics.width, height: metrics.height, alignment: .top)
+                        .transition(.opacity.animation(.easeOut(duration: 0.1)))
+                }
+            }
+            .overlay(alignment: .top) {
+                // The camera housing, drawn for snapshots so a light panel shows it as a real Mac would.
+                if isSnapshot, viewModel.isOpen, viewModel.geometry.hasHardwareNotch {
+                    UnevenRoundedRectangle(cornerRadii: .init(bottomLeading: 10, bottomTrailing: 10), style: .continuous)
+                        .fill(.black)
+                        .frame(width: viewModel.geometry.closedSize.width, height: viewModel.geometry.closedSize.height)
+                        .allowsHitTesting(false)
+                }
+            }
             .modifier(SnapshotLayer())
-            // Glass carries a lighter shadow: a heavy one shows through it.
             .shadow(color: .black.opacity((viewModel.isOpen || viewModel.isGlancing) && settings.showOpenShadow
-                        ? (viewModel.isOpen && theme.isGlass ? 0.3 : 0.5) : 0),
-                    radius: 18, y: 8)
+                        ? (theme.isDark ? 0.42 : 0.22) : 0),
+                    radius: 17, y: 13)
             // The line is faint until the pointer finds it.
             .opacity(isLine ? (viewModel.phase == .hovering ? 0.7 : 0.4) : 1)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .environment(\.colorScheme, .dark)
+        .environment(\.colorScheme, theme.colorScheme)
         .environment(\.notchTheme, theme)
         .tint(theme.accent)
     }
@@ -127,8 +143,77 @@ struct ClosedNotchView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
+        if viewModel.showsDots {
+            dotsBody
+        } else {
+            activitiesBody
+        }
+    }
+
+    /// Orbit's status dots either side of the camera.
+    private var dotsBody: some View {
         let layout = viewModel.closedLayout
-        VStack(spacing: 0) {
+        let dots = viewModel.closedDots
+        return HStack(spacing: 0) {
+            HStack(spacing: ClosedDots.musicGap) {
+                if dots.music {
+                    ArtworkView(image: media.artwork, size: viewModel.geometry.closedSize.height - 12, cornerRadius: 5)
+                        .transition(arrival(from: 0.6))
+                }
+                dotRow(dots.left)
+            }
+            .padding(.leading, 11)
+            .frame(width: layout.earWidth, height: layout.notchHeight, alignment: .leading)
+            Color.clear.frame(width: layout.notchWidth)
+            HStack(spacing: ClosedDots.musicGap) {
+                dotRow(dots.right)
+                if dots.music {
+                    AudioBars(isPlaying: media.isPlaying, color: tint)
+                        .frame(width: ClosedDots.barsWidth, height: 13)
+                        .transition(arrival(from: 0.5))
+                }
+            }
+            .padding(.trailing, 11)
+            .frame(width: layout.earWidth, height: layout.notchHeight, alignment: .trailing)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .clipped()
+        .contentShape(Rectangle())
+        .onTapGesture { viewModel.activate() }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(dots.isEmpty ? "Notch"
+            : ((dots.music ? ["Music playing"] : []) + (dots.left + dots.right).map(\.label)).joined(separator: ", "))
+    }
+
+    private func dotRow(_ dots: [ClosedDots.Dot]) -> some View {
+        HStack(spacing: ClosedDots.spacing) {
+            ForEach(dots) { dot in
+                Circle()
+                    .fill(color(for: dot.tone))
+                    .frame(width: ClosedDots.size, height: ClosedDots.size)
+                    .background {
+                        if dot.tone == .needsYou {
+                            Circle().fill(theme.accent.opacity(0.35)).padding(-3)
+                        }
+                    }
+                    .transition(arrival(from: 0.3))
+            }
+        }
+        .animation(.notchActivity, value: dots)
+    }
+
+    private func color(for tone: ClosedDots.Tone) -> Color {
+        switch tone {
+        case .live: Color(red: 0.19, green: 0.82, blue: 0.35)
+        case .running: Color(white: 0.96)
+        case .needsYou: theme.accent
+        case .alert: Color(red: 1, green: 0.27, blue: 0.23)
+        }
+    }
+
+    private var activitiesBody: some View {
+        let layout = viewModel.closedLayout
+        return VStack(spacing: 0) {
             HStack(spacing: 0) {
                 leading
                     .padding(.leading, 10)
@@ -186,6 +271,9 @@ struct ClosedNotchView: View {
         case .timer:
             ProgressRing(progress: timer.progress, color: timer.phase.color, lineWidth: 2.6)
                 .frame(width: 17, height: 17)
+        case .notice(let notice) where notice.isPeek:
+            PeekAppIcon(bundleID: notice.appBundleID, symbol: notice.symbol, tint: notice.tint)
+                .transition(arrival(from: 0.6))
         case .notice(let notice):
             Image(systemName: notice.symbol)
                 .font(.system(size: 13, weight: .semibold))
@@ -229,6 +317,10 @@ struct ClosedNotchView: View {
             case .meter(let level):
                 LevelBar(level: level)
                     .frame(width: 62, height: 5)
+            case .info where notice.isPeek:
+                Text("now")
+                    .font(NotchFont.time(11.5, .medium))
+                    .foregroundStyle(theme.secondary)
             case .info:
                 NoticeText(text: notice.text, tint: notice.tint)
             }
@@ -256,6 +348,20 @@ struct ClosedNotchView: View {
             }
         case .lyrics:
             LyricRow()
+        case .notice(let notice) where notice.isPeek:
+            VStack(alignment: .leading, spacing: 1) {
+                Text(notice.text)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(theme.primary)
+                if let detail = notice.detail {
+                    Text(detail)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(theme.secondary)
+                }
+            }
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
         case .notice(let notice):
             if let detail = notice.detail {
                 // `ClosedLayout` widens the notch for this face, up to `maxRowWidth`.
@@ -332,5 +438,28 @@ struct ScriptBadge: View {
             .background(Circle().fill(.white))
             .offset(x: 4, y: 3)
             .accessibilityLabel("From a script")
+    }
+}
+
+/// A notification's app, as its own icon in a small rounded square, or the notice's symbol when
+/// the app can't be found.
+struct PeekAppIcon: View {
+    let bundleID: String?
+    let symbol: String
+    let tint: Color
+
+    var body: some View {
+        if let bundleID, let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+            Image(nsImage: NSWorkspace.shared.icon(forFile: url.path))
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 20, height: 20)
+                .accessibilityHidden(true)
+        } else {
+            Image(systemName: symbol)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 20, height: 20)
+        }
     }
 }

@@ -32,6 +32,14 @@ final class AudioLevels: ObservableObject {
     private var generation = 0
     private var stopTask: Task<Void, Never>?
     private var listener: AudioObjectPropertyListenerBlock?
+    /// The audio clients' bundle IDs, so a change to the list reads only the clients new to it.
+    private var directory = AudioClientDirectory()
+    /// `directory` matches the list. It's read again only when the tap is wanted and it doesn't,
+    /// never for a Now Playing change alone.
+    private var listIsCurrent = false
+    /// A change to the list waits for the rest of its burst.
+    private var listChange: Task<Void, Never>?
+    static let listDebounce: Duration = .milliseconds(250)
     private var cancellables = Set<AnyCancellable>()
     /// Creating, starting and destroying the tap can each take a moment.
     private static let control = DispatchQueue(label: "app.dynotch.equalizer.control", qos: .userInitiated)
@@ -106,8 +114,22 @@ final class AudioLevels: ObservableObject {
     }
 
     private func audioSystemChanged(_ selector: AudioObjectPropertySelector) {
-        if selector == kAudioHardwarePropertyDefaultOutputDevice, tapBundleID != nil { stopTap() }
-        update()
+        guard selector == kAudioHardwarePropertyProcessObjectList else {
+            if selector == kAudioHardwarePropertyDefaultOutputDevice, tapBundleID != nil { stopTap() }
+            update()
+            return
+        }
+        // Clients come and go in bursts, and starting or stopping the tap is one of them: Dynotch
+        // becomes a client itself. That reads one new bundle ID, finds the player's clients as they
+        // were and leaves the tap alone, so it can't go round.
+        listIsCurrent = false
+        listChange?.cancel()
+        listChange = Task { [weak self] in
+            try? await Task.sleep(for: Self.listDebounce)
+            guard !Task.isCancelled else { return }
+            self?.listChange = nil
+            self?.update()
+        }
     }
 
     private func update() {
@@ -142,7 +164,11 @@ final class AudioLevels: ObservableObject {
         }
         stopTask?.cancel()
         stopTask = nil
-        let processes = Self.processes(for: bundleID)
+        if !listIsCurrent {
+            directory.update(list: Self.processList(), bundleID: Self.bundleID(of:))
+            listIsCurrent = true
+        }
+        let processes = directory.processes(for: bundleID)
         guard bundleID != tapBundleID || processes != tapProcesses else { return }
         stopTap()
         // A player only gets a process object once it makes sound; the process list listener tries again then.
@@ -210,8 +236,8 @@ final class AudioLevels: ObservableObject {
         if next != bands { bands = next }
     }
 
-    /// The player's audio process objects: the app itself and any helpers whose bundle IDs start with its own.
-    private static func processes(for bundleID: String) -> [AudioObjectID] {
+    /// Every audio process object on the Mac.
+    private static func processList() -> [AudioObjectID] {
         let system = AudioObjectID(kAudioObjectSystemObject)
         var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyProcessObjectList,
                                                  mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
@@ -219,21 +245,58 @@ final class AudioLevels: ObservableObject {
         guard AudioObjectGetPropertyDataSize(system, &address, 0, nil, &size) == noErr, size > 0 else { return [] }
         var list = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
         guard AudioObjectGetPropertyData(system, &address, 0, nil, &size, &list) == noErr else { return [] }
-        return list.filter { process in
-            var address = AudioObjectPropertyAddress(mSelector: kAudioProcessPropertyBundleID,
-                                                     mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
-            var value: Unmanaged<CFString>?
-            var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
-            guard AudioObjectGetPropertyData(process, &address, 0, nil, &size, &value) == noErr,
-                  let id = value?.takeRetainedValue() as String? else { return false }
-            return id == bundleID || id.hasPrefix(bundleID + ".")
-        }
+        return Array(list.prefix(Int(size) / MemoryLayout<AudioObjectID>.size))
+    }
+
+    private static func bundleID(of process: AudioObjectID) -> String? {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioProcessPropertyBundleID,
+                                                 mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var value: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        guard AudioObjectGetPropertyData(process, &address, 0, nil, &size, &value) == noErr else { return nil }
+        return value?.takeRetainedValue() as String? ?? ""
     }
 
     // MARK: Snapshots
 
     func loadSample(_ bands: [Float]?) {
         self.bands = bands
+    }
+}
+
+/// The audio clients' bundle IDs, each read once, when its process object first shows up.
+struct AudioClientDirectory {
+    private var order: [AudioObjectID] = []
+    /// Empty for a client without one.
+    private var bundleIDs: [AudioObjectID: String] = [:]
+
+    /// Takes the list as it is now, reading the bundle ID of only the clients new to it. One that
+    /// couldn't be read is tried again next time. Returns how many were read.
+    @discardableResult
+    mutating func update(list: [AudioObjectID], bundleID: (AudioObjectID) -> String?) -> Int {
+        var next: [AudioObjectID: String] = [:]
+        var reads = 0
+        for process in list where next[process] == nil {
+            if let known = bundleIDs[process] {
+                next[process] = known
+            } else {
+                reads += 1
+                if let id = bundleID(process) { next[process] = id }
+            }
+        }
+        order = list
+        bundleIDs = next
+        return reads
+    }
+
+    /// The player's clients, in the list's order: the app itself and any helpers whose bundle IDs
+    /// start with its own.
+    func processes(for bundleID: String) -> [AudioObjectID] {
+        var seen: Set<AudioObjectID> = []
+        return order.filter { process in
+            guard let id = bundleIDs[process], seen.insert(process).inserted else { return false }
+            return id == bundleID || id.hasPrefix(bundleID + ".")
+        }
     }
 }
 

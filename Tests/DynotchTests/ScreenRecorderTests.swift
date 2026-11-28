@@ -1112,6 +1112,95 @@ struct RecordingCaptureTests {
         #expect(rig.saved().count == 1)
     }
 
+    /// `dynotch://capture` and `dynotch capture` can come from anything on the Mac: they say a
+    /// recording is going and leave it alone.
+    @Test func aLinkNeverStopsARecording() async throws {
+        let rig = try Rig()
+        await rig.record()
+        try #require(rig.recorder.isRunning)
+        let controller = CaptureController.shared
+        let saved = (controller.recorder, controller.notify)
+        var notices: [LiveNotice] = []
+        controller.recorder = rig.recorder
+        controller.notify = { notice, _ in notices.append(notice) }
+        defer { (controller.recorder, controller.notify) = saved }
+
+        controller.begin(fromScript: true)
+        controller.begin(fromScript: true)
+        #expect(rig.recorder.isRunning)
+        #expect(!controller.isActive)
+        #expect(notices.count == 2)
+        #expect(notices.first?.key == "capture" && notices.first?.text == "Recording")
+        // The keyboard shortcut and the menu still stop it.
+        controller.begin()
+        #expect(rig.recorder.state == .saving)
+        await rig.landed()
+        #expect(rig.saved().count == 1)
+    }
+
+    // MARK: Left behind by a crash
+
+    private func staged(_ name: String, in folder: URL, age: TimeInterval) throws -> URL {
+        let url = folder.appendingPathComponent(name)
+        try Data("moov".utf8).write(to: url)
+        try FileManager.default.setAttributes([.modificationDate: Date.now.addingTimeInterval(-age)], ofItemAtPath: url.path)
+        return url
+    }
+
+    @Test func onlyAHiddenRecordingsOwnNameCounts() {
+        let id = UUID().uuidString
+        #expect(ScreenRecorder.isStagedName(".recording-\(id).mp4"))
+        #expect(ScreenRecorder.isStagedName(".recording-\(id.lowercased()).mp4"))
+        #expect(!ScreenRecorder.isStagedName("recording-\(id).mp4"))
+        #expect(!ScreenRecorder.isStagedName(".recording-\(id).gif"))
+        #expect(!ScreenRecorder.isStagedName(".recording-\(id).mp4.txt"))
+        #expect(!ScreenRecorder.isStagedName(".recording-holiday.mp4"))
+        #expect(!ScreenRecorder.isStagedName(".recording-\(id)-2.mp4"))
+        #expect(!ScreenRecorder.isStagedName("Screen Recording 2026-10-31 at 18.02.06.mp4"))
+    }
+
+    @Test func aStaleHiddenRecordingIsFoundAndNothingElse() throws {
+        let rig = try Rig()
+        let folder = rig.tray.folder
+        let stale = try staged(".recording-\(UUID().uuidString).mp4", in: folder, age: 3600)
+        _ = try staged(".recording-\(UUID().uuidString).mp4", in: folder, age: 5)
+        let kept = try staged(".recording-\(UUID().uuidString).mp4", in: folder, age: 3600)
+        _ = try staged(".recording-\(UUID().uuidString).gif", in: folder, age: 3600)
+        _ = try staged("Screen Recording.mp4", in: folder, age: 3600)
+        let directory = folder.appendingPathComponent(".recording-\(UUID().uuidString).mp4", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes([.modificationDate: Date.now.addingTimeInterval(-3600)], ofItemAtPath: directory.path)
+        let found = ScreenRecorder.staleStagedFiles(in: folder, keeping: [kept.standardizedFileURL.path])
+        #expect(found.map(\.lastPathComponent) == [stale.lastPathComponent])
+    }
+
+    /// The launch clean-up: a recording that couldn't be moved stays in the Tray under its hidden name,
+    /// and that one is kept.
+    @Test func atLaunchStaleRecordingsGoAndTheTraysStay() async throws {
+        let rig = try Rig()
+        let folder = rig.tray.folder
+        let stale = try staged(".recording-\(UUID().uuidString).mp4", in: folder, age: 3600)
+        let inTheTray = try staged(".recording-\(UUID().uuidString).mp4", in: folder, age: 3600)
+        let fresh = try staged(".recording-\(UUID().uuidString).mp4", in: folder, age: 1)
+        rig.tray.add([inTheTray])
+        await rig.recorder.removeStaleStagedFiles().value
+        #expect(!FileManager.default.fileExists(atPath: stale.path))
+        #expect(FileManager.default.fileExists(atPath: inTheTray.path))
+        #expect(FileManager.default.fileExists(atPath: fresh.path))
+    }
+
+    @Test func theRecordingBeingWrittenIsLeftAlone() async throws {
+        let rig = try Rig()
+        await rig.record()
+        let writing = try #require(rig.trayFiles().first { ScreenRecorder.isStagedName($0) })
+        let url = rig.tray.folder.appendingPathComponent(writing)
+        try FileManager.default.setAttributes([.modificationDate: Date.now.addingTimeInterval(-3600)], ofItemAtPath: url.path)
+        await rig.recorder.removeStaleStagedFiles().value
+        #expect(FileManager.default.fileExists(atPath: url.path))
+        rig.recorder.stop()
+        await rig.landed()
+    }
+
     /// Only the row itself, on the fake recorder: the whole command list reads the real stores.
     @Test func theCommandFieldOffersStopWhileRecordingAndItStops() async throws {
         let rig = try Rig()

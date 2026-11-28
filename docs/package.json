@@ -14,7 +14,7 @@
   "dependencies": {
     "@astrojs/mdx": "^8.1.2",
     "@astrojs/sitemap": "^3.7.4",
-    "astro": "^7.4.4",
+    "astro": "^7.4.13",
     "marked": "^18.1.2",
     "pagefind": "^1.5.2"
   },

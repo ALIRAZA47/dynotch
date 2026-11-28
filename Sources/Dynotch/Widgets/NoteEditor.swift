@@ -12,12 +12,29 @@ final class NoteEditorHandle {
     }
 }
 
-/// A plain-text Markdown editor. Checklist items ("- [ ] ", "- [x] ") show a round checkbox you
+/// How large a note's text is drawn: small in a widget, a page's size with the first line as its
+/// title in Notes.
+struct NoteStyle: Equatable {
+    /// The text's point size.
+    var size: CGFloat
+    /// The first line's size, as the note's title, or nil to draw it like the rest.
+    var titleSize: CGFloat?
+    /// Room after each line, which spaces a checklist out into rows.
+    var lineGap: CGFloat
+    /// A checkbox's side.
+    var box: CGFloat
+
+    static let card = NoteStyle(size: 12.5, titleSize: nil, lineGap: 3, box: 12)
+    static let page = NoteStyle(size: 13.5, titleSize: 18, lineGap: 10, box: 15)
+}
+
+/// A plain-text Markdown editor. Checklist items ("- [ ] ", "- [x] ") show a square checkbox you
 /// can click, Return carries a list on to the next line, and ticked items are struck through.
 struct NoteEditor: NSViewRepresentable {
     let noteID: NotesStore.Note.ID?
     let text: String
     let handle: NoteEditorHandle
+    var style: NoteStyle = .card
     let onChange: (String) -> Void
 
     func makeCoordinator() -> Coordinator {
@@ -52,7 +69,7 @@ struct NoteEditor: NSViewRepresentable {
 
         handle.textView = textView
         context.coordinator.noteID = noteID
-        textView.follow(context.environment.notchTheme)
+        textView.follow(context.environment.notchTheme, style: style)
         textView.setText(text)
         return scrollView
     }
@@ -60,7 +77,7 @@ struct NoteEditor: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let textView = scrollView.documentView as? NoteTextView else { return }
         handle.textView = textView
-        textView.follow(context.environment.notchTheme)
+        textView.follow(context.environment.notchTheme, style: style)
         context.coordinator.onChange = onChange
         if context.coordinator.noteID != noteID {
             context.coordinator.noteID = noteID
@@ -104,17 +121,24 @@ private final class NoteScrollView: NSScrollView {
 }
 
 final class NoteTextView: NSTextView {
-    private static let font = NSFont.systemFont(ofSize: 11.5)
-    private static let headingFont = NSFont.systemFont(ofSize: 12.5, weight: .bold)
-    private static let base: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
+    private var style = NoteStyle.card
+    private var bodyFont = NSFont.systemFont(ofSize: NoteStyle.card.size)
+    private var headingFont = NSFont.systemFont(ofSize: NoteStyle.card.size + 1, weight: .bold)
+    private var base: [NSAttributedString.Key: Any] = [:]
     /// For the hidden "- [ ] ": small, so the text starts just past the checkbox, and monospaced, so
     /// "[x]" takes as much room as "[ ]" and ticked items line up with the rest.
-    private static let markerFont = NSFont.monospacedSystemFont(ofSize: 6, weight: .regular)
+    private var markerFont = NSFont.monospacedSystemFont(ofSize: 6, weight: .regular)
 
-    /// Ticked items, list markers and empty checkboxes: the theme's tertiary white, so they stay
-    /// readable on black and on glass.
-    private var dim = NSColor.white.withAlphaComponent(0.5)
-    /// The theme `dim` and the insertion point were last set from.
+    /// The text, in the theme's primary.
+    private var ink = NSColor.labelColor
+    /// Ticked items: the theme's secondary, struck through.
+    private var done = NSColor.secondaryLabelColor
+    /// List markers: the theme's tertiary.
+    private var dim = NSColor.tertiaryLabelColor
+    private var accent = NSColor.controlAccentColor
+    private var onAccent = NSColor.white
+    private var boxRadius: CGFloat = 2
+    /// The theme and the style the colors and fonts were last set from.
     private var theme: NotchTheme?
 
     /// The "- [ ]" of each checklist item, and whether it's ticked.
@@ -123,13 +147,25 @@ final class NoteTextView: NSTextView {
     /// The notch never activates the app, so the first click has to count.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    /// Takes its colors from the notch's theme: the insertion point in the accent, and quieter
-    /// parts in tertiary. Restyles only when the theme changed.
-    func follow(_ theme: NotchTheme) {
-        guard theme != self.theme else { return }
+    /// Takes its colors from the notch's theme, the insertion point in the accent, and its sizes from
+    /// `style`. Restyles only when either changed.
+    func follow(_ theme: NotchTheme, style: NoteStyle) {
+        guard theme != self.theme || style != self.style || base.isEmpty else { return }
         self.theme = theme
-        insertionPointColor = NSColor(theme.accent)
+        self.style = style
+        ink = NSColor(theme.primary)
+        done = NSColor(theme.secondary)
         dim = NSColor(theme.tertiary)
+        accent = NSColor(theme.accent)
+        onAccent = NSColor(theme.onAccent)
+        boxRadius = min(theme.radius * 0.8, style.box / 2 - 2)
+        insertionPointColor = accent
+        bodyFont = NSFont.systemFont(ofSize: style.size)
+        headingFont = NSFont.systemFont(ofSize: style.size + 1, weight: .bold)
+        markerFont = NSFont.monospacedSystemFont(ofSize: (style.box + 7) / 3.6, weight: .regular)
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.paragraphSpacing = style.lineGap
+        base = [.font: bodyFont, .foregroundColor: ink, .paragraphStyle: paragraph]
         restyle()
     }
 
@@ -152,7 +188,7 @@ final class NoteTextView: NSTextView {
         let text = storage.string as NSString
         var boxes: [(range: NSRange, checked: Bool)] = []
         storage.beginEditing()
-        storage.setAttributes(Self.base, range: NSRange(location: 0, length: text.length))
+        storage.setAttributes(base, range: NSRange(location: 0, length: text.length))
         var location = 0
         while location < text.length {
             var start = 0, end = 0, contentsEnd = 0
@@ -160,27 +196,34 @@ final class NoteTextView: NSTextView {
             let line = NoteLine(text.substring(with: NSRange(location: start, length: contentsEnd - start)))
             let marker = NSRange(location: start + (line.indent as NSString).length, length: (line.marker as NSString).length)
             let content = NSRange(location: NSMaxRange(marker), length: contentsEnd - NSMaxRange(marker))
+            let whole = NSRange(location: start, length: contentsEnd - start)
             switch line.kind {
             case .checklist(let checked):
-                storage.addAttributes([.foregroundColor: NSColor.clear, .font: Self.markerFont], range: marker)
+                storage.addAttributes([.foregroundColor: NSColor.clear, .font: markerFont], range: marker)
                 boxes.append((NSRange(location: marker.location, length: min(5, marker.length)), checked))
                 if checked {
-                    storage.addAttributes([.foregroundColor: dim, .strikethroughStyle: NSUnderlineStyle.single.rawValue,
-                                           .strikethroughColor: dim], range: content)
+                    storage.addAttributes([.foregroundColor: done, .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+                                           .strikethroughColor: done], range: content)
                 }
+            case .heading where start == 0 && style.titleSize != nil:
+                storage.addAttribute(.font, value: NSFont.systemFont(ofSize: style.titleSize!, weight: .semibold), range: whole)
+                storage.addAttribute(.foregroundColor, value: dim, range: marker)
             case .heading:
-                storage.addAttribute(.font, value: Self.headingFont, range: NSRange(location: start, length: contentsEnd - start))
+                storage.addAttribute(.font, value: headingFont, range: whole)
                 storage.addAttribute(.foregroundColor, value: dim, range: marker)
             case .bullet:
                 storage.addAttribute(.foregroundColor, value: dim, range: marker)
             case .text:
-                break
+                // The note's first line is its title, drawn as one on a page.
+                if start == 0, let titleSize = style.titleSize {
+                    storage.addAttribute(.font, value: NSFont.systemFont(ofSize: titleSize, weight: .semibold), range: whole)
+                }
             }
             location = end
         }
         storage.endEditing()
         self.boxes = boxes
-        typingAttributes = Self.base
+        typingAttributes = base
         needsDisplay = true
     }
 
@@ -264,28 +307,42 @@ final class NoteTextView: NSTextView {
         didChangeText()
     }
 
-    /// Where a checkbox goes: from the start of its marker, as tall as its line.
+    /// The checkbox: a square at the start of its marker, centred on the line's capitals.
     private func rect(for range: NSRange) -> NSRect {
         // Boxes can be a step behind the text while an input method is composing.
-        guard let layoutManager, let textContainer, NSMaxRange(range) <= (string as NSString).length else { return .zero }
+        guard let layoutManager, NSMaxRange(range) <= (string as NSString).length else { return .zero }
         let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-        let marker = layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
-        let line = layoutManager.lineFragmentUsedRect(forGlyphAt: glyphs.location, effectiveRange: nil)
-        return NSRect(x: marker.minX + textContainerOrigin.x, y: line.minY + textContainerOrigin.y,
-                      width: max(marker.width, 13), height: line.height)
+        let line = layoutManager.lineFragmentRect(forGlyphAt: glyphs.location, effectiveRange: nil)
+        let start = layoutManager.location(forGlyphAt: glyphs.location)
+        // The baseline, down from the top of the line in this flipped view.
+        let baseline = line.minY + start.y + textContainerOrigin.y
+        let side = style.box
+        let midY = baseline - bodyFont.capHeight / 2
+        return NSRect(x: (line.minX + start.x + textContainerOrigin.x).rounded(), y: (midY - side / 2).rounded(),
+                      width: side, height: side)
     }
 
+    /// An empty square in the secondary text color, or a tick on the accent once it's done.
     private func drawCheckbox(checked: Bool, in rect: NSRect) {
-        // A dark tick on a yellow disc, like Notes; an empty ring otherwise. The symbol applies a
-        // palette color's alpha twice, so the ring gets `dim` opaque and its alpha when it's drawn.
-        let colors = checked ? [NSColor.black, NSColor.systemYellow] : [dim.withAlphaComponent(1)]
-        let configuration = NSImage.SymbolConfiguration(pointSize: 11, weight: .medium)
-            .applying(NSImage.SymbolConfiguration(paletteColors: colors))
-        guard let image = NSImage(systemSymbolName: checked ? "checkmark.circle.fill" : "circle", accessibilityDescription: nil)?
-            .withSymbolConfiguration(configuration) else { return }
-        let size = image.size
-        let origin = NSPoint(x: rect.minX, y: (rect.midY - size.height / 2).rounded())
-        image.draw(in: NSRect(origin: origin, size: size), from: .zero, operation: .sourceOver,
-                   fraction: checked ? 1 : dim.alphaComponent, respectFlipped: true, hints: nil)
+        if checked {
+            let shape = NSBezierPath(roundedRect: rect, xRadius: boxRadius, yRadius: boxRadius)
+            accent.setFill()
+            shape.fill()
+            let tick = NSBezierPath()
+            tick.move(to: NSPoint(x: rect.minX + rect.width * 0.26, y: rect.minY + rect.height * 0.52))
+            tick.line(to: NSPoint(x: rect.minX + rect.width * 0.43, y: rect.minY + rect.height * 0.69))
+            tick.line(to: NSPoint(x: rect.minX + rect.width * 0.75, y: rect.minY + rect.height * 0.33))
+            tick.lineWidth = max(1.5, rect.width * 0.12)
+            tick.lineCapStyle = .round
+            tick.lineJoinStyle = .round
+            onAccent.setStroke()
+            tick.stroke()
+        } else {
+            let inset = rect.insetBy(dx: 0.75, dy: 0.75)
+            let shape = NSBezierPath(roundedRect: inset, xRadius: max(0, boxRadius - 0.75), yRadius: max(0, boxRadius - 0.75))
+            shape.lineWidth = 1.5
+            done.setStroke()
+            shape.stroke()
+        }
     }
 }

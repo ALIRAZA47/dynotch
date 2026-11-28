@@ -16,8 +16,9 @@ struct WorldClockWidget: View {
             } else {
                 TimelineView(.everyMinute) { context in
                     Scroller(.vertical, fadesOverflow: true) {
-                        VStack(spacing: 6) {
-                            ForEach(places, id: \.name) { place in
+                        VStack(spacing: 0) {
+                            ForEach(Array(places.enumerated()), id: \.element.name) { index, place in
+                                if index > 0 { theme.line.frame(height: 1) }
                                 row(place, at: context.date)
                             }
                         }
@@ -27,26 +28,28 @@ struct WorldClockWidget: View {
         }
     }
 
+    /// The city, the day where it isn't today here, and the time in SF Mono.
     private func row(_ place: WorldPlace, at date: Date) -> some View {
         let clock = WorldTime.clock(at: place, on: date)
-        return HStack(alignment: .firstTextBaseline, spacing: 6) {
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
             Text(place.name)
-                .font(NotchFont.body)
+                .font(NotchFont.bodyStrong)
                 .foregroundStyle(theme.primary)
                 .lineLimit(1)
             Spacer(minLength: 4)
             if let day = clock.day {
                 Text(day)
                     .font(NotchFont.caption)
-                    .foregroundStyle(theme.tertiary)
+                    .foregroundStyle(theme.secondary)
             }
             Text(clock.time)
-                .font(NotchFont.numeric(13.5))
+                .font(NotchFont.time(15))
                 .foregroundStyle(theme.primary)
                 .lineLimit(1)
                 .fixedSize()
         }
         .frame(maxWidth: .infinity)
+        .frame(height: 34)
         .accessibilityElement(children: .combine)
     }
 }

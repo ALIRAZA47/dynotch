@@ -49,10 +49,32 @@ struct ClosedLayout: Equatable {
         self.init(activity: activity, secondary: nil, notch: notch)
     }
 
+    /// Status dots: as many each side as the busier side has, so the camera stays centered.
+    init(dots: ClosedDots, notch: CGSize) {
+        notchWidth = notch.width
+        notchHeight = notch.height
+        // Each side: its dots, plus the artwork on the left or the bars on the right while music plays.
+        func side(_ count: Int, music: CGFloat) -> CGFloat {
+            let dotsWidth = count == 0 ? 0 : CGFloat(count) * ClosedDots.size + CGFloat(count - 1) * ClosedDots.spacing
+            let item = dots.music ? music : 0
+            let gap = dotsWidth > 0 && item > 0 ? ClosedDots.musicGap : 0
+            return dotsWidth + item + gap
+        }
+        let widest = max(side(dots.left.count, music: notch.height - 12), side(dots.right.count, music: ClosedDots.barsWidth))
+        earWidth = widest == 0 ? 0 : 22 + widest
+        rowHeight = 0
+    }
+
     /// How wide each ear must be for a notice's second row to fit, measured in the row's font.
     private static func rowEarWidth(for activity: ClosedActivity, notch: CGSize) -> CGFloat {
         let text: CGFloat
-        if case .lyrics(let rowWidth) = activity {
+        if case .notice(let notice) = activity, notice.isPeek {
+            // Orbit's peek: the sender over the message, each measured in its own font.
+            let font = { (size: CGFloat, weight: NSFont.Weight, string: String) in
+                (string as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: size, weight: weight)]).width
+            }
+            text = max(font(13, .semibold, notice.text), font(12.5, .regular, notice.detail ?? ""))
+        } else if case .lyrics(let rowWidth) = activity {
             text = rowWidth
         } else if case .notice(let notice) = activity, case .info = notice.kind, let detail = notice.detail {
             text = (detail as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .medium)]).width
@@ -116,11 +138,95 @@ struct ClosedLayout: Equatable {
             case .meter:
                 earWidth = 96
                 rowHeight = 0
+            case .info where notice.isPeek:
+                // The app's icon on the left, "now" on the right, the sender and the message underneath.
+                earWidth = 46
+                rowHeight = 44
             case .info:
                 earWidth = max(56, CGFloat(notice.text.count) * 7.5 + 22)
                 rowHeight = notice.detail == nil ? 0 : 26
             }
         }
+    }
+}
+
+/// Orbit's closed notch: a dot for each live thing, beside the camera, in the order of the section
+/// buttons: those whose section sits left of the camera on the left, the rest on the right.
+struct ClosedDots: Equatable {
+    enum Tone: Equatable {
+        /// Green: playing.
+        case live
+        /// White: running, like a timer or a run.
+        case running
+        /// The accent with a halo: it waits on you.
+        case needsYou
+        /// Red: recording, or something failed.
+        case alert
+    }
+
+    struct Dot: Equatable, Identifiable {
+        let id: String
+        let tone: Tone
+        let tab: NotchTab
+        /// What it stands for, for VoiceOver: a color alone says nothing there.
+        let label: String
+    }
+
+    static let size: CGFloat = 6
+    static let spacing: CGFloat = 5
+    /// Between the artwork or the bars and the dots beside them.
+    static let musicGap: CGFloat = 8
+    static let barsWidth: CGFloat = 18
+
+    var left: [Dot] = []
+    var right: [Dot] = []
+    /// Music from Music or Spotify is playing: it shows as its artwork on the left and moving bars
+    /// on the right, rather than as a dot.
+    var music = false
+
+    var isEmpty: Bool { left.isEmpty && right.isEmpty && !music }
+
+    /// What's live now, as dots, from the same sources as the closed notch's activities.
+    @MainActor
+    static func current() -> ClosedDots {
+        let settings = AppSettings.shared
+        var dots: [Dot] = []
+        if ScreenRecorder.shared.isActive { dots.append(Dot(id: "recording", tone: .alert, tab: .live, label: "Recording the screen")) }
+        let music = settings.liveMusic && NowPlayingService.shared.isPlaying && NowPlayingService.shared.track != nil
+        if !DownloadMonitor.shared.downloads.isEmpty, settings.liveDownloads {
+            dots.append(Dot(id: "download", tone: .running, tab: .tray, label: "Downloading"))
+        }
+        let timers = TimerStore.shared
+        if (settings.liveTimer && PomodoroTimer.shared.isRunning)
+            || (settings.liveCountdowns && (timers.countdowns.contains(where: \.isRunning) || timers.stopwatch.isRunning)) {
+            dots.append(Dot(id: "timer", tone: .running, tab: .focus, label: "A timer is running"))
+        }
+        if settings.liveAgents {
+            let deck = AgentDeck.shared
+            if !deck.approvals.isEmpty || deck.waitingCount > 0 {
+                dots.append(Dot(id: "agents", tone: .needsYou, tab: .agents, label: "An agent is waiting for you"))
+            } else if deck.sessions.contains(where: { if case .working = $0.state { true } else { false } }) {
+                dots.append(Dot(id: "agents", tone: .running, tab: .agents, label: "An agent is working"))
+            }
+        }
+        if settings.liveCI, CIMonitor.shared.run != nil { dots.append(Dot(id: "ci", tone: .running, tab: .agents, label: "A CI run is going")) }
+        if settings.liveScripts, !ScriptActivityStore.shared.activities.isEmpty {
+            dots.append(Dot(id: "script", tone: .running, tab: .agents, label: "A script is running"))
+        }
+        if settings.liveKeepAwake, QuickToggles.shared.isKeepingAwake { dots.append(Dot(id: "awake", tone: .running, tab: .stats, label: "Keeping the Mac awake")) }
+        if settings.liveMicMuted, MicMonitor.shared.isMuted { dots.append(Dot(id: "mic", tone: .running, tab: .stats, label: "Microphone muted")) }
+        let now = Date.now
+        if settings.liveEvents,
+           let event = CalendarService.shared.events.first(where: { !$0.isAllDay && $0.start > now && $0.start.timeIntervalSince(now) < 10 * 60 }) {
+            dots.append(Dot(id: "event", tone: event.meetingURL != nil ? .needsYou : .running, tab: .calendar,
+                            label: "\(event.title) starts soon"))
+        }
+        // Strip order, split where the strip splits.
+        let order = NotchTab.allCases
+        dots.sort { (order.firstIndex(of: $0.tab) ?? 0) < (order.firstIndex(of: $1.tab) ?? 0) }
+        let leftTabs: Set<NotchTab> = [.live, .music, .tray, .focus, .agents]
+        return ClosedDots(left: dots.filter { leftTabs.contains($0.tab) }, right: dots.filter { !leftTabs.contains($0.tab) },
+                          music: music)
     }
 }
 
@@ -139,12 +245,16 @@ final class NotchViewModel: ObservableObject {
             LiveActivityCenter.shared.glanceChanged(isGlancing: phase == .glance)
         }
     }
-    /// The Tray's two sides: its files, and what's been copied.
+    /// The Tray's two sides from before Clipboard was a section of its own: its files, and what's
+    /// been copied. The Tray with its clipboard side showing is the Clipboard section now.
     enum TraySide: Hashable {
         case files, clipboard
     }
 
-    @Published var tab: NotchTab = .home
+    @Published var tab: NotchTab = .live {
+        // Another section drops the old clipboard side, so the Tray shows its files next time.
+        didSet { if tab != oldValue, traySide == .clipboard { traySide = .files } }
+    }
     @Published var traySide = TraySide.files
     /// What's typed in the Clipboard side's search field.
     @Published var clipSearch = ""
@@ -154,6 +264,16 @@ final class NotchViewModel: ObservableObject {
     }
     /// An image is among them, so the tray offers what can be done with one. It ends with the drag.
     @Published var isDraggingImages = false
+    /// How many rows Live has, and the closed notch's dots. Kept here, and only changed when they
+    /// really change, so the panel's size, the area the pointer counts as inside and what's drawn all
+    /// go by the same numbers. See `refreshLive`.
+    @Published private(set) var liveRows = 0
+    @Published private(set) var dots = ClosedDots()
+    private var liveClock: Timer?
+
+    deinit {
+        liveClock?.invalidate()
+    }
     @Published private(set) var activity: ClosedActivity
     /// A second activity, shown as a glyph at the end of the right ear.
     @Published private(set) var secondary: CompactActivity?
@@ -210,11 +330,52 @@ final class NotchViewModel: ObservableObject {
         AgentDeck.shared.objectWillChange
             .sink { [weak self] _ in self?.objectWillChange.send() }
             .store(in: &cancellables)
+        // Whatever Live lists or the dots show. Timers tick every second, so changes are taken a
+        // tenth of a second apart at most, and nothing is published unless the rows or dots changed.
+        let sources: [AnyPublisher<Void, Never>] = [
+            Self.changes(in: LiveActivityCenter.shared), Self.changes(in: NowPlayingService.shared),
+            Self.changes(in: PomodoroTimer.shared), Self.changes(in: TimerStore.shared),
+            Self.changes(in: AgentDeck.shared), Self.changes(in: CalendarService.shared),
+            Self.changes(in: DownloadMonitor.shared), Self.changes(in: CIMonitor.shared),
+            Self.changes(in: ScreenRecorder.shared), Self.changes(in: QuickToggles.shared),
+            Self.changes(in: MicMonitor.shared), Self.changes(in: ScriptActivityStore.shared),
+            Self.changes(in: FocusMonitor.shared), Self.changes(in: AppSettings.shared),
+        ]
+        Publishers.MergeMany(sources)
+            .throttle(for: .milliseconds(100), scheduler: RunLoop.main, latest: true)
+            // @Published fires before the value changes; read it on the next turn.
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.refreshLive() }
+            .store(in: &cancellables)
+        // An event coming up changes Live and the dots with nothing else happening.
+        let clock = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshLive() }
+        }
+        clock.tolerance = 10
+        RunLoop.main.add(clock, forMode: .common)
+        liveClock = clock
+        refreshLive()
         // Review was for those waiting then. The next to come waits for a recording like any other.
         AgentDeck.shared.$approvals
             .filter(\.isEmpty)
             .sink { [weak self] _ in self?.isReviewing = false }
             .store(in: &cancellables)
+    }
+
+    private static func changes<Source: ObservableObject>(in source: Source) -> AnyPublisher<Void, Never>
+    where Source.ObjectWillChangePublisher.Failure == Never {
+        source.objectWillChange.map { _ in () }.eraseToAnyPublisher()
+    }
+
+    /// Counts Live's rows and works out the dots again, and publishes what changed.
+    func refreshLive() {
+        let rows = LiveFeed.items(at: .now, viewModel: nil, theme: .standard).count
+        let next = AppSettings.shared.closedNotchShows == .dots ? ClosedDots.current() : ClosedDots()
+        guard rows != liveRows || next != dots else { return }
+        withAnimation(.notchActivity) {
+            if rows != liveRows { liveRows = rows }
+            if next != dots { dots = next }
+        }
     }
 
     var isOpen: Bool { phase == .open }
@@ -228,7 +389,8 @@ final class NotchViewModel: ObservableObject {
 
     /// The notch is drawn as a faint line: a virtual notch set to one, closed, with nothing to show.
     var isLine: Bool {
-        geometry.isLine && (phase == .closed || phase == .hovering) && activity == .idle && secondary == nil
+        geometry.isLine && (phase == .closed || phase == .hovering)
+            && (showsDots ? closedDots.isEmpty : activity == .idle && secondary == nil)
     }
 
     /// What the glance shows, from what's live right now.
@@ -280,41 +442,81 @@ final class NotchViewModel: ObservableObject {
 
     /// The open notch with the command field up: tall enough for its rows, at least as tall as the tabs.
     static func commandHeight(rows: Int, closedHeight: CGFloat) -> CGFloat {
-        max(closedHeight, NotchTheme.headerControlHeight) + 92 + 32 * CGFloat(min(max(rows, 1), CommandEngine.maximumResults))
+        // The band, the gap under it (8), the heading with its gap, the rows, then the field at the
+        // foot with the gap over it and the panel's bottom edge (14), as `CommandView` lays them out.
+        let rows = CGFloat(min(max(rows, 1), CommandEngine.maximumResults))
+        return bandHeight(closedHeight: closedHeight) + 8 + CommandView.headingHeight + CommandView.headingGap
+            + rows * (CommandView.rowHeight + CommandView.rowGap) + NotchTheme.commandFieldGap
+            + NotchTheme.commandFieldHeight + 14
+    }
+
+    /// The room around the open panel the strip needs at most, whatever the placement.
+    static let stripRoom = EdgeInsets(top: 0, leading: SectionStrip.arcOverhang, bottom: SectionStrip.arcDepth,
+                                      trailing: SectionStrip.arcOverhang)
+
+    /// The band beside the camera, where the section's title and actions sit: as tall as the menu
+    /// bar, and never shorter than its buttons need.
+    static func bandHeight(closedHeight: CGFloat) -> CGFloat {
+        max(closedHeight, 36)
     }
 
     /// The tallest the open notch gets, so its panel always has room.
     static func tallestOpenHeight(closedHeight: CGFloat) -> CGFloat {
-        max(AppSettings.shared.openHeight, commandHeight(rows: CommandEngine.maximumResults, closedHeight: closedHeight))
+        max(AppSettings.shared.openHeight, commandHeight(rows: CommandEngine.maximumResults, closedHeight: closedHeight),
+            LiveSectionView.preferredHeight(rows: LiveFeed.mostShown, band: bandHeight(closedHeight: closedHeight), actionBar: true))
     }
 
     /// The tab on screen: the tray while files are dragged in, otherwise the chosen one if it's enabled.
     var visibleTab: NotchTab {
         if isDraggingFiles { return .tray }
-        return AppSettings.shared.enabledTabs.contains(tab) ? tab : .home
+        if tab == .tray, traySide == .clipboard, AppSettings.shared.enabledTabs.contains(.clipboard) { return .clipboard }
+        return AppSettings.shared.enabledTabs.contains(tab) ? tab : .live
     }
 
+    /// The closed notch shows status dots rather than the live activity: Orbit's default, unless
+    /// what's showing is a notice, which needs its words.
+    var showsDots: Bool {
+        switch AppSettings.shared.closedNotchShows {
+        case .activities: return false
+        case .dots, .nothing:
+            switch activity {
+            case .notice, .trackPeek: return false
+            default: return true
+            }
+        }
+    }
+
+    /// The dots, or none when the setting says Nothing.
+    var closedDots: ClosedDots { dots }
+
     var closedLayout: ClosedLayout {
-        ClosedLayout(activity: activity, secondary: secondary, notch: geometry.closedSize)
+        if showsDots { return ClosedLayout(dots: closedDots, notch: geometry.closedSize) }
+        return ClosedLayout(activity: activity, secondary: secondary, notch: geometry.closedSize)
     }
 
     var metrics: NotchMetrics {
         let settings = AppSettings.shared
         switch phase {
         case .open:
-            let theme = settings.theme
             var height = settings.openHeight
             if isCommandMode {
                 height = max(height, Self.commandHeight(rows: commandResults.count, closedHeight: geometry.closedSize.height))
+            } else if visibleTab == .live {
+                // Live grows with what's in it.
+                height = LiveSectionView.preferredHeight(rows: liveRows, band: Self.bandHeight(closedHeight: geometry.closedSize.height),
+                                                         actionBar: settings.rowActionMode == .bar)
             }
             return NotchMetrics(width: settings.openWidth, height: height,
-                                topRadius: theme.topRadius, bottomRadius: theme.bottomRadius)
+                                topRadius: NotchTheme.panelTopRadius, bottomRadius: NotchTheme.panelBottomRadius)
         case .glance:
             let closed = geometry.closedSize
             let content = glanceContent
             var width = closed.width + GlanceContent.earWidth * 2
             // A command shows whole, so the more room it has the fewer lines it takes.
             if case .approval = content { width = max(width, ApprovalGlance.width) }
+            // Never narrower than the closed notch it grew from, a wide notification's most of all: a
+            // pointer resting on that one's edge would be outside its glance, and the two would trade places.
+            width = max(width, closedLayout.totalWidth + 14)
             return NotchMetrics(width: min(settings.openWidth, width), height: closed.height + content.extraHeight,
                                 topRadius: 8, bottomRadius: 22)
         case .closed, .hovering:
@@ -334,7 +536,8 @@ final class NotchViewModel: ObservableObject {
     }
 
     func open(tab: NotchTab? = nil) {
-        if let tab { self.tab = tab }
+        // Orbit opens on what's live now, unless something asked for a section by name.
+        if let tab { self.tab = tab } else if phase != .open { self.tab = .live }
         // Whatever opens the Tray by name means its files, like a screenshot's Show.
         if tab == .tray { traySide = .files }
         guard phase != .open else { return }
@@ -362,6 +565,15 @@ final class NotchViewModel: ObservableObject {
     /// Turns the glance to the recent list.
     func showRecent() {
         LiveActivityCenter.shared.markRecentsSeen()
+        if phase == .open {
+            // From Live's Recent button: the open notch turns to the glance, as it does for a tool call.
+            onTurnToGlance?()
+            withAnimation(.notchGlance) {
+                phase = .glance
+                isShowingRecent = true
+            }
+            return
+        }
         glance()
         withAnimation(.notchGlance) { isShowingRecent = true }
     }
@@ -472,7 +684,7 @@ final class NotchViewModel: ObservableObject {
 
     // MARK: Snapshots
 
-    func stage(phase: Phase, activity: ClosedActivity, secondary: CompactActivity? = nil, tab: NotchTab = .home,
+    func stage(phase: Phase, activity: ClosedActivity, secondary: CompactActivity? = nil, tab: NotchTab = .live,
                traySide: TraySide = .files, clipSearch: String = "",
                draggingFiles: Bool = false, draggingImages: Bool = false, command: String? = nil, showingRecent: Bool = false,
                showingUsage: Bool = false) {
@@ -489,5 +701,6 @@ final class NotchViewModel: ObservableObject {
         isDraggingImages = draggingImages
         isCommandMode = command != nil
         commandQuery = command ?? ""
+        refreshLive()
     }
 }

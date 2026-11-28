@@ -225,12 +225,13 @@ enum NotificationPeek {
         if source == nil, !line.isEmpty { line = "\(appName): \(line)" }
         let detail = code != nil && hideText ? "Login code"
             : hideText || line.isEmpty ? (sender == appName ? nil : appName) : String(line.prefix(160))
-        var actions = [NoticeAction(title: "Open", kind: .openApp(bundleID: entry.bundleID))]
+        let open: NoticeAction.Kind = entry.link.map { .openLink($0, bundleID: entry.bundleID) } ?? .openApp(bundleID: entry.bundleID)
+        var actions = [NoticeAction(title: "Open", kind: open)]
         if let code { actions.insert(NoticeAction(title: "Copy Code", kind: .copyCode(code)), at: 0) }
         // Keyed by who it's from, so a second message from them updates the first, and anyone else's waits its turn.
         return LiveNotice(key: "\(keyPrefix)\(entry.bundleID)-\(sender)", symbol: source?.symbol ?? "bell.badge.fill",
                           tint: source?.tint ?? .white, text: shortened(sender, to: 16), detail: detail, actions: actions,
-                          timing: code == nil ? .waits : .always, recall: .name(appName))
+                          timing: code == nil ? .waits : .always, recall: .name(appName), appBundleID: entry.bundleID)
     }
 
     /// "12" beside the camera, and "While you were in Work: Slack 8, Mail 3" underneath.

@@ -88,7 +88,7 @@ final class UpdateInstaller: ObservableObject {
                         bundleID: String? = Bundle.main.bundleIdentifier,
                         current: String = UpdateChecker.currentVersion) async throws -> URL {
         let unpacked = folder.appendingPathComponent("unpacked", isDirectory: true)
-        guard await Shell.run("/usr/bin/ditto", ["-x", "-k", zip.path, unpacked.path]).status == 0 else {
+        guard await Shell.run("/usr/bin/ditto", ["-x", "-k", zip.path, unpacked.path], timeout: 120).status == 0 else {
             throw InstallError.unpack
         }
         let apps = try FileManager.default.contentsOfDirectory(at: unpacked, includingPropertiesForKeys: nil)

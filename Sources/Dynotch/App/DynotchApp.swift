@@ -82,12 +82,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         #endif
 
+        // Before any service starts: a second copy would share the keys, the socket and the files.
+        // The capture test is a second copy on purpose, and starts nothing the first one holds.
+        guard arguments.contains("--capture-test") || SingleCopy.claim() else {
+            NSApp.terminate(nil)
+            return
+        }
         NSApp.mainMenu = Self.makeMainMenu()
         // Paces every service's polls, so it knows from the start whether anyone's looking.
         EnergyCoordinator.shared.start()
         // First, so a profile a rule picks is in place before the services read their settings.
         ProfileStore.shared.start()
         TrayStore.shared.load()
+        // After the Tray, whose items say which hidden recordings are still wanted.
+        ScreenRecorder.shared.removeStaleStagedFiles()
         ClipboardStore.shared.start()
         NotesStore.shared.start()
         FocusHistory.shared.load()
@@ -248,7 +256,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return item
     }
 
-    @objc private func openNotch() { NotchManager.shared.open(tab: .home) }
+    @objc private func openNotch() { NotchManager.shared.open(tab: .live) }
     @objc private func openTray() { NotchManager.shared.open(tab: .tray) }
     @objc private func openSettings() { SettingsWindowController.shared.show() }
     @objc private func openAbout() { SettingsWindowController.shared.show(page: .about) }

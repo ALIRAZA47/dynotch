@@ -51,11 +51,11 @@ struct SystemFooter: View {
     private func row(_ size: CGFloat, isWhole: Bool = false) -> some View {
         HStack(spacing: 0) {
             Text("CPU \(Int((monitor.cpu * 100).rounded()))%")
-                .foregroundStyle(monitor.cpu > 0.85 ? Color.orange : theme.tertiary)
+                .foregroundStyle(monitor.cpu > 0.85 ? theme.primary : theme.tertiary)
                 .fixedSize(horizontal: isWhole, vertical: false)
             Spacer(minLength: 4)
             Text("Mem \(Int((monitor.memoryFraction * 100).rounded()))%")
-                .foregroundStyle(monitor.memoryFraction > 0.9 ? Color.orange : theme.tertiary)
+                .foregroundStyle(monitor.memoryFraction > 0.9 ? theme.primary : theme.tertiary)
                 .fixedSize(horizontal: isWhole, vertical: false)
             Spacer(minLength: 4)
             Label(Format.rate(monitor.download), systemImage: "arrow.down")
@@ -64,6 +64,35 @@ struct SystemFooter: View {
                 .layoutPriority(1)
         }
         .font(NotchFont.numeric(size))
+    }
+}
+
+/// CPU, memory and the download rate on one line in SF Mono, across from the Control section's
+/// "Batteries". A reading running high turns primary. Disk space and the upload rate are in its tooltip.
+struct SystemLine: View {
+    @ObservedObject private var monitor = SystemMonitor.shared
+    @Environment(\.notchTheme) private var theme
+    /// Snapshots show their sample, which a real reading would replace.
+    @Environment(\.isSnapshot) private var isSnapshot
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Text("CPU \(Int((monitor.cpu * 100).rounded()))%")
+                .foregroundStyle(monitor.cpu > 0.85 ? theme.primary : theme.tertiary)
+            Text("Mem \(Int((monitor.memoryFraction * 100).rounded()))%")
+                .foregroundStyle(monitor.memoryFraction > 0.9 ? theme.primary : theme.tertiary)
+            Label(Format.rate(monitor.download), systemImage: "arrow.down")
+                .foregroundStyle(theme.tertiary)
+        }
+        .font(NotchFont.time(11, .medium))
+        .labelStyle(CompactLabelStyle())
+        .lineLimit(1)
+        .fixedSize()
+        .help("Memory: \(Format.memory(monitor.memoryUsed)) of \(Format.memory(monitor.memoryTotal)) · "
+              + "Disk: \(Format.bytes(monitor.diskFree)) free · Upload: \(Format.rate(monitor.upload))")
+        .accessibilityElement(children: .combine)
+        .onAppear { if !isSnapshot { monitor.beginObserving() } }
+        .onDisappear { if !isSnapshot { monitor.endObserving() } }
     }
 }
 

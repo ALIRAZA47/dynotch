@@ -51,6 +51,26 @@ final class CaptureController: ObservableObject {
     /// What Record starts, and what every way into Capture stops. Tests and the self-test give it one
     /// of their own, with made-up frames.
     var recorder = ScreenRecorder.shared
+    /// Where the controller's own notices go. A test collects them instead.
+    var notify: ImageActions.Notify = ImageActions.show
+    /// Who holds Esc while the overlay is up, so that it cancels whichever window has the keyboard: the
+    /// notch's manager, which owns the app's one Esc hot key. Nil is that, except for parked overlays,
+    /// which leave the real keyboard alone. A test hands in a stand-in.
+    var escapeHolder: EscapeHolding?
+    /// A capture nobody touches, with nothing selected, goes by itself after this long.
+    var idleLimit: TimeInterval = 120
+    /// Whether nobody can see the screen (the displays sleep, it's locked, another user has the Mac),
+    /// each time that changes. Nil is `EnergyCoordinator`'s; a test sends its own.
+    var quietChanges: AnyPublisher<Bool, Never>?
+    /// The displays as they are now; see `displayLayout()`. Tests give it their own.
+    var currentDisplays: () -> [String] = { CaptureController.displayLayout() }
+
+    /// Who has Esc for the overlay now, to give it back to.
+    private var escapeHeldBy: EscapeHolding?
+    /// What takes the overlay down by itself: the screen going quiet, the displays changing.
+    private var guards = Set<AnyCancellable>()
+    private var idleWatch: Task<Void, Never>?
+    private var lastActivity = Date.now
 
     private static let shutterPath = "/System/Library/Components/CoreAudio.component/Contents/SharedSupport/SystemSounds/system/Grab.aif"
 
@@ -59,12 +79,21 @@ final class CaptureController: ObservableObject {
     var isActive: Bool { editor != nil }
 
     /// Freezes the displays and opens the editor. Without Screen Recording access, asks for it and says so in the notch.
-    /// While a recording runs it stops that instead, so every way in, from ⌃⌥S to `dynotch capture`, is a way to stop.
-    func begin() {
+    /// While a recording runs it stops that instead, so ⌃⌥S, the menu and the command field are ways to stop.
+    ///
+    /// `fromScript` is a `dynotch://capture` link or `dynotch capture`, which any app or script can send:
+    /// that never stops a recording, and never covers a screen nobody can see.
+    func begin(fromScript: Bool = false) {
         if recorder.isRunning {
-            recorder.stop()
+            if fromScript {
+                notify(LiveNotice(key: "capture", symbol: "record.circle", tint: .red, text: "Recording",
+                                  detail: "Stop it from the notch before capturing", fromScript: true), 3)
+            } else {
+                recorder.stop()
+            }
             return
         }
+        if fromScript, EnergyCoordinator.shared.isQuiet { return }
         guard editor == nil, !isFreezing else { return }
         refreshAccess()
         guard hasAccess else {
@@ -173,6 +202,8 @@ final class CaptureController: ObservableObject {
 
     private func show(_ displays: [CaptureDisplay]) {
         guard !displays.isEmpty else { return }
+        // The screen went quiet while it froze: nobody would see the overlay, or be there to close it.
+        if !placesOverlaysOffScreen, EnergyCoordinator.shared.isQuiet { return }
         NotchManager.shared.close()
         // The notch mustn't open or grow under the overlay while the pointer crosses it.
         NotchManager.shared.isPointerSuspended = true
@@ -186,6 +217,7 @@ final class CaptureController: ObservableObject {
                 window.isParked = true
                 window.setFrameOrigin(NSPoint(x: -20_000 - CGFloat(index) * 6_000, y: -70_000))
             }
+            window.onActivity = { [weak self] in self?.lastActivity = .now }
             window.orderFrontRegardless()
             return window
         }
@@ -198,10 +230,68 @@ final class CaptureController: ObservableObject {
             editor.mouseMoved(to: underPointer.display.localPoint(fromDesktop: pointer), on: underPointer.display.id)
         }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            let handled = MainActor.assumeIsolated { self?.editor?.handleKey(event) ?? false }
+            let handled = MainActor.assumeIsolated {
+                self?.lastActivity = .now
+                return self?.editor?.handleKey(event) ?? false
+            }
             return handled ? nil : event
         }
+        watchForWaysOut()
         NSCursor.crosshair.set()
+    }
+
+    /// The overlay is opaque, above everything, and shows a picture that has stopped. A local key
+    /// monitor only hears the keyboard while an overlay has it, so Esc is held system-wide, and the
+    /// overlay goes by itself when nobody can see it, the displays change under it, or nobody's there.
+    private func watchForWaysOut() {
+        lastActivity = .now
+        let holder = escapeHolder ?? (placesOverlaysOffScreen ? nil : NotchManager.shared)
+        holder?.holdEscape { [weak self] in self?.escapePressed() }
+        escapeHeldBy = holder
+
+        // From now on: the first is how things are, and a capture was only shown with someone looking.
+        let quiet = quietChanges ?? EnergyCoordinator.shared.$conditions.map(\.isQuiet).removeDuplicates().dropFirst().eraseToAnyPublisher()
+        quiet
+            .filter { $0 }
+            .sink { [weak self] _ in self?.cancel() }
+            .store(in: &guards)
+        // macOS sends this for the Dock or the menu bar changing size too. Only a display coming,
+        // going, moving or changing resolution leaves the frozen picture wrong.
+        let displays = currentDisplays()
+        NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
+            .sink { [weak self] _ in
+                guard let self, self.currentDisplays() != displays else { return }
+                self.cancel()
+            }
+            .store(in: &guards)
+
+        idleWatch = Task { [weak self] in
+            while !Task.isCancelled {
+                let limit = self?.idleLimit ?? 120
+                try? await Task.sleep(for: .seconds(min(15, max(limit / 4, 0.05))))
+                guard !Task.isCancelled, let self, let editor = self.editor else { return }
+                if Self.isIdle(hasSelection: editor.hasSelection, lastActivity: self.lastActivity, now: .now, limit: self.idleLimit) {
+                    self.cancel()
+                    return
+                }
+            }
+        }
+    }
+
+    /// Nothing selected and nothing touched for `limit`: nobody's using this capture.
+    nonisolated static func isIdle(hasSelection: Bool, lastActivity: Date, now: Date, limit: TimeInterval) -> Bool {
+        !hasSelection && now.timeIntervalSince(lastActivity) >= limit
+    }
+
+    /// As the editor takes Esc from its key monitor: a text mark being typed goes first, then the capture.
+    private func escapePressed() {
+        guard let editor else { return }
+        lastActivity = .now
+        if editor.isEditingText {
+            editor.discardText()
+        } else {
+            editor.cancel()
+        }
     }
 
     /// Where the selection is on the desktop, from the overlay's frame: the display's, or off screen in a test.
@@ -296,6 +386,11 @@ final class CaptureController: ObservableObject {
     private func tearDown() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
+        escapeHeldBy?.releaseEscape()
+        escapeHeldBy = nil
+        guards.removeAll()
+        idleWatch?.cancel()
+        idleWatch = nil
         overlays.forEach { window in
             window.orderOut(nil)
             window.close()
@@ -388,5 +483,12 @@ final class CaptureController: ObservableObject {
     private static func text(_ string: String, at point: NSPoint, size: CGFloat, weight: NSFont.Weight, color: NSColor) {
         NSAttributedString(string: string, attributes: [.font: NSFont.systemFont(ofSize: size, weight: weight), .foregroundColor: color])
             .draw(at: point)
+    }
+}
+
+extension CaptureController {
+    /// Each display and its frame, which a Dock or menu bar change leaves as they are.
+    static func displayLayout() -> [String] {
+        NSScreen.screens.map { "\($0.displayID) \(NSStringFromRect($0.frame)) \($0.backingScaleFactor)" }
     }
 }

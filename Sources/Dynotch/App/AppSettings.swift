@@ -60,18 +60,29 @@ enum VirtualNotchStyle: String, CaseIterable, Identifiable {
 }
 
 enum NotchTab: String, CaseIterable, Identifiable {
-    // `stats` is the Control tab; the raw value stays so saved settings and links keep working.
-    case home, tray, focus, stats
+    // The order is the section strip's, left to right. `stats` is Control and `home` is Widgets;
+    // their raw values stay so saved settings and links keep working.
+    /// Whatever is live now, most urgent first. Where the notch opens.
+    case live
+    case music, tray, focus
     /// Claude Code's sessions. Only there while there are some.
     case agents
+    case stats, clipboard, notes, calendar
+    /// The widgets picked in Settings: the calendar, weather, clocks, the mirror, shortcuts.
+    case home
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
-        case .home: "Nook"
+        case .live: "Live"
+        case .music: "Music"
+        case .home: "Widgets"
         case .tray: "Tray"
+        case .clipboard: "Clipboard"
         case .focus: "Focus"
+        case .notes: "Notes"
+        case .calendar: "Calendar"
         case .stats: "Control"
         case .agents: "Agents"
         }
@@ -79,11 +90,16 @@ enum NotchTab: String, CaseIterable, Identifiable {
 
     var symbol: String {
         switch self {
-        case .home: "house.fill"
-        case .tray: "tray.full.fill"
+        case .live: "waveform.path.ecg"
+        case .music: "music.note"
+        case .home: "square.grid.2x2"
+        case .tray: "tray"
+        case .clipboard: "list.clipboard"
         case .focus: "timer"
-        case .stats: "switch.2"
-        case .agents: "sparkles"
+        case .notes: "note.text"
+        case .calendar: "calendar"
+        case .stats: "slider.horizontal.3"
+        case .agents: "sparkle"
         }
     }
 }
@@ -249,8 +265,8 @@ final class AppSettings: ObservableObject {
     @Published var hoverDelay: Double = AppSettings.value("hoverDelay", 0.15) {
         didSet { save("hoverDelay", hoverDelay) }
     }
-    @Published var hoverShows: HoverShows = AppSettings.value("hoverShows", HoverShows.glance) {
-        didSet { save("hoverShows", hoverShows.rawValue) }
+    @Published var hoverShows: HoverShows = AppSettings.value("orbitHoverShows", HoverShows.notch) {
+        didSet { save("orbitHoverShows", hoverShows.rawValue) }
     }
     /// ⌃⌥K opens the command field from anywhere.
     @Published var commandShortcut: Bool = AppSettings.value("commandShortcut", true) {
@@ -284,12 +300,15 @@ final class AppSettings: ObservableObject {
 
     // MARK: Appearance
 
-    @Published var openWidth: Double = AppSettings.value("openWidth", 680) {
-        didSet { save("openWidth", openWidth) }
+    /// Orbit's panel is taller than the notch before it, so its sizes have keys of their own.
+    @Published var openWidth: Double = AppSettings.value("orbitOpenWidth", 720) {
+        didSet { save("orbitOpenWidth", openWidth) }
     }
-    @Published var openHeight: Double = AppSettings.value("openHeight", 228) {
-        didSet { save("openHeight", openHeight) }
+    @Published var openHeight: Double = AppSettings.value("orbitOpenHeight", 360) {
+        didSet { save("orbitOpenHeight", openHeight) }
     }
+    static let openWidthRange: ClosedRange<Double> = 640...880
+    static let openHeightRange: ClosedRange<Double> = 300...460
     @Published var virtualNotchWidth: Double = AppSettings.value("virtualNotchWidth", 190) {
         didSet { save("virtualNotchWidth", virtualNotchWidth) }
     }
@@ -310,8 +329,33 @@ final class AppSettings: ObservableObject {
     @Published var notchMaterial: NotchMaterial = AppSettings.value("notchMaterial", NotchMaterial.black) {
         didSet { save("notchMaterial", notchMaterial.rawValue) }
     }
-    @Published var notchAccent: NotchAccent = AppSettings.value("notchAccent", NotchAccent.lavender) {
-        didSet { save("notchAccent", notchAccent.rawValue) }
+    /// Orbit starts everyone on cobalt; the accent picked before it is kept under its old key.
+    @Published var notchAccent: NotchAccent = AppSettings.value("orbitAccent", NotchAccent.cobalt) {
+        didSet { save("orbitAccent", notchAccent.rawValue) }
+    }
+    /// Light, dark, or whatever macOS is using.
+    @Published var notchAppearance: NotchAppearance = AppSettings.value("notchAppearance", NotchAppearance.system) {
+        didSet { save("notchAppearance", notchAppearance.rawValue) }
+    }
+    /// Button roundness, in points: buttons, switches, rows and fields. 0 is square.
+    @Published var buttonRadius: Double = AppSettings.value("buttonRadius", 3.0) {
+        didSet { save("buttonRadius", buttonRadius) }
+    }
+    /// Where the section buttons sit around the open notch.
+    @Published var sectionPlacement: SectionPlacement = AppSettings.value("sectionPlacement", SectionPlacement.under) {
+        didSet { save("sectionPlacement", sectionPlacement.rawValue) }
+    }
+    /// Where a row's buttons appear.
+    @Published var rowActionMode: RowActionMode = AppSettings.value("rowActionMode", RowActionMode.hover) {
+        didSet { save("rowActionMode", rowActionMode.rawValue) }
+    }
+    /// How the panel opens and the strip slides out.
+    @Published var notchMotion: NotchMotion = AppSettings.value("notchMotion", NotchMotion.springy) {
+        didSet { save("notchMotion", notchMotion.rawValue) }
+    }
+    /// What sits beside the camera while the notch is closed.
+    @Published var closedNotchShows: ClosedNotchShows = AppSettings.value("closedNotchShows", ClosedNotchShows.dots) {
+        didSet { save("closedNotchShows", closedNotchShows.rawValue) }
     }
     /// Where the open notch meets the top of the screen, in points.
     @Published var notchTopRadius: Double = AppSettings.value("notchTopRadius", 12.0) {
@@ -322,9 +366,19 @@ final class AppSettings: ObservableObject {
         didSet { save("notchBottomRadius", notchBottomRadius) }
     }
 
-    /// The open notch's look, from the four settings above.
+    /// The open notch's look. `isDark` is the system's appearance, for Follow macOS.
+    func theme(systemIsDark: Bool) -> NotchTheme {
+        let isDark = switch notchAppearance {
+        case .light: false
+        case .dark: true
+        case .system: systemIsDark
+        }
+        return NotchTheme(accent: notchAccent, isDark: isDark, radius: buttonRadius)
+    }
+
+    /// The look with the system's appearance as it is now.
     var theme: NotchTheme {
-        NotchTheme(material: notchMaterial, accent: notchAccent, topRadius: notchTopRadius, bottomRadius: notchBottomRadius)
+        theme(systemIsDark: NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) != .aqua)
     }
 
     // MARK: Equalizer and keys
@@ -447,6 +501,21 @@ final class AppSettings: ObservableObject {
     }
     @Published var showStatsTab: Bool = AppSettings.value("showStatsTab", true) {
         didSet { save("showStatsTab", showStatsTab) }
+    }
+    @Published var showMusicTab: Bool = AppSettings.value("showMusicTab", true) {
+        didSet { save("showMusicTab", showMusicTab) }
+    }
+    @Published var showClipboardTab: Bool = AppSettings.value("showClipboardTab", true) {
+        didSet { save("showClipboardTab", showClipboardTab) }
+    }
+    @Published var showNotesTab: Bool = AppSettings.value("showNotesTab", true) {
+        didSet { save("showNotesTab", showNotesTab) }
+    }
+    @Published var showCalendarTab: Bool = AppSettings.value("showCalendarTab", true) {
+        didSet { save("showCalendarTab", showCalendarTab) }
+    }
+    @Published var showWidgetsTab: Bool = AppSettings.value("showWidgetsTab", true) {
+        didSet { save("showWidgetsTab", showWidgetsTab) }
     }
     @Published var pinnedShortcuts: [String] = AppSettings.value("pinnedShortcuts", [String]()) {
         didSet { save("pinnedShortcuts", pinnedShortcuts) }
@@ -605,9 +674,14 @@ final class AppSettings: ObservableObject {
     var enabledTabs: [NotchTab] {
         NotchTab.allCases.filter { tab in
             switch tab {
-            case .home: true
+            case .live: true
+            case .music: showMusicTab
+            case .home: showWidgetsTab && !homeWidgets.isEmpty
             case .tray: showTrayTab
+            case .clipboard: showClipboardTab
             case .focus: showFocusTab
+            case .notes: showNotesTab
+            case .calendar: showCalendarTab
             case .stats: showStatsTab
             case .agents: liveAgents && AgentDeck.shared.hasSessions
             }

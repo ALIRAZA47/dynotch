@@ -5,6 +5,10 @@ import CoreServices
 /// Notes as Markdown files in a folder: Dynotch's own, or one the user picks. A folder in iCloud
 /// Drive syncs them between Macs. Edits are saved as you type, and changes made on disk, by
 /// another app or another Mac, show up as they land.
+///
+/// The folder is listed and read on a queue of its own, never on the main thread: a note in iCloud
+/// that isn't downloaded yet blocks whoever reads it, and a shared folder can change many times a
+/// second. A file is only read again when its modification date or size moved.
 @MainActor
 final class NotesStore: ObservableObject {
     static let shared = NotesStore()
@@ -43,9 +47,34 @@ final class NotesStore: ObservableObject {
     /// How long after a failed save it's tried again.
     var retryDelay: Duration = .seconds(30)
 
+    /// Reads a note file's bytes. The tests count reads through it.
+    typealias Reader = @Sendable (URL) throws -> Data
+    /// Moves a file to the Trash. The tests keep it away from the real one.
+    typealias Trasher = (URL) throws -> Void
+
+    /// A reload shows at most this many notes, the most recently changed, and reads no file larger
+    /// than `maxFileBytes`. A larger file is left out, never read in part, so it's never saved back short.
+    nonisolated static let maxNotes = 500
+    nonisolated static let maxFileBytes = 4 << 20
+
     private var stream: FSEventStreamRef?
+    /// The folder's path as the stream reports it, which resolves links such as /var to /private/var.
+    private var watchedPaths: [String] = []
     private var saveTasks: [Note.ID: Task<Void, Never>] = [:]
     private var reloadTask: Task<Void, Never>?
+    private let reader: Reader
+    private let trash: Trasher
+    private let diskQueue = DispatchQueue(label: "app.dynotch.notes", qos: .utility)
+    /// What each file held when it was last read or written here, by standardized path.
+    private var fileCache: [String: CachedFile] = [:]
+    /// Counts this store's own writes, moves and removals, so a listing taken before one is thrown away.
+    private var diskChanges = 0
+    private var reloading: Task<Void, Never>?
+    private var reloadAgain = false
+    /// Files this store created since launch: only those are removed outright when left empty.
+    private var createdHere: Set<String> = []
+    /// How many times the folder has been listed, for the tests.
+    private(set) var scans = 0
     private var terminationObserver: NSObjectProtocol?
     /// The chosen folder was gone at launch, so Dynotch's own is in use.
     private let folderWasMissing: Bool
@@ -53,6 +82,8 @@ final class NotesStore: ObservableObject {
     private static let currentKey = "notes.current"
 
     private init() {
+        reader = Self.readFile
+        trash = Self.moveToTrash
         defaultFolder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Dynotch/Notes", isDirectory: true)
         // Anything can write a path into the defaults; only a folder that's there is used, and it's
@@ -70,11 +101,18 @@ final class NotesStore: ObservableObject {
     }
 
     /// A store that keeps to `folder`, for the tests, which must never reach the real notes.
-    init(folder: URL, defaultFolder: URL? = nil) {
+    init(folder: URL, defaultFolder: URL? = nil, reader: @escaping Reader = NotesStore.readFile,
+         trash: @escaping Trasher = NotesStore.moveToTrash) {
         self.defaultFolder = defaultFolder ?? folder
         self.folder = folder
+        self.reader = reader
+        self.trash = trash
         folderWasMissing = false
     }
+
+    nonisolated static let readFile: Reader = { try Data(contentsOf: $0) }
+
+    nonisolated static func moveToTrash(_ url: URL) throws { try FileManager.default.trashItem(at: url, resultingItemURL: nil) }
 
     var current: Note? { notes.first { $0.id == currentID } }
 
@@ -128,7 +166,11 @@ final class NotesStore: ObservableObject {
         guard let index = notes.firstIndex(where: { $0.id == id }) else { return }
         saveTasks[id]?.cancel()
         let note = notes.remove(at: index)
-        if note.isOnDisk { try? FileManager.default.trashItem(at: note.url, resultingItemURL: nil) }
+        if note.isOnDisk {
+            diskChanges += 1
+            try? trash(note.url)
+            forget(note.url)
+        }
         if notes.isEmpty {
             newNote()
         } else if currentID == id {
@@ -156,6 +198,8 @@ final class NotesStore: ObservableObject {
         AppSettings.shared.notesFolderPath = newFolder == nil ? "" : target.path
         folder = target
         notes = []
+        fileCache = [:]
+        createdHere = []
         reload()
         watch()
     }
@@ -171,6 +215,7 @@ final class NotesStore: ObservableObject {
     }
 
     private func move(_ files: [URL], to target: URL) {
+        diskChanges += 1
         for file in files {
             let destination = FileActions.uniqueURL(for: target.appendingPathComponent(file.lastPathComponent))
             try? FileManager.default.moveItem(at: file, to: destination)
@@ -222,13 +267,18 @@ final class NotesStore: ObservableObject {
             if !note.isOnDisk || (!note.isBlank && !Self.isNamed(url, after: name)) {
                 let target = FileActions.uniqueURL(for: folder.appendingPathComponent(name + ".md"))
                 if note.isOnDisk {
+                    diskChanges += 1
                     try FileManager.default.moveItem(at: url, to: target)
+                    moved(from: url, to: target)
                     // Now, so that a retry after a failed write doesn't look for the old name.
                     notes[index].url = target
                 }
                 url = target
             }
+            diskChanges += 1
             try note.text.write(to: url, atomically: true, encoding: .utf8)
+            if !note.isOnDisk { createdHere.insert(Self.key(url)) }
+            remember(url, text: note.text)
             notes[index].url = url
             notes[index].savedText = note.text
             notes[index].isOnDisk = true
@@ -239,6 +289,27 @@ final class NotesStore: ObservableObject {
             scheduleSave(id, after: retryDelay)
         }
     }
+
+    /// The file as just written, so the event the write causes reads nothing.
+    private func remember(_ url: URL, text: String) {
+        // A URL of its own: resource values are cached on the URL they're read through.
+        let values = try? URL(fileURLWithPath: url.path).resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+        fileCache[Self.key(url)] = CachedFile(stamp: FileStamp(date: values?.contentModificationDate, size: values?.fileSize),
+                                              text: text)
+    }
+
+    private func moved(from old: URL, to new: URL) {
+        // A rename keeps the date and size.
+        fileCache[Self.key(new)] = fileCache.removeValue(forKey: Self.key(old))
+        if createdHere.remove(Self.key(old)) != nil { createdHere.insert(Self.key(new)) }
+    }
+
+    private func forget(_ url: URL) {
+        fileCache[Self.key(url)] = nil
+        createdHere.remove(Self.key(url))
+    }
+
+    private nonisolated static func key(_ url: URL) -> String { url.standardizedFileURL.path }
 
     /// "Groceries.md", or "Groceries 2.md" when another note had the name first.
     private static func isNamed(_ url: URL, after name: String) -> Bool {
@@ -254,7 +325,8 @@ final class NotesStore: ObservableObject {
         }
     }
 
-    /// An empty note goes away once you leave it, file and all.
+    /// An empty note goes away once you leave it, file and all. A file this store made since launch is
+    /// removed; any other, which another app may have put there, goes to the Trash.
     private func discardIfBlank(_ id: Note.ID) {
         guard let index = notes.firstIndex(where: { $0.id == id }), notes[index].isBlank, notes.count > 1 else { return }
         saveTasks[id]?.cancel()
@@ -262,30 +334,152 @@ final class NotesStore: ObservableObject {
         guard note.isOnDisk else { return }
         let onDisk = (try? String(contentsOf: note.url, encoding: .utf8)) ?? ""
         if onDisk.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            try? FileManager.default.removeItem(at: note.url)
+            diskChanges += 1
+            if createdHere.contains(Self.key(note.url)) {
+                try? FileManager.default.removeItem(at: note.url)
+            } else {
+                try? trash(note.url)
+            }
+            forget(note.url)
         }
     }
 
     // MARK: Loading
 
-    /// Reads every Markdown file in the folder. Notes edited here keep their edits; others take what's on disk.
-    func reload() {
+    /// A file's modification date and size: when neither moved, it holds what it held.
+    struct FileStamp: Equatable, Sendable {
+        var date: Date?
+        var size: Int?
+
+        /// Only a stamp with both parts says a file is unchanged.
+        func matches(_ other: FileStamp) -> Bool { date != nil && size != nil && self == other }
+    }
+
+    struct CachedFile: Sendable {
+        var stamp: FileStamp
+        /// Nil when the file was read but isn't UTF-8 text.
+        var text: String?
+    }
+
+    /// One Markdown file in the folder, as a scan found it.
+    struct ScannedFile: Sendable {
+        let url: URL
+        /// Nil when it wasn't read this time: not downloaded, not text, past `maxNotes`, or not readable.
+        let text: String?
+        let created: Date
+    }
+
+    struct Scan: Sendable {
+        /// Nil when the folder couldn't be listed, which isn't the same as having no notes.
+        let files: [ScannedFile]?
+        let cache: [String: CachedFile]
+    }
+
+    /// Reads every Markdown file in the folder that changed since it was last read, on the notes queue.
+    /// Notes edited here keep their edits; others take what's on disk. The task ends once the notes are
+    /// up to date; calls while one runs fold into it.
+    @discardableResult
+    func reload() -> Task<Void, Never> {
+        reloadAgain = true
+        if let reloading { return reloading }
+        let task = Task { [weak self] in
+            while let store = self, store.reloadAgain {
+                store.reloadAgain = false
+                await store.reloadOnce()
+            }
+            self?.reloading = nil
+        }
+        reloading = task
+        return task
+    }
+
+    private func reloadOnce() async {
+        let folder = folder, changes = diskChanges, cache = fileCache, reader = reader
+        scans += 1
+        let scan = await withCheckedContinuation { (continuation: CheckedContinuation<Scan, Never>) in
+            diskQueue.async { continuation.resume(returning: Self.scan(folder, cache: cache, reader: reader)) }
+        }
+        // A save, rename or removal here while the folder was being read, or a new folder: what the scan
+        // saw is already out of date, and taking it would undo the change. The change's own event, or
+        // this, looks again.
+        guard folder == self.folder, changes == diskChanges else {
+            if folder == self.folder { scheduleReload() }
+            return
+        }
+        fileCache = scan.cache
+        apply(scan.files)
+    }
+
+    /// Lists the folder and reads what changed, off the main thread. Files whose date and size match
+    /// `cache` aren't read again, files not downloaded from iCloud are asked for and read once their
+    /// event comes in, and files over `maxFileBytes` are left out.
+    nonisolated static func scan(_ folder: URL, cache: [String: CachedFile], reader: Reader) -> Scan {
+        let keys: [URLResourceKey] = [.creationDateKey, .contentModificationDateKey, .fileSizeKey, .isDirectoryKey,
+                                      .ubiquitousItemDownloadingStatusKey]
+        guard let listed = try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys,
+                                                                         options: [.skipsHiddenFiles]) else {
+            return Scan(files: nil, cache: cache)
+        }
+        let entries = listed.filter { isNoteName($0.lastPathComponent) }
+            .map { url in (url: url, values: try? url.resourceValues(forKeys: Set(keys))) }
+            .filter { $0.values?.isDirectory != true }
+            // The most recently changed first, so `maxNotes` keeps those.
+            .sorted { ($0.values?.contentModificationDate ?? .distantPast) > ($1.values?.contentModificationDate ?? .distantPast) }
+        var files: [ScannedFile] = []
+        var fresh: [String: CachedFile] = [:]
+        for (position, entry) in entries.enumerated() {
+            let url = entry.url, values = entry.values
+            let path = key(url)
+            let stamp = FileStamp(date: values?.contentModificationDate, size: values?.fileSize)
+            let created = values?.creationDate ?? .now
+            if let cached = cache[path], cached.stamp.matches(stamp) {
+                fresh[path] = cached
+                files.append(ScannedFile(url: url, text: cached.text, created: created))
+                continue
+            }
+            // Too big to be a note: left out whole, so it can't come back cut short.
+            if let size = values?.fileSize, size > maxFileBytes { continue }
+            guard position < maxNotes else {
+                files.append(ScannedFile(url: url, text: nil, created: created))
+                continue
+            }
+            if let status = values?.ubiquitousItemDownloadingStatus, status != .current {
+                // Reading it would wait for iCloud. Its event comes in once it's here.
+                try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+                files.append(ScannedFile(url: url, text: nil, created: created))
+                continue
+            }
+            guard let data = try? reader(url) else {
+                // Not readable just now; tried again next time.
+                files.append(ScannedFile(url: url, text: nil, created: created))
+                continue
+            }
+            let text = String(data: data, encoding: .utf8)
+            fresh[path] = CachedFile(stamp: stamp, text: text)
+            files.append(ScannedFile(url: url, text: text, created: created))
+        }
+        return Scan(files: files, cache: fresh)
+    }
+
+    /// Takes what a scan found. Notes edited here keep their edits; others take what's on disk.
+    private func apply(_ scanned: [ScannedFile]?) {
         // A folder that can't be read just now says nothing about its notes, so they stay as they are.
-        guard let files = Self.noteFiles(in: folder) else {
+        guard let files = scanned else {
             if notes.isEmpty { newNote() }
             return
         }
-        let paths = Set(files.map(\.standardizedFileURL.path))
-        let known = Dictionary(notes.map { ($0.url.standardizedFileURL.path, $0) }, uniquingKeysWith: { first, _ in first })
-        var gone = notes.filter { $0.isOnDisk && !paths.contains($0.url.standardizedFileURL.path) }
+        let paths = Set(files.map { Self.key($0.url) })
+        let known = Dictionary(notes.map { (Self.key($0.url), $0) }, uniquingKeysWith: { first, _ in first })
+        var gone = notes.filter { $0.isOnDisk && !paths.contains(Self.key($0.url)) }
         var loaded: [Note] = []
-        for url in files {
-            guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+        for file in files {
+            let url = file.url
+            guard let text = file.text else {
                 // Not readable as text just now. A note we have keeps what it has.
-                if let note = known[url.standardizedFileURL.path], note.isOnDisk { loaded.append(note) }
+                if let note = known[Self.key(url)], note.isOnDisk { loaded.append(note) }
                 continue
             }
-            if var note = known[url.standardizedFileURL.path] {
+            if var note = known[Self.key(url)] {
                 if text != note.savedText {
                     // Changed elsewhere. Unsaved edits here win; they're written out shortly.
                     if note.text == note.savedText { note.text = text }
@@ -298,8 +492,7 @@ final class NotesStore: ObservableObject {
                 note.url = url
                 loaded.append(note)
             } else {
-                let created = (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate ?? .now
-                loaded.append(Note(id: UUID(), url: url, text: text, savedText: text, isOnDisk: true, created: created))
+                loaded.append(Note(id: UUID(), url: url, text: text, savedText: text, isOnDisk: true, created: file.created))
             }
         }
         // Gone from the folder with edits that never reached it: they stay, and save as a new file.
@@ -323,7 +516,46 @@ final class NotesStore: ObservableObject {
         let keys: [URLResourceKey] = [.creationDateKey, .isRegularFileKey]
         return (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: keys,
                                                              options: [.skipsHiddenFiles]))?
-            .filter { ["md", "markdown"].contains($0.pathExtension.lowercased()) }
+            .filter { isNoteName($0.lastPathComponent) }
+    }
+
+    /// The names a listing keeps: Markdown, and not hidden.
+    nonisolated static func isNoteName(_ name: String) -> Bool {
+        !name.hasPrefix(".") && ["md", "markdown"].contains((name as NSString).pathExtension.lowercased())
+    }
+
+    /// Whether a file event can change the notes: one for a note file right in the folder, or one that
+    /// says events were lost. Files in folders inside it, hidden files and other kinds are passed over.
+    nonisolated static func eventMatters(_ path: String, flags: FSEventStreamEventFlags, folderPaths: [String]) -> Bool {
+        let rescan = FSEventStreamEventFlags(kFSEventStreamEventFlagMustScanSubDirs | kFSEventStreamEventFlagUserDropped
+                                             | kFSEventStreamEventFlagKernelDropped | kFSEventStreamEventFlagRootChanged)
+        if flags & rescan != 0 { return true }
+        var path = path
+        while path.count > 1, path.hasSuffix("/") { path.removeLast() }
+        let parent = (path as NSString).deletingLastPathComponent
+        guard folderPaths.contains(where: { $0.caseInsensitiveCompare(parent) == .orderedSame }) else { return false }
+        return isNoteName((path as NSString).lastPathComponent)
+    }
+
+    /// The folder's path as written and with its links resolved, since events name the real path.
+    private static func paths(of folder: URL) -> [String] {
+        var paths = [folder.standardizedFileURL.path]
+        if let real = realpath(folder.path, nil) {
+            paths.append(String(cString: real))
+            free(real)
+        }
+        return paths.map { $0.count > 1 && $0.hasSuffix("/") ? String($0.dropLast()) : $0 }
+    }
+
+    /// Schedules a reload when any of the events can change the notes. Says whether it did.
+    @discardableResult
+    func handleEvents(_ paths: [String], flags: [FSEventStreamEventFlags]) -> Bool {
+        let folderPaths = watchedPaths.isEmpty ? Self.paths(of: folder) : watchedPaths
+        let matters = paths.indices.contains { index in
+            Self.eventMatters(paths[index], flags: flags.indices.contains(index) ? flags[index] : 0, folderPaths: folderPaths)
+        }
+        if matters { scheduleReload() }
+        return matters
     }
 
     private func scheduleReload() {
@@ -335,7 +567,8 @@ final class NotesStore: ObservableObject {
         }
     }
 
-    /// FSEvents with file-level events, which also catch files changed in place.
+    /// FSEvents with file-level events, which also catch files changed in place. The stream covers the
+    /// folder's subfolders too; `handleEvents` passes over what happens in them.
     private func watch() {
         if let stream {
             FSEventStreamStop(stream)
@@ -343,14 +576,18 @@ final class NotesStore: ObservableObject {
             FSEventStreamRelease(stream)
             self.stream = nil
         }
+        watchedPaths = Self.paths(of: folder)
         var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(),
                                            retain: nil, release: nil, copyDescription: nil)
-        let callback: FSEventStreamCallback = { _, info, _, _, _, _ in
+        let callback: FSEventStreamCallback = { _, info, count, eventPaths, eventFlags, _ in
             guard let info else { return }
             let store = Unmanaged<NotesStore>.fromOpaque(info).takeUnretainedValue()
-            MainActor.assumeIsolated { store.scheduleReload() }
+            let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as? [String] ?? []
+            let flags = Array(UnsafeBufferPointer(start: eventFlags, count: count))
+            MainActor.assumeIsolated { _ = store.handleEvents(paths, flags: flags) }
         }
-        let flags = FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer)
+        let flags = FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagNoDefer
+                                             | kFSEventStreamCreateFlagUseCFTypes)
         guard let stream = FSEventStreamCreate(nil, callback, &context, [folder.path] as CFArray,
                                                FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 0.3, flags) else { return }
         FSEventStreamSetDispatchQueue(stream, .main)
@@ -379,16 +616,23 @@ final class NotesStore: ObservableObject {
 
     // MARK: Snapshots
 
-    func loadSample(_ texts: [String]) {
+    /// `created` dates the notes, oldest first; without it they're as old as the reference date.
+    /// `current` is the one open.
+    func loadSample(_ texts: [String], created: [Date]? = nil, current: Int = 0) {
         notes = texts.enumerated().map { index, text in
             Note(id: UUID(), url: URL(fileURLWithPath: "/tmp/\(index).md"), text: text, savedText: text, isOnDisk: true,
-                 created: Date(timeIntervalSinceReferenceDate: Double(index)))
+                 created: created.flatMap { $0.indices.contains(index) ? $0[index] : nil }
+                    ?? Date(timeIntervalSinceReferenceDate: Double(index)))
         }
-        currentID = notes.first?.id
+        currentID = notes.indices.contains(current) ? notes[current].id : notes.first?.id
     }
 
     func loadSample(leftBehind: LeftBehind?) {
         self.leftBehind = leftBehind
+    }
+
+    func loadSample(saveFailed: Bool) {
+        self.saveFailed = saveFailed
     }
 }
 

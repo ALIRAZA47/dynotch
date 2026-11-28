@@ -81,8 +81,14 @@ final class NotchWindowController {
             .sink { [weak self] active in
                 // Leaving the field hands the keyboard straight back, so typing goes where it was going.
                 if active { self?.panel.makeKey() } else { self?.panel.giveUpKeyFocus() }
-                self?.refreshPointer()
+                self?.panelResized()
             }
+            .store(in: &cancellables)
+        // A section change or a row coming or going resizes the open panel under a still pointer.
+        Publishers.Merge3(viewModel.$tab.map { _ in () }, viewModel.$liveRows.map { _ in () },
+                          AppSettings.shared.objectWillChange.map { _ in () })
+            .receive(on: RunLoop.main)
+            .sink { [weak self] in self?.panelResized() }
             .store(in: &cancellables)
         AudioOutputs.shared.$isPresentingRoutes
             .removeDuplicates()
@@ -95,9 +101,13 @@ final class NotchWindowController {
         let settings = AppSettings.shared
         viewModel.update(geometry: NotchGeometry.make(for: screen, virtualWidth: settings.virtualNotchWidth,
                                                       virtualStyle: settings.virtualNotchStyle))
-        let width = settings.openWidth + NotchTheme.maxTopRadius * 2 + Self.shadowInset * 2
+        // Room for the section buttons around the panel too, wherever they're placed.
+        let room = NotchViewModel.stripRoom
+        let width = max(settings.openWidth + NotchTheme.maxTopRadius * 2, settings.openWidth + room.leading + room.trailing)
+            + Self.shadowInset * 2
         // The command field can make the open notch taller than its setting.
-        let height = NotchViewModel.tallestOpenHeight(closedHeight: viewModel.geometry.closedSize.height) + Self.shadowInset
+        let height = NotchViewModel.tallestOpenHeight(closedHeight: viewModel.geometry.closedSize.height) + room.bottom
+            + Self.shadowInset
         let frame = screen.frame
         panel.setFrame(CGRect(x: (frame.midX - width / 2).rounded(), y: frame.maxY - height, width: width, height: height),
                        display: true)
@@ -140,7 +150,7 @@ final class NotchWindowController {
             if viewModel.isDraggingOut { viewModel.isDraggingOut = false }
             if viewModel.isDraggingFiles { viewModel.isDraggingFiles = false }
         }
-        let inside = hitRect().contains(point)
+        let inside = isOnNotch(point)
         setInteractive(inside)
         // It has found the glance, or the approval it was turned to has gone, so that can close as usual.
         if awaitingPointer, viewModel.isGlancing, inside || !viewModel.noticeHasActions { awaitingPointer = false }
@@ -167,7 +177,7 @@ final class NotchWindowController {
     }
 
     func mouseDown(at point: CGPoint) {
-        let inside = hitRect().contains(point)
+        let inside = isOnNotch(point)
         // A glance's own buttons take its clicks; a click anywhere else on it opens the notch from SwiftUI.
         if inside, viewModel.phase == .closed || viewModel.phase == .hovering {
             hoverTask?.cancel()
@@ -185,13 +195,13 @@ final class NotchWindowController {
         }
     }
 
-    func mouseDragged(to point: CGPoint, carryingFiles: Bool) {
-        guard carryingFiles, !viewModel.isDraggingOut, AppSettings.shared.trayOpensOnDrag else {
-            mouseMoved(to: point)
-            return
-        }
+    /// `carryingFiles` reads the drag pasteboard, which asks the app the drag started in, so it's only
+    /// called for a drag that would open the Tray here: with the setting on and the pointer in reach.
+    func mouseDragged(to point: CGPoint, carryingFiles: () -> Bool) {
         let reach = viewModel.isOpen ? notchRect.insetBy(dx: -24, dy: -24) : notchRect.insetBy(dx: -80, dy: -70)
-        if reach.contains(point) {
+        let opens = Self.opensTrayOnDrag(at: point, reach: reach, isEnabled: AppSettings.shared.trayOpensOnDrag,
+                                         isDraggingOut: viewModel.isDraggingOut, carryingFiles: carryingFiles)
+        if opens {
             cancelClose()
             setInteractive(true)
             let images = NotchManager.shared.isDraggingImages
@@ -201,11 +211,21 @@ final class NotchWindowController {
                 Haptics.tap()
                 viewModel.open(tab: .tray)
             }
-        } else if viewModel.isDraggingFiles {
+        } else if viewModel.isDraggingFiles, !reach.contains(point) {
             viewModel.isDraggingFiles = false
             viewModel.close()
             setInteractive(false)
+        } else {
+            mouseMoved(to: point)
         }
+    }
+
+    /// Whether a drag at `point` opens the Tray. The cheap tests come first: the pasteboard is only read
+    /// with the setting on, nothing being dragged out of the notch and the pointer within `reach`.
+    static func opensTrayOnDrag(at point: CGPoint, reach: CGRect, isEnabled: Bool, isDraggingOut: Bool,
+                                carryingFiles: () -> Bool) -> Bool {
+        guard isEnabled, !isDraggingOut, reach.contains(point) else { return false }
+        return carryingFiles()
     }
 
     func scrolled(_ event: NSEvent, at point: CGPoint) {
@@ -219,7 +239,7 @@ final class NotchWindowController {
         let overStack = viewModel.isOpen && !viewModel.isCommandMode && StackSwipeAreaView.covers(point, in: panel)
         let gestures = AppSettings.shared.swipeGestures
         guard gestures || overStack else { return }
-        guard hitRect().contains(point) else {
+        guard isOnNotch(point) else {
             resetSwipe()
             return
         }
@@ -309,7 +329,7 @@ final class NotchWindowController {
 
     // MARK: Private
 
-    /// The visible notch in screen coordinates.
+    /// The visible notch in screen coordinates: the panel, without the section buttons round it.
     private var notchRect: CGRect {
         let metrics = viewModel.metrics
         let frame = viewModel.geometry.screenFrame
@@ -317,12 +337,44 @@ final class NotchWindowController {
                       width: metrics.outerWidth, height: metrics.height)
     }
 
-    /// The notch plus a little slack, and up past the top edge so the very top pixel counts.
-    private func hitRect() -> CGRect {
+    /// Everything the pointer counts as on the notch: the notch with a little slack, up past the top
+    /// edge so the very top pixel counts, and the section buttons around the open panel. Clear space
+    /// beside the buttons isn't in it, so clicks there reach what's underneath.
+    private func hitRects() -> [CGRect] {
         // The line is only a few points tall, so it gets more room underneath.
         let slack: CGFloat = viewModel.isOpen || viewModel.isGlancing ? 6 : viewModel.isLine ? 8 : 4
         let rect = notchRect
-        return CGRect(x: rect.minX - slack, y: rect.minY - slack, width: rect.width + slack * 2, height: rect.height + slack + 4)
+        var rects = [CGRect(x: rect.minX - slack, y: rect.minY - slack, width: rect.width + slack * 2, height: rect.height + slack + 4)]
+        guard viewModel.isOpen, !viewModel.isCommandMode else { return rects }
+        let metrics = viewModel.metrics
+        let frame = viewModel.geometry.screenFrame
+        let strip = SectionStrip.frames(placement: AppSettings.shared.sectionPlacement, count: AppSettings.shared.enabledTabs.count,
+                                        panel: CGSize(width: metrics.width, height: metrics.height))
+        // From the panel's top center with y down, to the screen's coordinates with y up.
+        rects += strip.map {
+            CGRect(x: frame.midX + $0.minX, y: frame.maxY - $0.maxY, width: $0.width, height: $0.height).insetBy(dx: -slack, dy: -slack)
+        }
+        return rects
+    }
+
+    private func isOnNotch(_ point: CGPoint) -> Bool {
+        hitRects().contains { $0.contains(point) }
+    }
+
+    /// The panel changed size without the pointer moving: another section, Live gaining or losing a
+    /// row, the command field going. If that left the pointer outside, it hasn't walked away, so the
+    /// notch waits for it to come back rather than closing under it, as it does when opened from the keyboard.
+    private func panelResized() {
+        guard viewModel.isOpen else { return }
+        let inside = isOnNotch(NSEvent.mouseLocation)
+        if isInside, !inside {
+            isInside = false
+            awaitingPointer = true
+            cancelClose()
+            setInteractive(false)
+        } else {
+            refreshPointer()
+        }
     }
 
     private func setInteractive(_ interactive: Bool) {
@@ -381,7 +433,7 @@ final class NotchWindowController {
     /// Something that held the notch open went away while the pointer was elsewhere.
     private func closeIfAbandoned() {
         guard viewModel.isOpen, !isHeldOpen else { return }
-        isInside = hitRect().contains(NSEvent.mouseLocation)
+        isInside = isOnNotch(NSEvent.mouseLocation)
         if !isInside { scheduleClose(after: 0.4) }
     }
 

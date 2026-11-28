@@ -42,6 +42,8 @@ struct LiveNotice: Equatable {
     var actions: [NoticeAction] = []
     var timing: Timing = .always
     var recall: Recall = .nothing
+    /// The app a notification came from, for its icon beside the camera.
+    var appBundleID: String?
 
     /// A notification from another app, rather than something of Dynotch's own.
     var isPeek: Bool { key.hasPrefix(NotificationPeek.keyPrefix) }

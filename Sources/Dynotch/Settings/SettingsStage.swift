@@ -1,93 +1,82 @@
 import SwiftUI
 
-/// The header of every page: a stage of graphite glass, light or dark with the page and lit from
-/// above in the user's accent, with a model notch hanging from its top edge. The notch acts out
-/// the page's settings as they change.
+/// The header of every page: a strip of desk with a menu bar, and a model notch hanging from its top
+/// edge that acts out the page's settings as they change, then the page's title. The open notch is
+/// drawn the way Orbit draws it, in the theme the notch would have now.
 struct SettingsStage: View {
     @ObservedObject var navigation: SettingsNavigation
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.colorSchemeContrast) private var contrast
 
     static let height: CGFloat = 206
+    /// The desk the model hangs over.
+    static let deskHeight: CGFloat = 136
 
     var body: some View {
         let page = navigation.page
-        let ink = StageInk(colorScheme: colorScheme, contrast: contrast)
-        ZStack(alignment: .bottom) {
-            // Both are decoration. The backdrop's glow is stretched past the stage, where `clipped`
-            // hides it but hit testing still finds it: it swallowed clicks on the sidebar's top rows.
-            StageBackdrop()
-                .allowsHitTesting(false)
-            StagePreview(navigation: navigation)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                .accessibilityHidden(true)
-                .allowsHitTesting(false)
-            HStack(alignment: .bottom, spacing: 16) {
-                VStack(alignment: .leading, spacing: 3) {
+        VStack(alignment: .leading, spacing: 0) {
+            StageDesk {
+                StagePreview(navigation: navigation)
+            }
+            .frame(height: Self.deskHeight)
+            // Decoration, read out by nothing.
+            .accessibilityHidden(true)
+            .allowsHitTesting(false)
+            .padding(.top, 14)
+            Spacer(minLength: 0)
+            HStack(alignment: .center, spacing: 16) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(page.title)
-                        .font(.system(size: 26, weight: .bold))
-                        .foregroundStyle(ink.primary)
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(.primary)
                         .accessibilityAddTraits(.isHeader)
                     Text(page.subtitle)
-                        .font(.system(size: 12.5, weight: .medium))
-                        .foregroundStyle(ink.secondary)
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Palette.secondaryText)
                 }
                 .id(page)
                 .transition(.opacity)
                 Spacer(minLength: 0)
                 StageAction(page: page)
             }
-            .padding(.horizontal, 26)
-            .padding(.bottom, 20)
         }
+        .padding(.horizontal, 28)
+        .padding(.bottom, 2)
         .frame(height: Self.height)
         .frame(maxWidth: .infinity)
-        .clipped()
     }
 }
 
-/// The stage's text. On the dark stage it's white at the notch's levels, a step brighter with
-/// Increase Contrast; on the light one it's the system's label color, with the second level a
-/// little firmer than the system's, which reads under 4.5:1 on the stage's grey.
+/// The stage's text, on the desk. The desk's grey is darker than the page in light mode, so the
+/// second level is a step firmer there than the page's to keep 4.5:1.
 struct StageInk {
     let colorScheme: ColorScheme
     var contrast = ColorSchemeContrast.standard
 
-    var primary: Color { colorScheme == .dark ? .white : .primary }
+    var primary: Color { colorScheme == .dark ? NotchTheme.hex(0xF5F5F7) : NotchTheme.hex(0x1D1D1F) }
     var secondary: Color {
-        colorScheme == .dark ? .white.opacity(contrast == .increased ? 0.78 : 0.62) : .primary.opacity(0.7)
+        colorScheme == .dark ? NotchTheme.hex(contrast == .increased ? 0xD1D1D6 : 0xB4B4BA)
+            : NotchTheme.hex(contrast == .increased ? 0x2C2C2E : 0x45454A)
     }
     /// A method that's off. It's news, not a disabled control, so it reads at the second level;
     /// its chip has no fill.
     var off: Color { secondary }
 }
 
-/// Graphite glass lit from above, light or dark with the page: a bloom of the user's accent where
-/// the model notch hangs, on the dark stage a white glow under the top edge, and a line along the
-/// foot where the stage meets the page.
-private struct StageBackdrop: View {
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.windowAccent) private var accent
+/// A strip of desktop in a rounded frame with a hairline, a menu bar along its top, and what's
+/// given hanging from the middle of that.
+struct StageDesk<Content: View>: View {
+    var menuBarHeight: CGFloat = 20
+    @ViewBuilder var content: Content
 
     var body: some View {
-        let bloom = accent.color.opacity(Palette.stageBloomOpacity(colorScheme))
-        ZStack {
-            Palette.stageGradient
-            // The light fades out before the stage's left edge, where the window's own gradient takes
-            // over behind the sidebar, so no edge shows between them.
-            ZStack {
-                RadialGradient(colors: [bloom, bloom.opacity(0)], center: .top, startRadius: 0, endRadius: Palette.stageBloomRadius)
-                    .scaleEffect(x: Palette.stageBloomStretch, y: 1, anchor: .top)
-                RadialGradient(colors: [Palette.stageGlow, Palette.stageGlow.opacity(0)], center: .top, startRadius: 0,
-                               endRadius: Palette.stageGlowRadius)
-                    .scaleEffect(x: Palette.stageGlowStretch, y: 1, anchor: .top)
-            }
-            .mask(LinearGradient(stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.08)],
-                                 startPoint: .leading, endPoint: .trailing))
+        let shape = RoundedRectangle(cornerRadius: 10, style: .continuous)
+        ZStack(alignment: .top) {
+            Palette.wall
+            Palette.menuBar.frame(height: menuBarHeight)
+            content
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .overlay(alignment: .bottom) {
-            Palette.stageFoot.frame(height: 1)
-        }
+        .clipShape(shape)
+        .overlay(shape.strokeBorder(Palette.stroke))
     }
 }
 
@@ -99,9 +88,9 @@ private struct StageAction: View {
     var body: some View {
         switch page {
         case .general, .appearance:
-            button("Open the Notch") { NotchManager.shared.open(tab: .home) }
+            button("Open the Notch") { NotchManager.shared.open(tab: .live) }
         case .nook:
-            button("Open the Nook") { NotchManager.shared.open(tab: .home) }
+            button("Open the Notch") { NotchManager.shared.open(tab: .live) }
         case .tray where settings.showTrayTab:
             button("Open the Tray") { NotchManager.shared.open(tab: .tray) }
         case .focus where settings.showFocusTab:
@@ -114,32 +103,33 @@ private struct StageAction: View {
     }
 
     private func button(_ title: String, symbol: String = "arrow.up.forward", action: @escaping () -> Void) -> some View {
-        CapsuleButton(title: title, symbol: symbol, kind: .glass, action: action)
+        CapsuleButton(title: title, symbol: symbol, action: action)
             .transition(.opacity)
     }
 }
 
-/// The model notch and a line about it. Closed or open, it's one shape, so moving between pages
-/// opens and closes it like the real one.
+/// The model notch and a line about it. Closed or open, moving between pages opens and closes it
+/// like the real one.
 private struct StagePreview: View {
     @ObservedObject var navigation: SettingsNavigation
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject private var permissions = PermissionStatus.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
 
     /// The closed notch is drawn larger than life and the open one smaller, so both fit.
     private static let closedScale: CGFloat = 1.4
-    private static let openScale: CGFloat = 0.46
+    static let openScale: CGFloat = 0.32
     private static let hardwareNotch = CGSize(width: 185, height: 32)
     private static let cycle: TimeInterval = 2.6
     /// How it moves with Reduce Motion: no spring.
     private static let eased = Animation.easeOut(duration: 0.2)
 
-    /// The look as the real notch draws it.
+    /// The look as the real notch draws it, following the window for Follow macOS.
     private var theme: NotchTheme {
-        var theme = settings.theme
-        theme.reducesTransparency = reduceTransparency
+        var theme = settings.theme(systemIsDark: colorScheme == .dark)
+        theme.isHighContrast = contrast == .increased
         return theme
     }
 
@@ -148,16 +138,19 @@ private struct StagePreview: View {
         // Only the Live Activities page cycles through samples.
         TimelineView(.periodic(from: .now, by: page == .activities && !reduceMotion ? Self.cycle : 3600)) { context in
             let featured = featuredActivity(tick: Int(context.date.timeIntervalSinceReferenceDate / Self.cycle))
-            VStack(spacing: 13) {
+            ZStack(alignment: .top) {
                 notch(featured: featured)
                 caption(featured: featured)
                     .id(page)
                     .transition(.opacity)
+                    .padding(.leading, 14)
+                    .padding(.bottom, 12)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isOpen ? .bottomLeading : .bottom)
             }
             .animation(reduceMotion ? Self.eased : .notchActivity, value: featured)
         }
         .animation(reduceMotion ? Self.eased : .notchOpen, value: page)
-        .animation(reduceMotion ? Self.eased : .spring(response: 0.35, dampingFraction: 0.85), value: theme)
+        .animation(reduceMotion ? Self.eased : .snappy(duration: 0.25), value: theme)
         .environment(\.notchTheme, theme)
     }
 
@@ -167,12 +160,7 @@ private struct StagePreview: View {
     private func notch(featured: LiveActivityKind?) -> some View {
         let page = navigation.page
         if isOpen {
-            let scale = Self.openScale
-            PreviewNotch(size: CGSize(width: settings.openWidth * scale, height: settings.openHeight * scale),
-                         topRadius: theme.topRadius * scale, bottomRadius: theme.bottomRadius * scale,
-                         isGlass: theme.isGlass, bandHeight: 32 * scale, shadow: settings.showOpenShadow) {
-                OpenPreview(tab: page == .tray ? .tray : .home, scale: scale)
-            }
+            OrbitModel(tab: page == .tray ? .tray : .live, maxScale: Self.openScale, maxHeight: SettingsStage.deskHeight - 6)
         } else {
             let activity = closedActivity(featured: featured)
             let secondary = page == .activities ? featured?.sampleSecondary : nil
@@ -233,7 +221,9 @@ private struct StagePreview: View {
                 MethodChip(symbol: "keyboard", text: "⌃⌥N", isOn: settings.globalShortcut)
             }
         case .appearance:
-            CaptionText("\(Int(settings.openWidth)) × \(Int(settings.openHeight)) pt · \(settings.theme.material.title) · \(settings.notchAccent.title)")
+            CaptionText("\(Int(settings.openWidth)) × \(Int(settings.openHeight)) pt\n\(theme.isDark ? "Dark" : "Light") · \(settings.notchAccent.title)")
+        case .nook:
+            CaptionText("\(settings.enabledTabs.count) sections\n\(settings.sectionPlacement.title)", isNumeric: false)
         case .activities:
             ActivityDots(featured: featured)
         case .focus:
@@ -246,40 +236,25 @@ private struct StagePreview: View {
     }
 }
 
-/// The notch silhouette at preview size, hanging from the top edge. Black, or glass for an open
-/// notch whose theme asks for it. Whatever the stage around it, the notch is dark inside, with
-/// white on black as the real one has.
+/// The closed notch at preview size, hanging from the top edge: black, with white on black as the
+/// real one has, whatever the window around it.
 private struct PreviewNotch<Content: View>: View {
     let size: CGSize
     let topRadius: CGFloat
     let bottomRadius: CGFloat
-    var isGlass = false
-    var bandHeight: CGFloat = 0
-    var shadow = false
     @ViewBuilder var content: Content
-    /// The stage's appearance, which the shadow follows.
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.isSnapshot) private var isSnapshot
 
     var body: some View {
-        let onDark = colorScheme == .dark
         content
             .frame(width: size.width, height: size.height, alignment: .top)
             .padding(.horizontal, topRadius)
-            .background(NotchSurface(isGlass: isGlass, topRadius: topRadius, bottomRadius: bottomRadius, bandHeight: bandHeight))
-            // Glass carries its own dark layer live. The snapshot's stand-in, on the light stage, needs this.
-            .background {
-                if isSnapshot, isGlass, !onDark { Color.black.opacity(0.35) }
-            }
+            .background(Color.black)
             .clipShape(NotchShape(topRadius: topRadius, bottomRadius: bottomRadius))
             .environment(\.colorScheme, .dark)
-            // Softer on the light stage, and fainter under glass, which would show it through.
-            .shadow(color: .black.opacity(shadow ? (onDark ? (isGlass ? 0.35 : 0.6) : (isGlass ? 0.15 : 0.25)) : 0),
-                    radius: 12, y: onDark ? 7 : 6)
     }
 }
 
-/// A line under the model notch, in the stage's second color.
+/// A line on the desk, in the stage's second color.
 struct CaptionText: View {
     let text: String
     /// Numbers roll as they change; a line that's a sentence cross-fades instead.
@@ -294,8 +269,7 @@ struct CaptionText: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 11.5, weight: .semibold, design: .rounded))
-            .monospacedDigit()
+            .font(.system(size: 11.5, weight: .medium, design: .monospaced))
             .foregroundStyle(StageInk(colorScheme: colorScheme, contrast: contrast).secondary)
             .contentTransition(isNumeric ? .numericText() : .opacity)
     }
@@ -501,50 +475,50 @@ private struct ClosedPreview: View {
     }
 }
 
-/// How the notch opens, as an info chip: glass on the stage, dim while that way is off.
+
+/// How the notch opens, as an info chip on the desk: filled while that way is on, an outline while
+/// it's off.
 private struct MethodChip: View {
     let symbol: String
     let text: String
     let isOn: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         let ink = StageInk(colorScheme: colorScheme, contrast: contrast)
-        let dark = colorScheme == .dark
+        let shape = RoundedRectangle(cornerRadius: max(theme.radius, 2), style: .continuous)
         HStack(spacing: 5) {
             Image(systemName: symbol).font(.system(size: 11, weight: .semibold))
             Text(text).font(.system(size: 12, weight: .medium)).monospacedDigit()
         }
         .foregroundStyle(isOn ? ink.primary : ink.off)
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 9)
         .frame(height: 22)
         .background {
             if isOn {
-                Capsule().fill(dark ? AnyShapeStyle(Color.white.opacity(0.13)) : AnyShapeStyle(Palette.wash))
-                    .overlay(Capsule().strokeBorder(dark ? LinearGradient(colors: [.white.opacity(0.35), .white.opacity(0.06)],
-                                                                         startPoint: .top, endPoint: .bottom)
-                                                         : Palette.rimGradient))
+                shape.fill(Palette.sidebar).overlay(shape.strokeBorder(Palette.stroke))
             } else {
-                Capsule().strokeBorder(Palette.stroke)
+                shape.strokeBorder(ink.off.opacity(0.5))
             }
         }
     }
 }
 
-/// A dot per live activity: bright for the one on show, dim for those turned off.
+/// A dot per live activity: solid for the one on show, faint for those turned off.
 private struct ActivityDots: View {
     let featured: LiveActivityKind?
     @ObservedObject private var settings = AppSettings.shared
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             CaptionText(featured.map { $0.isShown(with: settings) ? $0.title : "\($0.title) · Off" }
                         ?? "Nothing shows in the closed notch", isNumeric: false)
             HStack(spacing: 5) {
                 ForEach(LiveActivityKind.allCases) { kind in
-                    Capsule()
-                        .fill(Color.primary.opacity(kind == featured ? 0.95 : kind.isShown(with: settings) ? 0.35 : 0.1))
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color.primary.opacity(kind == featured ? 0.95 : kind.isShown(with: settings) ? 0.4 : 0.12))
                         .frame(width: kind == featured ? 14 : 5, height: 5)
                 }
             }
@@ -565,18 +539,18 @@ private struct FocusRound: View {
         let total = CGFloat(sessions * settings.focusMinutes + (sessions - 1) * settings.shortBreakMinutes
             + settings.longBreakMinutes)
         let room = width - gap * CGFloat(sessions * 2 - 1)
-        // On the light stage the phases' pale colors would all but vanish, so they take the window's deeper shades.
+        // On the light desk the phases' pale colors would all but vanish, so they take the window's deeper shades.
         let onLight = colorScheme == .light
         let focus = onLight ? WindowAccent(choice: .red).color : PomodoroTimer.Phase.focus.color
         let rest = onLight ? WindowAccent(choice: .green).color : PomodoroTimer.Phase.shortBreak.color
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
             HStack(spacing: gap) {
                 ForEach(0..<sessions, id: \.self) { index in
                     let last = index == sessions - 1
-                    Capsule()
+                    RoundedRectangle(cornerRadius: 1.5)
                         .fill(focus)
                         .frame(width: max(4, room * CGFloat(settings.focusMinutes) / total))
-                    Capsule()
+                    RoundedRectangle(cornerRadius: 1.5)
                         .fill(rest.opacity(last ? 1 : onLight ? 0.8 : 0.55))
                         .frame(width: max(3, room * CGFloat(last ? settings.longBreakMinutes : settings.shortBreakMinutes) / total))
                 }
@@ -589,242 +563,277 @@ private struct FocusRound: View {
 
 // MARK: Open notch
 
-/// The open notch in miniature: its header and the Nook or the tray.
-private struct OpenPreview: View {
+/// The open notch as Orbit draws it, in miniature: the panel in the notch's theme hanging from the
+/// top edge with the camera housing in its band, a section's rows, the command field at its foot,
+/// and the section buttons where Settings › Appearance puts them. It's laid out at full size and
+/// scaled down, so its proportions follow the size sliders.
+struct OrbitModel: View {
     let tab: NotchTab
-    let scale: CGFloat
+    /// The most it's scaled by.
+    let maxScale: CGFloat
+    /// How tall it may be, section buttons included. A taller panel is drawn smaller to fit.
+    var maxHeight: CGFloat = .infinity
+    @ObservedObject private var settings = AppSettings.shared
+
+    /// Room round the panel for the section buttons, at full size.
+    static let sideRoom: CGFloat = 64
+    static let footRoom: CGFloat = 64
+
+    var body: some View {
+        let panel = CGSize(width: settings.openWidth, height: settings.openHeight)
+        let full = CGSize(width: panel.width + Self.sideRoom * 2, height: panel.height + Self.footRoom)
+        let scale = min(maxScale, maxHeight / full.height)
+        OrbitModelCanvas(tab: tab, panel: panel)
+            .frame(width: full.width, height: full.height, alignment: .top)
+            .scaleEffect(scale, anchor: .top)
+            .frame(width: full.width * scale, height: full.height * scale, alignment: .top)
+    }
+}
+
+private struct OrbitModelCanvas: View {
+    let tab: NotchTab
+    let panel: CGSize
     @ObservedObject private var settings = AppSettings.shared
     @Environment(\.notchTheme) private var theme
 
+    private static let housing = CGSize(width: 185, height: 32)
+    private static let button = CGSize(width: 48, height: 47)
+
     var body: some View {
-        VStack(spacing: 0) {
-            header
-                .frame(height: 32 * scale)
-            Group {
-                if tab == .tray {
-                    TraySketch(cardRadius: theme.cardRadius * scale)
-                } else {
-                    NookSketch(cardRadius: theme.cardRadius * scale)
-                }
+        let shape = NotchShape(topRadius: NotchTheme.panelTopRadius, bottomRadius: NotchTheme.panelBottomRadius)
+        let tabs = settings.enabledTabs
+        ZStack(alignment: .top) {
+            strip(tabs)
+            VStack(spacing: 0) {
+                band(tabs)
+                content
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                commandField
             }
-            .padding(.top, 8 * scale)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .padding(.horizontal, NotchTheme.inset + NotchTheme.panelTopRadius)
+            .padding(.bottom, 14)
+            .frame(width: panel.width + NotchTheme.panelTopRadius * 2, height: panel.height)
+            .background {
+                shape.fill(theme.background)
+                    .overlay(shape.stroke(theme.line, lineWidth: 1))
+                    .shadow(color: .black.opacity(settings.showOpenShadow ? (theme.isDark ? 0.5 : 0.22) : 0), radius: 22, y: 12)
+            }
+            .environment(\.colorScheme, theme.colorScheme)
         }
-        .padding(.horizontal, NotchTheme.inset * scale)
-        .padding(.bottom, NotchTheme.inset * scale)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
-    /// As the real header has it: the tabs in a track pressed into the slab, the selected one a
-    /// jewel of the accent with ink on it, and the command pill and the ··· menu on the right.
-    private var header: some View {
-        // As in the real header: each side gets what's left beside the camera housing.
-        let side = max(0, (settings.openWidth - NotchTheme.inset * 2 - 185) / 2 - 6) * scale
-        return HStack(spacing: 0) {
-            HStack(spacing: 2) {
-                ForEach(settings.enabledTabs) { item in
-                    let selected = item == tab
-                    HStack(spacing: 2.5) {
-                        Image(systemName: item.symbol).font(.system(size: 6.5, weight: .semibold))
-                        if selected {
-                            Text(item.title).font(.system(size: 6.5, weight: .semibold)).fixedSize()
-                        }
-                    }
-                    .foregroundStyle(selected ? theme.onAccent : theme.primary.opacity(0.55))
-                    .padding(.horizontal, selected ? 5 : 3)
-                    .frame(height: 11)
-                    .background {
-                        if selected { GlassSurface(depth: .lens(theme.accent), shape: Capsule()) }
-                    }
-                }
+    // MARK: Band
+
+    private func band(_ tabs: [NotchTab]) -> some View {
+        HStack(spacing: 0) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(title).font(NotchFont.title).foregroundStyle(theme.primary)
+                Text(subtitle).font(NotchFont.subheadline).foregroundStyle(theme.secondary)
             }
-            .padding(1)
-            .glass(.well, in: Capsule())
-            .frame(width: side, alignment: .leading)
-            Spacer(minLength: 0)
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Color.black
+                .frame(width: Self.housing.width, height: Self.housing.height)
+                .clipShape(UnevenRoundedRectangle(bottomLeadingRadius: 10, bottomTrailingRadius: 10, style: .continuous))
+                .frame(maxHeight: .infinity, alignment: .top)
             HStack(spacing: 4) {
-                HStack(spacing: 3) {
-                    Image(systemName: "magnifyingglass")
-                    Text("Type a command")
+                Spacer(minLength: 0)
+                if settings.sectionPlacement == .band {
+                    ForEach(tabs.prefix(5)) { item in
+                        Image(systemName: item.symbol)
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(item == tab ? theme.onAccent : theme.secondary)
+                            .frame(width: 32, height: 26)
+                            .background(theme.controlShape.fill(item == tab ? theme.accent : .clear))
+                    }
                 }
-                .padding(.horizontal, 5)
-                .frame(height: 13)
-                .glass(.control, in: Capsule())
                 Image(systemName: "ellipsis")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(theme.secondary)
+                    .frame(width: 26)
             }
-            .font(.system(size: 6, weight: .semibold))
-            .foregroundStyle(theme.secondary)
-            .frame(width: side, alignment: .trailing)
+            .frame(maxWidth: .infinity)
         }
+        .frame(height: 40)
     }
-}
 
-private struct NookSketch: View {
-    let cardRadius: CGFloat
-    @ObservedObject private var settings = AppSettings.shared
-    @Environment(\.notchTheme) private var theme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private var title: String {
+        tab == .tray ? "Tray" : "Live now"
+    }
 
-    var body: some View {
-        GeometryReader { proxy in
-            let widgets = settings.homeWidgets
-            HStack(spacing: 5.5) {
-                PlayerSketch(tint: settings.artworkTint ? Color(red: 1, green: 0.45, blue: 0.55) : theme.accent,
-                             artworkRadius: cardRadius)
-                    .frame(width: widgets.isEmpty ? proxy.size.width : (proxy.size.width * 0.5).rounded())
-                ForEach(Array(widgets.enumerated()), id: \.offset) { _, widget in
-                    VStack(spacing: 4) {
-                        Image(systemName: widget.symbol)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.85))
-                        Text(widget.title)
-                            .font(.system(size: 6.5, weight: .semibold))
+    private var subtitle: String {
+        tab == .tray ? "3 items" : "4 things"
+    }
+
+    // MARK: Content
+
+    @ViewBuilder
+    private var content: some View {
+        if tab == .tray {
+            HStack(spacing: NotchTheme.gap) {
+                ForEach([("doc.richtext.fill", "Brief.pdf"), ("photo.fill", "Hero.png"), ("doc.zipper", "Build.zip")],
+                        id: \.1) { file in
+                    VStack(spacing: 8) {
+                        Image(systemName: file.0)
+                            .font(.system(size: 30, weight: .regular))
                             .foregroundStyle(theme.secondary)
-                            .lineLimit(1)
+                        Text(file.1).font(NotchFont.subheadline).foregroundStyle(theme.primary)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .glass(.pane, in: RoundedRectangle(cornerRadius: cardRadius, style: .continuous))
-                    .transition(reduceMotion ? AnyTransition.opacity : .opacity.combined(with: .scale(scale: 0.9)))
+                    .frame(maxWidth: .infinity, maxHeight: 120)
+                    .background(theme.cardShape.fill(theme.raised).overlay(theme.cardShape.strokeBorder(theme.line)))
+                }
+            }
+            .padding(.top, 8)
+        } else {
+            VStack(spacing: 0) {
+                row(time: "01:02", symbol: "calendar", title: "Design review", subtitle: "Starts in 13m", needsYou: true)
+                OrbitRowDivider()
+                row(time: "1:20", symbol: "music.note", title: "Midnight City", subtitle: "M83 · Music", status: "Playing")
+                OrbitRowDivider()
+                row(time: "3:41", symbol: "hourglass", title: "Tea", subtitle: "Ends at 10:22", status: "Running")
+                OrbitRowDivider()
+                row(time: "25:00", symbol: "hourglass", title: "Bread dough", subtitle: "Paused")
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    /// A ranked row as `OrbitRow` lays one out, drawn here without its buttons or the stores behind it.
+    private func row(time: String, symbol: String, title: String, subtitle: String, status: String? = nil,
+                     needsYou: Bool = false) -> some View {
+        HStack(spacing: 12) {
+            Text(time)
+                .font(NotchFont.time())
+                .foregroundStyle(needsYou ? theme.accentText : theme.primary)
+                .frame(width: 52, alignment: .leading)
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(needsYou ? theme.accentText : theme.secondary)
+                .frame(width: 30, height: 30)
+                .background(theme.controlShape.fill(needsYou ? theme.accentSoft : theme.hover))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title).font(NotchFont.headline).foregroundStyle(theme.primary)
+                Text(subtitle).font(NotchFont.subheadline).foregroundStyle(theme.secondary)
+            }
+            Spacer(minLength: 0)
+            if needsYou {
+                FocusButtonLabel(title: "Join")
+            } else if let status {
+                HStack(spacing: 6) {
+                    Circle().fill(theme.live).frame(width: 7, height: 7)
+                    Text(status).font(NotchFont.subheadline).foregroundStyle(theme.secondary)
                 }
             }
         }
-    }
-}
-
-/// The player in miniature: glass-rimmed art, the bold title, a groove of light in the music's tint
-/// and a pearl to play.
-private struct PlayerSketch: View {
-    let tint: Color
-    let artworkRadius: CGFloat
-    @Environment(\.notchTheme) private var theme
-
-    private static let pearl: CGFloat = 13
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack(alignment: .top, spacing: 6) {
-                let art = RoundedRectangle(cornerRadius: artworkRadius, style: .continuous)
-                art.fill(Palette.sunset)
-                    .overlay(art.strokeBorder(LinearGradient(colors: [.white.opacity(0.4), .white.opacity(0.05)],
-                                                             startPoint: .top, endPoint: .bottom)))
-                    .frame(width: 34, height: 34)
-                    .shadow(color: Palette.magenta.opacity(0.4), radius: 4)
-                VStack(alignment: .leading, spacing: 1.5) {
-                    Text("Midnight City")
-                        .font(.system(size: 8.5, weight: .bold))
-                        .foregroundStyle(theme.primary)
-                    Text("M83")
-                        .font(.system(size: 6.5, weight: .medium))
-                        .foregroundStyle(theme.secondary)
-                    AudioBars(isPlaying: false, color: tint)
-                        .frame(width: 11, height: 6)
-                        .padding(.top, 4)
-                }
-                .lineLimit(1)
+        .lineLimit(1)
+        .padding(.horizontal, 10)
+        .frame(height: NotchTheme.rowHeight)
+        .background {
+            if needsYou {
+                theme.controlShape.fill(theme.raised).overlay(theme.controlShape.strokeBorder(theme.line))
             }
-            Capsule()
-                .fill(theme.track)
-                .frame(height: 2)
-                .overlay(alignment: .leading) {
-                    GeometryReader { proxy in
-                        Capsule()
-                            .fill(LinearGradient(colors: [tint.opacity(0.55), tint], startPoint: .leading, endPoint: .trailing))
-                            .frame(width: proxy.size.width * 0.35)
-                    }
-                }
-            HStack {
-                ForEach(["shuffle", "backward.fill", "pause.fill", "forward.fill", "repeat"], id: \.self) { symbol in
-                    if symbol == "pause.fill" {
-                        pearl(symbol)
-                    } else {
-                        Image(systemName: symbol)
-                            .foregroundStyle(.white.opacity(symbol == "shuffle" || symbol == "repeat" ? 0.5 : 0.85))
-                    }
-                    if symbol != "repeat" { Spacer(minLength: 0) }
-                }
-            }
-            .font(.system(size: 6.5, weight: .bold))
-            .frame(height: Self.pearl)
         }
-        .frame(maxHeight: .infinity, alignment: .top)
     }
 
-    /// The play button's pearl of white glass, with the glyph in black. No shadow: the miniature
-    /// redraws all the while a size slider is dragged.
-    private func pearl(_ symbol: String) -> some View {
-        let side = Self.pearl
-        return Image(systemName: symbol)
-            .font(.system(size: side * 0.4, weight: .bold))
-            .foregroundStyle(.black.opacity(0.86))
-            .frame(width: side, height: side)
-            .background(Circle().fill(LinearGradient(colors: [.white, .white.opacity(0.8)], startPoint: .top, endPoint: .bottom)))
-            .overlay(Circle().strokeBorder(LinearGradient(colors: [.white, .white.opacity(0.2)], startPoint: .top, endPoint: .bottom)))
-    }
-}
-
-private struct TraySketch: View {
-    let cardRadius: CGFloat
-    @ObservedObject private var tray = TrayStore.shared
-    @Environment(\.notchTheme) private var theme
-
-    var body: some View {
-        HStack(spacing: 5.5) {
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 3) {
-                    Text("Tray").font(.system(size: 7, weight: .bold)).foregroundStyle(.white)
-                    Text(tray.items.count == 1 ? "1 item" : "\(tray.items.count) items")
-                        .font(.system(size: 6.5, weight: .medium))
-                        .foregroundStyle(theme.tertiary)
-                }
-                if tray.items.isEmpty {
-                    Text("Drop files here")
-                        .font(.system(size: 6.5, weight: .medium))
-                        .foregroundStyle(theme.tertiary)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    HStack(alignment: .top, spacing: 4) {
-                        ForEach(tray.items.prefix(5)) { item in
-                            VStack(spacing: 2) {
-                                Image(nsImage: IconCache.icon(forFile: item.url.path, side: 20))
-                                    .resizable()
-                                    .frame(width: 18, height: 18)
-                                Text(item.url.lastPathComponent)
-                                    .font(.system(size: 5, weight: .semibold))
-                                    .foregroundStyle(.white.opacity(0.85))
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                            }
-                            .frame(width: 30)
-                        }
-                    }
-                }
-            }
-            .padding(6)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .glass(.pane, in: RoundedRectangle(cornerRadius: cardRadius, style: .continuous))
-            VStack(spacing: 3) {
-                Image(systemName: "dot.radiowaves.left.and.right")
-                    .font(.system(size: 9, weight: .medium))
-                Text("AirDrop").font(.system(size: 6, weight: .semibold))
-            }
-            .foregroundStyle(.white.opacity(0.8))
-            .frame(width: 50)
-            .frame(maxHeight: .infinity)
-            .glass(.pane, in: RoundedRectangle(cornerRadius: cardRadius, style: .continuous))
+    private var commandField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "magnifyingglass").font(.system(size: 14, weight: .medium))
+            Text("Type a command").font(NotchFont.body)
+            Spacer(minLength: 0)
+            Text("⌃⌥K").font(NotchFont.keycap)
         }
+        .foregroundStyle(theme.tertiary)
+        .padding(.horizontal, 12)
+        .frame(height: NotchTheme.commandFieldHeight)
+        .background(theme.controlShape.fill(theme.field).overlay(theme.controlShape.strokeBorder(theme.line)))
+        .padding(.top, NotchTheme.commandFieldGap)
+    }
+
+    // MARK: Section buttons
+
+    @ViewBuilder
+    private func strip(_ tabs: [NotchTab]) -> some View {
+        let edge = theme.background
+        switch settings.sectionPlacement {
+        case .under:
+            HStack(spacing: 3) { buttons(tabs) }
+                .padding(.horizontal, 6)
+                .padding(.top, 6)
+                .padding(.bottom, 6)
+                .background(UnevenRoundedRectangle(bottomLeadingRadius: 14, bottomTrailingRadius: 14, style: .continuous).fill(edge))
+                .padding(.top, panel.height - 1)
+        case .left, .right, .sides:
+            let split = settings.sectionPlacement == .sides ? (tabs.count + 1) / 2 : tabs.count
+            let left = settings.sectionPlacement == .right ? [] : Array(tabs.prefix(split))
+            let right = settings.sectionPlacement == .left ? [] : Array(tabs.suffix(tabs.count - (settings.sectionPlacement == .right ? 0 : split)))
+            HStack(alignment: .top, spacing: 0) {
+                column(left, edge: .leading)
+                Spacer(minLength: 0)
+                column(right, edge: .trailing)
+            }
+            .frame(width: panel.width + NotchTheme.panelTopRadius * 2 + Self.button.width * 2 + 8)
+            .padding(.top, 44)
+        case .arc:
+            let count = tabs.count
+            ZStack(alignment: .top) {
+                ForEach(Array(tabs.enumerated()), id: \.element) { index, item in
+                    let t = count > 1 ? Double(index) / Double(count - 1) : 0.5
+                    let angle = Double.pi * (0.12 + 0.76 * t)
+                    let radiusX = Double(panel.width) / 2 + 20
+                    disc(item)
+                        .offset(x: -CGFloat(cos(angle) * radiusX), y: panel.height - 18 + CGFloat(sin(angle) * 50))
+                }
+            }
+        case .band, .hidden:
+            EmptyView()
+        }
+    }
+
+    private func column(_ tabs: [NotchTab], edge: HorizontalEdge) -> some View {
+        VStack(spacing: 3) { buttons(tabs) }
+            .padding(5)
+            .background(UnevenRoundedRectangle(topLeadingRadius: edge == .leading ? 12 : 0,
+                                               bottomLeadingRadius: edge == .leading ? 12 : 0,
+                                               bottomTrailingRadius: edge == .trailing ? 12 : 0,
+                                               topTrailingRadius: edge == .trailing ? 12 : 0, style: .continuous)
+                .fill(theme.background))
+            .opacity(tabs.isEmpty ? 0 : 1)
+    }
+
+    private func buttons(_ tabs: [NotchTab]) -> some View {
+        ForEach(tabs) { item in
+            let selected = item == tab
+            Image(systemName: item.symbol)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(selected ? theme.onAccent : theme.secondary)
+                .frame(width: Self.button.width, height: Self.button.height)
+                .background(theme.controlShape.fill(selected ? theme.accent : .clear))
+        }
+    }
+
+    private func disc(_ item: NotchTab) -> some View {
+        let selected = item == tab
+        return Image(systemName: item.symbol)
+            .font(.system(size: 17, weight: .medium))
+            .foregroundStyle(selected ? theme.onAccent : theme.secondary)
+            .frame(width: 50, height: 50)
+            .background(Circle().fill(selected ? theme.accent : theme.raised))
+            .overlay(Circle().strokeBorder(theme.line))
     }
 }
 
 // MARK: Model notch elsewhere
 
-/// The header's lit glass, for windows other than Settings.
+/// The header's desk, for windows other than Settings.
 struct StageSky: View {
     var body: some View {
-        StageBackdrop()
+        StageDesk { EmptyView() }
     }
 }
 
 /// The header's model notch on its own, for the welcome tour: closed with a live activity, under
-/// the pointer, or open on a tab.
+/// the pointer, or open on a section.
 struct ModelNotch: View {
     enum Pose: Equatable {
         case closed(ClosedActivity, secondary: CompactActivity? = nil)
@@ -833,18 +842,21 @@ struct ModelNotch: View {
     }
 
     let pose: Pose
+    var openScale: CGFloat = 0.32
+    /// How tall the open model may be, its section buttons included.
+    var openHeight: CGFloat = SettingsStage.deskHeight - 6
     @ObservedObject private var settings = AppSettings.shared
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
 
-    // As in StagePreview: the closed notch larger than life, the open one smaller.
+    // As in StagePreview: the closed notch larger than life.
     private static let closedScale: CGFloat = 1.4
-    private static let openScale: CGFloat = 0.46
     private static let hardwareNotch = CGSize(width: 185, height: 32)
 
-    /// The look as the real notch draws it.
+    /// The look as the real notch draws it, following the window for Follow macOS.
     private var theme: NotchTheme {
-        var theme = settings.theme
-        theme.reducesTransparency = reduceTransparency
+        var theme = settings.theme(systemIsDark: colorScheme == .dark)
+        theme.isHighContrast = contrast == .increased
         return theme
     }
 
@@ -857,12 +869,7 @@ struct ModelNotch: View {
     private var notch: some View {
         switch pose {
         case .open(let tab):
-            let scale = Self.openScale
-            PreviewNotch(size: CGSize(width: settings.openWidth * scale, height: settings.openHeight * scale),
-                         topRadius: theme.topRadius * scale, bottomRadius: theme.bottomRadius * scale,
-                         isGlass: theme.isGlass, bandHeight: 32 * scale, shadow: settings.showOpenShadow) {
-                OpenPreview(tab: tab, scale: scale)
-            }
+            OrbitModel(tab: tab, maxScale: openScale, maxHeight: openHeight)
         case .closed, .hovering:
             let (activity, secondary): (ClosedActivity, CompactActivity?) = if case .closed(let activity, let secondary) = pose {
                 (activity, secondary)

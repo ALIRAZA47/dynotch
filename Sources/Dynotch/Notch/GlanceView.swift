@@ -124,18 +124,9 @@ struct GlanceView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .contentShape(Rectangle())
         .onTapGesture { viewModel.open() }
-        // The glance is black to its edge whatever the open notch is made of, so its glass is lit as
-        // glass on black: a pane on Liquid Glass darkens the glass, and on black it would vanish.
-        .environment(\.notchTheme, theme.onBlack)
-    }
-}
-
-private extension NotchTheme {
-    /// This look on the black slab: the same accent, corners and contrast, with black's tokens.
-    var onBlack: NotchTheme {
-        var theme = self
-        theme.material = .black
-        return theme
+        // The glance hangs from the closed notch, black to its edge whatever the open panel's theme,
+        // so it's drawn in Orbit's dark tokens with the same accent and roundness.
+        .environment(\.notchTheme, theme.dark)
     }
 }
 
@@ -196,12 +187,14 @@ extension GlanceLayout where Bottom == EmptyView {
     }
 }
 
-/// A round button in the glance's ear, a disc of glass with the tint's light in it: pause, play.
+/// The main button in the glance's ear: pause, play. A flat square at the button roundness, a wash
+/// of the tint with the symbol in it.
 struct GlanceCircleButton: View {
     let symbol: String
     let tint: Color
     let help: String
     let action: () -> Void
+    @Environment(\.notchTheme) private var theme
     @ViewState private var hovering = false
 
     var body: some View {
@@ -210,9 +203,9 @@ struct GlanceCircleButton: View {
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(tint)
                 .contentTransition(.symbolEffect(.replace))
-                .frame(width: 27, height: 27)
-                .glass(.tint(tint), in: Circle(), isLit: hovering)
-                .contentShape(Circle())
+                .frame(width: 28, height: 28)
+                .background(theme.controlShape.fill(tint.opacity(hovering ? 0.26 : 0.18)))
+                .contentShape(theme.controlShape)
         }
         .buttonStyle(PressableButtonStyle())
         .onHover { hovering = $0 }
@@ -222,17 +215,18 @@ struct GlanceCircleButton: View {
     }
 }
 
-/// The picture for a stopwatch or a notice: its symbol on a disc of glass holding the tint's light.
+/// The picture for a stopwatch or a notice: its symbol on a flat tile washed with its tint.
 struct GlanceDisc: View {
     let symbol: String
     let tint: Color
+    @Environment(\.notchTheme) private var theme
 
     var body: some View {
         Image(systemName: symbol)
             .font(.system(size: 19, weight: .semibold))
             .foregroundStyle(tint)
             .frame(width: glancePicture, height: glancePicture)
-            .glass(.tint(tint), in: Circle())
+            .background(theme.cardShape.fill(tint.opacity(0.16)))
     }
 }
 
@@ -294,13 +288,13 @@ private struct MusicGlance: View {
     var body: some View {
         let tint = settings.artworkTint ? Color(nsColor: media.accent) : theme.accent
         GlanceLayout(band: band) {
-            // The art's color falls on the black below it, as the player's does. No art, no light.
-            ArtworkView(image: media.artwork, size: glancePicture, cornerRadius: 11,
-                        glow: settings.artworkTint && media.artwork != nil ? tint : nil)
+            // Flat: no light falls from the art in Orbit.
+            ArtworkView(image: media.artwork, size: glancePicture, cornerRadius: theme.cardRadius)
         } trailing: {
             HStack(spacing: 2) {
                 IconButton(symbol: "backward.fill", size: 12, help: "Previous", action: media.previous)
-                PlayButton(isPlaying: media.isPlaying, side: 28, action: media.playPause)
+                GlanceCircleButton(symbol: media.isPlaying ? "pause.fill" : "play.fill", tint: theme.primary,
+                                   help: media.isPlaying ? "Pause" : "Play", action: media.playPause)
                 IconButton(symbol: "forward.fill", size: 12, help: "Next", action: media.next)
             }
         } center: {
@@ -330,7 +324,7 @@ private struct PomodoroGlance: View {
         let color = timer.phase.color
         GlanceLayout(band: band) {
             ZStack {
-                ProgressRing(progress: timer.progress, color: color, lineWidth: 4, halo: true)
+                ProgressRing(progress: timer.progress, color: color, lineWidth: 4, halo: false)
                 Image(systemName: timer.phase.symbol)
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(color)
@@ -363,9 +357,8 @@ private struct CountdownGlance: View {
         let tint = countdown.isRunning ? TimerStore.tint : theme.secondary
         GlanceLayout(band: band) {
             ZStack {
-                // Light runs round the ring only while it's counting.
-                ProgressRing(progress: countdown.progress(at: store.now), color: tint, lineWidth: 4,
-                             halo: countdown.isRunning)
+                // In the timer's color while it's counting, grey while it's paused.
+                ProgressRing(progress: countdown.progress(at: store.now), color: tint, lineWidth: 4)
                 Image(systemName: "timer")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(tint)
@@ -377,12 +370,15 @@ private struct CountdownGlance: View {
                     store.extend(countdown, by: 60)
                 } label: {
                     Text("+1 min")
-                        .font(NotchFont.bodyStrong)
-                        .foregroundStyle(TimerStore.tint)
-                        .padding(.horizontal, 9)
-                        .frame(height: 25)
-                        .glass(.tint(TimerStore.tint), in: Capsule(), isLit: hovering)
-                        .contentShape(Capsule())
+                        // SF Pro digits: SF Mono would push it past the ear's edge.
+                        .font(NotchFont.numeric(12))
+                        .foregroundStyle(theme.primary)
+                        .lineLimit(1)
+                        .fixedSize()
+                        .padding(.horizontal, 7)
+                        .frame(height: 28)
+                        .background(theme.controlShape.fill(hovering ? theme.controlHover : theme.hover))
+                        .contentShape(theme.controlShape)
                 }
                 .buttonStyle(PressableButtonStyle(scale: 0.94))
                 .onHover { hovering = $0 }
@@ -429,7 +425,7 @@ private struct DownloadGlance: View {
 
     var body: some View {
         GlanceLayout(band: band) {
-            DownloadRing(fraction: monitor.fraction, lineWidth: 4, arrowSize: 15, halo: true)
+            DownloadRing(fraction: monitor.fraction, lineWidth: 4, arrowSize: 15, halo: false)
                 .padding(2)
         } trailing: {
             DownloadAmount()
@@ -495,7 +491,6 @@ private struct NoticeGlance: View {
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .frame(width: glancePicture, height: glancePicture)
-                .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
                 .onDrag {
                     viewModel.isDraggingOut = true
                     return NSItemProvider(contentsOf: file) ?? NSItemProvider()
@@ -507,7 +502,8 @@ private struct NoticeGlance: View {
     }
 }
 
-/// A button on a notice. The main one is the accent's jewel, in ink; another is glass.
+/// A button on a notice. The main one is a focus button in the accent, the one to look at; another
+/// is a plain filled one.
 struct NoticeButton: View {
     let action: NoticeAction
     var isMain = true
@@ -518,20 +514,25 @@ struct NoticeButton: View {
 
     var body: some View {
         Button(action: run) {
-            Text(action.title)
-                .font(NotchFont.bodyStrong)
-                .foregroundStyle(isMain ? theme.onAccent : theme.primary)
-                .lineLimit(1)
-                .padding(.horizontal, 12)
-                .frame(height: height)
-                .glass(isMain ? .lens(theme.accent) : .control, in: Capsule(), isLit: hovering)
-                .contentShape(Capsule())
+            if isMain {
+                FocusButtonLabel(title: action.title, height: height, hovering: hovering)
+            } else {
+                Text(action.title)
+                    .font(NotchFont.bodyStrong)
+                    .foregroundStyle(theme.primary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 12)
+                    .frame(height: height)
+                    .background(theme.controlShape.fill(hovering ? theme.controlHover : theme.hover))
+                    .contentShape(theme.controlShape)
+            }
         }
         .buttonStyle(PressableButtonStyle(scale: 0.95))
         .onHover { hovering = $0 }
         .animation(.notchHighlight, value: hovering)
         .fixedSize()
         .help(action.title)
+        .accessibilityLabel(action.title)
     }
 }
 
@@ -548,8 +549,10 @@ private struct RecentGlance: View {
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
                     Text("Recent")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(theme.primary)
+                        .font(NotchFont.label)
+                        .tracking(0.66)
+                        .textCase(.uppercase)
+                        .foregroundStyle(theme.secondary)
                     Spacer(minLength: 0)
                 }
                 .padding(.horizontal, 16)
@@ -581,8 +584,8 @@ private struct RecentGlance: View {
             }
             Spacer(minLength: 4)
             Text(Format.ago(recent.date, from: now))
-                .font(NotchFont.caption)
-                .foregroundStyle(theme.tertiary)
+                .font(NotchFont.time(11.5, .medium))
+                .foregroundStyle(theme.secondary)
                 .lineLimit(1)
                 .fixedSize()
             if let action = recent.actions.first {
@@ -602,23 +605,24 @@ private struct EventGlance: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 30)) { context in
             GlanceLayout(band: band) {
-                // A leaf of a desk calendar: a pane with the weekday over the day.
+                // A leaf of a desk calendar: a raised tile with the weekday over the day.
                 VStack(spacing: 0) {
                     Text(event.start.formatted(.dateTime.weekday(.abbreviated)).uppercased())
                         .font(.system(size: 9, weight: .bold))
                         .tracking(0.5)
                         .foregroundStyle(Color.orange)
                     Text(event.start.formatted(.dateTime.day()))
-                        .font(NotchFont.numeric(20))
+                        .font(NotchFont.figure(19))
                         .foregroundStyle(theme.primary)
                 }
                 // Digits leave the line's descender empty, so the pair sits a point low to look centered.
                 .offset(y: 1)
                 .frame(width: glancePicture, height: glancePicture)
-                .glass(.pane, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(theme.cardShape.fill(theme.raised))
+                .overlay(theme.cardShape.strokeBorder(theme.line))
             } trailing: {
                 Text(event.isHappening(at: context.date) ? "Now" : Format.countdown(to: event.start, from: context.date))
-                    .font(NotchFont.numeric(12))
+                    .font(NotchFont.time(12))
                     .foregroundStyle(Color.orange)
                     .lineLimit(1)
             } center: {
@@ -628,7 +632,11 @@ private struct EventGlance: View {
                                     + event.end.formatted(date: .omitted, time: .shortened))
                     Spacer(minLength: 0)
                     if let url = event.meetingURL {
-                        JoinButton(url: url, height: 28)
+                        // The call's own green, whatever the accent, as on the call buttons in FaceTime.
+                        PillButton(title: "Join", symbol: "video.fill", tint: theme.live, height: 28) {
+                            NSWorkspace.shared.open(url)
+                        }
+                        .help(url.absoluteString)
                     }
                 }
             }
@@ -666,7 +674,7 @@ private struct TodayGlance: View {
                             }
                             Text("\(power.level)%")
                         }
-                        .font(NotchFont.numeric(12))
+                        .font(NotchFont.time(12))
                         .foregroundStyle(power.isCharging ? Color.green : power.level <= 20 ? Color.orange : theme.secondary)
                     }
                 }
@@ -702,12 +710,12 @@ private struct TodayGlance: View {
                 let sky = Sky(code: conditions.code, isDay: conditions.isDay)
                 let temperature = WeatherService.format(conditions.temperature, units: settings.weatherUnits)
                 chip(symbol: sky.symbol, tint: .yellow, text: describesSky ? temperature + " " + sky.description : temperature) {
-                    viewModel.open(tab: .home)
+                    viewModel.open(tab: AppSettings.shared.enabledTabs.contains(.home) ? .home : .live)
                 }
             }
             if let event = nextEvent(at: now) {
                 chip(symbol: "calendar", tint: .orange, text: eventText(event, at: now)) {
-                    viewModel.open(tab: .home)
+                    viewModel.open(tab: .calendar)
                 }
             }
             if showsReviews, ci.reviewCount > 0 {
@@ -750,7 +758,7 @@ private struct TodayGlance: View {
     }
 }
 
-/// A capsule of glass under the camera: what's coming, in its color, and a tap opens where it is.
+/// A flat chip under the camera: what's coming, its symbol in its color, and a tap opens where it is.
 struct GlanceChip: View {
     let symbol: String
     let tint: Color
@@ -773,10 +781,10 @@ struct GlanceChip: View {
                     .frame(maxWidth: 160, alignment: .leading)
                     .fixedSize(horizontal: true, vertical: false)
             }
-            .padding(.horizontal, 11)
+            .padding(.horizontal, 10)
             .frame(height: 28)
-            .glass(.control, in: Capsule(), isLit: hovering)
-            .contentShape(Capsule())
+            .background(theme.controlShape.fill(hovering ? theme.controlHover : theme.hover))
+            .contentShape(theme.controlShape)
         }
         .buttonStyle(PressableButtonStyle(scale: 0.95))
         .onHover { hovering = $0 }

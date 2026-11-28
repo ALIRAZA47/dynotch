@@ -6,6 +6,9 @@ import DynotchShared
 struct NoticeAction: Equatable {
     enum Kind: Equatable {
         case openApp(bundleID: String)
+        /// A notification's own link, opened by the app that posted it, so a click lands on the chat or
+        /// session it was about. Only a web link, or a link that app itself handles, is opened.
+        case openLink(URL, bundleID: String)
         case openFile(URL)
         case reveal(URL)
         case openURL(URL)
@@ -31,6 +34,16 @@ struct NoticeAction: Equatable {
         switch kind {
         case .openApp(let bundleID):
             if let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) {
+                NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration())
+            }
+        case .openLink(let link, let bundleID):
+            guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { break }
+            let scheme = link.scheme?.lowercased() ?? ""
+            let handler = NSWorkspace.shared.urlForApplication(toOpen: link)
+            let isTheApps = handler.flatMap { Bundle(url: $0)?.bundleIdentifier } == bundleID
+            if scheme == "http" || scheme == "https" || isTheApps {
+                NSWorkspace.shared.open([link], withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration())
+            } else {
                 NSWorkspace.shared.openApplication(at: app, configuration: NSWorkspace.OpenConfiguration())
             }
         case .openFile(let url):

@@ -47,21 +47,14 @@ final class BrightnessMonitor: ObservableObject {
 
     // MARK: Changing the brightness
 
-    /// The brightness keys would change the built-in display, which Dynotch can set. With the pointer
-    /// on another display, or the lid closed, the keys are left to macOS.
-    var canSetBrightness: Bool { getBrightness != nil && setBrightness != nil && keyTarget != nil }
-
-    /// One press of a brightness key: a sixteenth, or a sixty-fourth with ⇧⌥, as in macOS. Shows the
-    /// meter even at either end. False if the brightness couldn't be set.
-    @discardableResult
-    func step(up: Bool, fine: Bool) -> Bool {
-        guard let display = keyTarget, let getBrightness, let setBrightness else { return false }
+    /// A run of brightness key presses the tap took, as one change. The tap's thread has already
+    /// checked that the pointer is on the built-in display.
+    func step(_ presses: [KeyPress]) {
+        guard !presses.isEmpty, let display = builtInDisplay, let getBrightness, let setBrightness else { return }
         var current: Float = 0
-        guard getBrightness(display, &current) == 0 else { return false }
-        let level = MediaKeyTap.step(from: current, up: up, fine: fine)
-        guard setBrightness(display, level) == 0 else { return false }
-        showMeter(level)
-        return true
+        guard getBrightness(display, &current) == 0 else { return }
+        let level = MediaKeyTap.level(from: current, after: presses) { $0 == .brightnessUp }
+        if setBrightness(display, level) == 0 { showMeter(level) }
     }
 
     /// The Control tab can set the built-in display wherever the pointer is.
@@ -84,20 +77,6 @@ final class BrightnessMonitor: ObservableObject {
     /// The built-in display, while it's on and DisplayServices can change it.
     private var builtInDisplay: CGDirectDisplayID? {
         guard let display = NSScreen.screens.first(where: { CGDisplayIsBuiltin($0.displayID) != 0 })?.displayID else { return nil }
-        if let canChangeBrightness, !canChangeBrightness(display) { return nil }
-        return display
-    }
-
-    /// The built-in display, while it's on and the pointer is on it.
-    private var keyTarget: CGDirectDisplayID? {
-        let screens = NSScreen.screens
-        guard let builtIn = screens.first(where: { CGDisplayIsBuiltin($0.displayID) != 0 }) else { return nil }
-        let pointer = NSEvent.mouseLocation
-        if screens.count > 1, let underPointer = screens.first(where: { NSMouseInRect(pointer, $0.frame, false) }),
-           underPointer != builtIn {
-            return nil
-        }
-        let display = builtIn.displayID
         if let canChangeBrightness, !canChangeBrightness(display) { return nil }
         return display
     }

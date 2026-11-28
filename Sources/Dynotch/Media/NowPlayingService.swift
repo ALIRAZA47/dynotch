@@ -100,8 +100,14 @@ final class NowPlayingService: ObservableObject {
 
     /// Re-reads everything from the running players.
     func refresh(_ only: Player? = nil) {
-        for source in only.map({ [$0] }) ?? Player.allCases where source.isRunning {
-            Task { await poll(source) }
+        // One read under way and one waiting behind it is all a player ever needs: a player that
+        // isn't answering would otherwise collect a line of them, and hold the other player's up too.
+        for source in only.map({ [$0] }) ?? Player.allCases where source.isRunning && polls[source, default: 0] < 2 {
+            polls[source, default: 0] += 1
+            Task {
+                await poll(source)
+                polls[source, default: 1] -= 1
+            }
         }
         if only == nil, let player, !player.isRunning { clear() }
     }
@@ -192,8 +198,20 @@ final class NowPlayingService: ObservableObject {
         refresh(source)
     }
 
+    /// Reads under way or waiting, for each player. See `refresh`.
+    private var polls: [Player: Int] = [:]
+
+    /// A script for a player, made safe to leave waiting: it gives up after a few seconds, where
+    /// AppleScript's own patience is two minutes, and it doesn't speak to a player that isn't
+    /// running, which would start it again as it quits. `launches` is for Play on a player that's closed.
+    static func guarded(_ script: String, for source: Player, launches: Bool = false) -> String {
+        let body = "with timeout of 3 seconds\n\(script)\nend timeout"
+        return launches ? body : "if application id \"\(source.bundleID)\" is running then\n\(body)\nend if"
+    }
+
     private func poll(_ source: Player) async {
-        guard let result = await runner.run(source == .music ? Self.musicStateScript : Self.spotifyStateScript) else { return }
+        let script = Self.guarded(source == .music ? Self.musicStateScript : Self.spotifyStateScript, for: source)
+        guard let result = await runner.run(script) else { return }
         let state = result.string(0) ?? "stopped"
         guard state != "stopped" else {
             if player == source { clear() }
@@ -264,6 +282,8 @@ final class NowPlayingService: ObservableObject {
 
     private func send(_ script: String, refreshing source: Player? = nil) {
         let target = source ?? player
+        // Only Play on a closed player, which names its player, is meant to open it.
+        let script = target.map { Self.guarded(script, for: $0, launches: source != nil) } ?? script
         Task {
             _ = await runner.run(script)
             try? await Task.sleep(for: .milliseconds(350))
@@ -289,13 +309,13 @@ final class NowPlayingService: ObservableObject {
     private func fetchArtwork(source: Player, track: Track) async -> NSImage? {
         switch source {
         case .music:
-            if let data = await runner.run(Self.musicArtworkScript)?.data, let image = NSImage(data: data), image.isValid {
+            if let data = await runner.run(Self.guarded(Self.musicArtworkScript, for: .music))?.data, let image = NSImage(data: data), image.isValid {
                 return image
             }
             // Streamed Apple Music tracks often have no local artwork.
             return await Self.catalogArtwork(artist: track.artist, album: track.album.isEmpty ? track.title : track.album)
         case .spotify:
-            guard let link = await runner.run(Self.spotifyArtworkScript)?.text, let url = URL(string: link) else { return nil }
+            guard let link = await runner.run(Self.guarded(Self.spotifyArtworkScript, for: .spotify))?.text, let url = URL(string: link) else { return nil }
             return await Self.download(url)
         }
     }

@@ -10,7 +10,8 @@ final class ShortcutsService: ObservableObject {
     /// What `runInTurn` has yet to finish, the one running first.
     private var queued: [String] = []
     /// Runs a Shortcut and says whether it finished. A test stands in for it.
-    var runner: @MainActor (String) async -> Bool = { await Shell.run("/usr/bin/shortcuts", ["run", $0]).status == 0 }
+    /// No time limit: a Shortcut can wait on the user as long as it likes.
+    var runner: @MainActor (String) async -> Bool = { await Shell.run("/usr/bin/shortcuts", ["run", $0], timeout: nil).status == 0 }
 
     private init() {}
 
@@ -35,6 +36,9 @@ final class ShortcutsService: ObservableObject {
     /// so a quick skip can't leave a Focus on, or set two running against each other. It says nothing
     /// unless one fails.
     func runInTurn(_ name: String) {
+        // Never a long line of them: past a few, the ones still waiting give way to the newest, which
+        // is the one that says how things should end up. The one running is left to finish.
+        if queued.count >= 4 { queued.removeSubrange(1...) }
         queued.append(name)
         guard queued.count == 1 else { return }
         Task {
@@ -67,7 +71,7 @@ struct ShortcutsWidget: View {
             } else {
                 // Four rows are taller than the card in a short notch.
                 Scroller(.vertical, fadesOverflow: true) {
-                    VStack(spacing: 4) {
+                    VStack(spacing: 2) {
                         ForEach(settings.pinnedShortcuts.prefix(4), id: \.self) { name in
                             ShortcutButton(name: name, isRunning: shortcuts.running.contains(name)) { shortcuts.run(name) }
                         }
@@ -87,28 +91,33 @@ private struct ShortcutButton: View {
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 5) {
-                // The play symbol sits at the center of the capsule's rounded end.
-                if isRunning {
-                    ProgressView().controlSize(.mini)
-                        .frame(width: 12)
-                } else {
-                    Image(systemName: "play.fill")
-                        .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(hovering ? theme.primary : theme.secondary)
-                        .frame(width: 12)
+            HStack(spacing: 10) {
+                // A glyph square, as on Orbit's rows: the accent's wash while it runs.
+                ZStack {
+                    if isRunning {
+                        ProgressView().controlSize(.mini)
+                    } else {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(hovering ? theme.primary : theme.secondary)
+                    }
                 }
+                .frame(width: 22, height: 22)
+                .background(theme.controlShape.fill(isRunning ? theme.accentSoft : hovering ? theme.controlHover : theme.hover))
                 Text(name)
-                    .font(NotchFont.body)
+                    .font(NotchFont.bodyStrong)
                     .foregroundStyle(theme.primary)
                     .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(.leading, 6)
-            .padding(.trailing, 10)
-            .frame(height: 24)
-            .glass(.control, in: Capsule(), isLit: hovering)
-            .contentShape(Capsule())
+            .padding(.horizontal, 5)
+            .frame(height: 32)
+            .background {
+                if hovering {
+                    theme.controlShape.fill(theme.hover)
+                }
+            }
+            .contentShape(theme.controlShape)
         }
         .buttonStyle(PressableButtonStyle(scale: 0.96))
         .onHover { hovering = $0 }

@@ -30,6 +30,8 @@ final class CalendarService: ObservableObject, EventAdding {
         let isAllDay: Bool
         let color: Color
         let meetingURL: URL?
+        /// Where it is, as the event says.
+        var location: String? = nil
 
         func isHappening(at date: Date = .now) -> Bool { start <= date && date < end }
     }
@@ -60,8 +62,9 @@ final class CalendarService: ObservableObject, EventAdding {
     var hasReminderAccess: Bool { reminderAccess == .fullAccess }
 
     func start() {
+        // A sync posts this many times in a row. One read, a second after the last of them.
         observer = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: store, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.reload() }
+            MainActor.assumeIsolated { self?.reloadSoon() }
         }
         reload()
         poll = EnergyCoordinator.shared.schedule(.eventAlerts) { [weak self] in self?.tick() }
@@ -89,9 +92,23 @@ final class CalendarService: ObservableObject, EventAdding {
         }
     }
 
+    private var pendingReload: Task<Void, Never>?
+
+    private func reloadSoon() {
+        pendingReload?.cancel()
+        pendingReload = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            self?.reload()
+        }
+    }
+
     func reload() {
-        eventAccess = EKEventStore.authorizationStatus(for: .event)
-        reminderAccess = EKEventStore.authorizationStatus(for: .reminder)
+        let eventStatus = EKEventStore.authorizationStatus(for: .event)
+        let reminderStatus = EKEventStore.authorizationStatus(for: .reminder)
+        // Only what changed is published, so a read that finds nothing new redraws nothing.
+        if eventStatus != eventAccess { eventAccess = eventStatus }
+        if reminderStatus != reminderAccess { reminderAccess = reminderStatus }
         loadedDay = Calendar.current.startOfDay(for: .now)
         if hasEventAccess { loadEvents() }
         if hasReminderAccess { loadReminders() }
@@ -169,7 +186,7 @@ final class CalendarService: ObservableObject, EventAdding {
         guard let end = calendar.date(byAdding: .day, value: 7, to: start) else { return }
         let showAllDay = AppSettings.shared.showAllDayEvents
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
-        events = store.events(matching: predicate)
+        let loaded = store.events(matching: predicate)
             .filter { event in
                 event.status != .canceled
                     && (showAllDay || !event.isAllDay)
@@ -183,8 +200,10 @@ final class CalendarService: ObservableObject, EventAdding {
                       end: event.endDate,
                       isAllDay: event.isAllDay,
                       color: Color(cgColor: event.calendar.cgColor),
-                      meetingURL: Self.meetingURL(in: event))
+                      meetingURL: Self.meetingURL(in: event),
+                      location: event.location.flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 })
             }
+        if loaded != events { events = loaded }
     }
 
     private func loadReminders() {
@@ -203,7 +222,9 @@ final class CalendarService: ObservableObject, EventAdding {
                 default: false
                 }
             }
-            Task { @MainActor in self?.reminders = reminders }
+            Task { @MainActor in
+                if let self, reminders != self.reminders { self.reminders = reminders }
+            }
         }
     }
 
@@ -238,7 +259,9 @@ final class CalendarService: ObservableObject, EventAdding {
         guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return nil }
         for text in [event.url?.absoluteString, event.location, event.notes].compactMap({ $0 }) {
             for match in detector.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
-                guard let url = match.url, let host = url.host?.lowercased() else { continue }
+                // A call's link is a web link. Anything else with a call service's name in it, like a
+                // file:// link in an invitation, isn't one to open from a button.
+                guard let url = match.url, url.scheme?.lowercased() == "https", let host = url.host?.lowercased() else { continue }
                 if meetingHosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }) { return url }
             }
         }
@@ -258,5 +281,11 @@ final class CalendarService: ObservableObject, EventAdding {
         reminderAccess = .fullAccess
         self.events = events
         self.reminders = reminders
+    }
+
+    /// Calendar or Reminders access as a scene needs it, leaving the events alone.
+    func loadSample(eventAccess: EKAuthorizationStatus, reminderAccess: EKAuthorizationStatus) {
+        self.eventAccess = eventAccess
+        self.reminderAccess = reminderAccess
     }
 }

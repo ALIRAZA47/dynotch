@@ -131,33 +131,36 @@ final class TrayStoreTests {
         #expect(try filesInTheFolder() == ["Screenshot.png"])
     }
 
-    /// What the Tray makes of a list that says this path is its own.
-    private func ownership(of url: URL) throws -> Bool? {
+    /// What the Tray makes of a list that says this path is its own, once it has looked at the path.
+    private func ownership(of url: URL) async throws -> Bool? {
         let listed = TrayStore.Item(id: UUID(), url: url, isOwned: true, addedAt: .now)
         try JSONEncoder().encode([listed]).write(to: support.appendingPathComponent("tray.json"))
         let reopened = TrayStore(support: support)
         reopened.load()
+        // Until it has, nothing on the list is the Tray's to trash.
+        #expect(reopened.items.allSatisfy { !$0.isOwned })
+        await reopened.inspection?.value
         return reopened.items.first?.isOwned
     }
 
-    @Test func aPathThroughALinkInTheFolderIsntTheTrays() throws {
+    @Test func aPathThroughALinkInTheFolderIsntTheTrays() async throws {
         let outside = support.appendingPathComponent("Outside", isDirectory: true)
         try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
         try Data("mine".utf8).write(to: outside.appendingPathComponent("Kept.txt"))
         let link = store.folder.appendingPathComponent("Linked")
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: outside)
-        #expect(try ownership(of: link.appendingPathComponent("Kept.txt")) == false)
+        #expect(try await ownership(of: link.appendingPathComponent("Kept.txt")) == false)
     }
 
-    @Test func aLinkInTheFolderIsntTheTrays() throws {
+    @Test func aLinkInTheFolderIsntTheTrays() async throws {
         let link = store.folder.appendingPathComponent("Shortcut.png")
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: file)
-        #expect(try ownership(of: link) == false)
+        #expect(try await ownership(of: link) == false)
     }
 
-    @Test func aFileTheTrayMadeIsStillItsOwn() throws {
+    @Test func aFileTheTrayMadeIsStillItsOwn() async throws {
         store.add(data: Data("dropped".utf8), named: "Dropped.txt")
-        #expect(try ownership(of: try #require(store.items.first?.url)) == true)
+        #expect(try await ownership(of: try #require(store.items.first?.url)) == true)
     }
 
     /// Links a scratch support folder's Tray to `target`.
@@ -189,17 +192,120 @@ final class TrayStoreTests {
     }
 
     /// The real `~/Library`, by other names. All this asks of it is whether those paths exist.
-    @Test func otherSpellingsOfTheLibraryAreStillTheLibrary() {
+    @Test func otherSpellingsOfTheLibraryAreStillTheLibrary() async {
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let onTheDataVolume = "/System/Volumes/Data" + home + "/Library/Preferences"
         #expect(FileManager.default.fileExists(atPath: onTheDataVolume))
-        store.addFromScript([onTheDataVolume, home + "/LIBRARY/Preferences", home + "/lIbRaRy/preferences"].map { URL(fileURLWithPath: $0) })
+        await store.addFromScript([onTheDataVolume, home + "/LIBRARY/Preferences", home + "/lIbRaRy/preferences"].map { URL(fileURLWithPath: $0) }).value
         #expect(store.items.isEmpty)
     }
 
-    @Test func whatsOutsideTheLibraryIsStillTaken() {
-        store.addFromScript([file])
+    @Test func whatsOutsideTheLibraryIsStillTaken() async {
+        await store.addFromScript([file]).value
         #expect(store.items.count == 1)
+        // Looked at on the way in, so the tile has its size without reading the disk.
+        #expect(store.items.first?.info?.bytes == 7)
         LiveActivityCenter.shared.dismissNotice()
+    }
+
+    /// Off the main thread, so the paths aren't there yet when it returns.
+    @Test func aScriptsFilesArriveAfterTheyveBeenLookedAt() async {
+        let task = store.addFromScript([file, file, support.appendingPathComponent("Missing.txt")])
+        #expect(store.items.isEmpty)
+        await task.value
+        #expect(store.items.map(\.url) == [file.resolvingSymlinksInPath().standardizedFileURL])
+        LiveActivityCenter.shared.dismissNotice()
+    }
+
+    @Test func atMostTwentyFromOneLink() async throws {
+        let many = try (0..<25).map { index -> URL in
+            let url = support.appendingPathComponent("File \(index).txt")
+            try Data("x".utf8).write(to: url)
+            return url
+        }
+        await store.addFromScript(many).value
+        #expect(store.items.count == 20)
+        #expect(store.items.allSatisfy { !$0.isOwned })
+        #expect(try filesInTheFolder().isEmpty)
+        LiveActivityCenter.shared.dismissNotice()
+    }
+
+    // MARK: Looking at the files off the main thread
+
+    private func writeList(_ urls: [URL]) throws {
+        let listed = urls.map { TrayStore.Item(id: UUID(), url: $0, isOwned: false, addedAt: .now) }
+        try JSONEncoder().encode(listed).write(to: support.appendingPathComponent("tray.json"))
+    }
+
+    @Test func aFileThatsGoneLeavesAfterTheLookAtLaunch() async throws {
+        let gone = support.appendingPathComponent("Gone.txt")
+        try writeList([file, gone])
+        let reopened = TrayStore(support: support)
+        reopened.load()
+        // Up at once, as saved: whether they're there is read off the main thread.
+        #expect(reopened.items.map(\.url) == [file, gone])
+        await reopened.inspection?.value
+        #expect(reopened.items.map(\.url) == [file])
+    }
+
+    @Test func sizesAreReadOnceAndKeptOnTheItem() async throws {
+        try writeList([file])
+        let reopened = TrayStore(support: support)
+        reopened.load()
+        #expect(reopened.items.first?.info == nil)
+        await reopened.inspection?.value
+        let info = try #require(reopened.items.first?.info)
+        #expect(info.exists && info.bytes == 7 && info.detail != nil)
+        // The file grows; the tile keeps what was read until the Tray looks again.
+        try Data("a bigger picture".utf8).write(to: file)
+        #expect(reopened.items.first?.info?.bytes == 7)
+        await reopened.refreshFiles().value
+        #expect(reopened.items.first?.info?.bytes == 16)
+    }
+
+    @Test func aFolderSaysSoAndHasNoSize() async throws {
+        let folder = support.appendingPathComponent("Photos", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        store.add([folder])
+        await store.inspection?.value
+        let info = try #require(store.items.first?.info)
+        #expect(info.detail == "Folder")
+        #expect(info.bytes == nil)
+    }
+
+    @Test func movingAnItemForgetsItsSizeAndReadsItAgain() async throws {
+        store.add([file])
+        await store.inspection?.value
+        #expect(store.items.first?.info?.bytes == 7)
+        let other = support.appendingPathComponent("Other.txt")
+        try Data("twelve bytes".utf8).write(to: other)
+        store.relocate(try #require(store.items.first), to: other)
+        #expect(store.items.first?.info == nil)
+        await store.inspection?.value
+        #expect(store.items.first?.info?.bytes == 12)
+    }
+
+    /// A look that comes back after the item has moved doesn't put the old file's size on it.
+    @Test func aLookAtAnOldPathIsDropped() async throws {
+        store.add([file])
+        let look = store.inspection
+        let other = support.appendingPathComponent("Other.txt")
+        try Data("twelve bytes".utf8).write(to: other)
+        store.relocate(try #require(store.items.first), to: other)
+        await look?.value
+        #expect(store.items.first?.info == nil || store.items.first?.info?.bytes == 12)
+        await store.inspection?.value
+        #expect(store.items.first?.info?.bytes == 12)
+    }
+
+    @Test func sizesAreNotSaved() async throws {
+        store.add([file])
+        await store.inspection?.value
+        #expect(store.items.first?.info != nil)
+        // A save with the size on the item.
+        store.togglePin(try #require(store.items.first))
+        let saved = try String(contentsOf: support.appendingPathComponent("tray.json"), encoding: .utf8)
+        #expect(!saved.contains("info"))
+        #expect(!saved.contains("fileSize"))
     }
 }

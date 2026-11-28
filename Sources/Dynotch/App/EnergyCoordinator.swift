@@ -16,8 +16,13 @@ extension Cadence {
     static let systemStats = Cadence(name: "Control tab", every: 1.5, onBattery: 3, lowPower: 5)
     /// Focus schedules start and end without touching the files that are watched.
     static let focusSchedules = Cadence(name: "Focus schedules", every: 30, onBattery: 60, lowPower: 120)
-    /// `system_profiler` for Bluetooth battery levels, which nothing announces.
+    /// `system_profiler` for Bluetooth battery levels, which nothing announces, while a view showing
+    /// them is on screen.
     static let bluetoothBatteries = Cadence(name: "Bluetooth batteries", every: 120, onBattery: 300, lowPower: 600)
+    /// The same with nothing showing them, only so low-battery alerts can find a device running down.
+    /// It makes the Bluetooth daemon list every device, so it stays rare.
+    static let bluetoothBatteryAlerts = Cadence(name: "Bluetooth low batteries", every: 10 * 60, onBattery: 15 * 60,
+                                                lowPower: 20 * 60)
     /// Often enough to catch rain half an hour before it starts.
     static let weather = Cadence(name: "Weather", every: 10 * 60, onBattery: 15 * 60, lowPower: 20 * 60)
     /// A partial download that grew in the last two minutes: files don't change the folder as they grow.

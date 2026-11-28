@@ -57,7 +57,7 @@ enum URLCommands {
         case "profile":
             ProfileStore.shared.switchTo(named: value("name") ?? "")
         case "capture":
-            CaptureController.shared.begin()
+            CaptureController.shared.begin(fromScript: true)
         default:
             // Only the command, since the query may carry text that shouldn't end up in a log.
             NSLog("Dynotch: ignoring dynotch://%@", path.joined(separator: "/"))
@@ -94,7 +94,13 @@ enum URLCommands {
                                        for: min(max(seconds.flatMap { $0.isFinite ? $0 : nil } ?? 4, 1), 30))
     }
 
+    /// When a link last worked the timer. A session's start and end can each run one of the user's
+    /// Shortcuts, so links don't get to flip it faster than a person would.
+    private static var lastTimerLink = Date.distantPast
+
     private static func timer(_ action: String) {
+        guard Date.now.timeIntervalSince(lastTimerLink) >= 2 else { return }
+        lastTimerLink = .now
         let timer = PomodoroTimer.shared
         switch action {
         case "start": timer.start()

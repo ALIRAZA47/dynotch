@@ -18,9 +18,13 @@ final class MicMonitor: ObservableObject {
     private let system = AudioObjectID(kAudioObjectSystemObject)
     private var input = AudioObjectID(kAudioObjectUnknown)
     private var inputAddresses: [AudioObjectPropertyAddress] = []
-    private var processes: [AudioObjectID] = []
     private var cameras: [CMIOObjectID] = []
     private var isStarted = false
+    /// Which audio clients record, kept on a queue of its own. Nil where the system doesn't list
+    /// its clients, and then the default input running at all counts.
+    private var clients: AudioClientWatcher?
+    /// The newest answer from `clients` taken, so a late one can't undo a newer one.
+    private var clientsAnswer = 0
     private lazy var refreshListener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
         MainActor.assumeIsolated { self?.refresh() }
     }
@@ -32,19 +36,19 @@ final class MicMonitor: ObservableObject {
         mSelector: kAudioHardwarePropertyDefaultInputDevice,
         mScope: kAudioObjectPropertyScopeGlobal,
         mElement: kAudioObjectPropertyElementMain)
-    private static let processListAddress = AudioObjectPropertyAddress(
+    nonisolated fileprivate static let processListAddress = AudioObjectPropertyAddress(
         mSelector: kAudioHardwarePropertyProcessObjectList,
         mScope: kAudioObjectPropertyScopeGlobal,
         mElement: kAudioObjectPropertyElementMain)
-    private static let runningInputAddress = AudioObjectPropertyAddress(
+    nonisolated fileprivate static let runningInputAddress = AudioObjectPropertyAddress(
         mSelector: kAudioProcessPropertyIsRunningInput,
         mScope: kAudioObjectPropertyScopeGlobal,
         mElement: kAudioObjectPropertyElementMain)
-    private static let processIDAddress = AudioObjectPropertyAddress(
+    nonisolated fileprivate static let processIDAddress = AudioObjectPropertyAddress(
         mSelector: kAudioProcessPropertyPID,
         mScope: kAudioObjectPropertyScopeGlobal,
         mElement: kAudioObjectPropertyElementMain)
-    private static let processInputDevicesAddress = AudioObjectPropertyAddress(
+    nonisolated fileprivate static let processInputDevicesAddress = AudioObjectPropertyAddress(
         mSelector: kAudioProcessPropertyDevices,
         mScope: kAudioObjectPropertyScopeInput,
         mElement: kAudioObjectPropertyElementMain)
@@ -76,16 +80,19 @@ final class MicMonitor: ObservableObject {
         }
         address = Self.processListAddress
         if AudioObjectHasProperty(system, &address) {
-            AudioObjectAddPropertyListenerBlock(system, &address, .main) { [weak self] _, _ in
-                MainActor.assumeIsolated { self?.bindProcesses() }
+            let watcher = AudioClientWatcher(system: .live) { inUse, answer in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { MicMonitor.shared.clientsChanged(inUse: inUse, answer: answer) }
+                }
             }
+            clients = watcher
+            watcher.start()
         }
         var cameraAddress = Self.cameraListAddress
         CMIOObjectAddPropertyListenerBlock(CMIOObjectID(kCMIOObjectSystemObject), &cameraAddress, .main) { [weak self] _, _ in
             MainActor.assumeIsolated { self?.bindCameras() }
         }
         bindDefaultInput()
-        bindProcesses()
         bindCameras()
     }
 
@@ -145,39 +152,22 @@ final class MicMonitor: ObservableObject {
         refresh()
     }
 
-    private func bindProcesses() {
-        for process in processes {
-            for var address in [Self.runningInputAddress, Self.processInputDevicesAddress] {
-                AudioObjectRemovePropertyListenerBlock(process, &address, .main, refreshListener)
-            }
-        }
-        // Dynotch itself never counts.
-        let ownID = UInt32(bitPattern: getpid())
-        processes = Self.objectList(system, Self.processListAddress)
-            .filter { Self.readUInt32($0, Self.processIDAddress) != ownID }
-        for process in processes {
-            for var address in [Self.runningInputAddress, Self.processInputDevicesAddress] {
-                guard AudioObjectHasProperty(process, &address) else { continue }
-                AudioObjectAddPropertyListenerBlock(process, &address, .main, refreshListener)
-            }
-        }
-        refresh()
+    /// What the client watcher found, per process, so a headset that's only playing doesn't count.
+    private func clientsChanged(inUse: Bool, answer: Int) {
+        guard answer > clientsAnswer else { return }
+        clientsAnswer = answer
+        if micInUse != inUse { micInUse = inUse }
     }
 
+    /// The default input: whether it's muted and there is one, and without a list of audio clients
+    /// whether it's running at all. The clients' part comes from `clients`.
     private func refresh() {
-        var address = Self.processListAddress
-        let inUse: Bool
-        if AudioObjectHasProperty(system, &address) {
-            // Per process, so a headset that's only playing doesn't count.
-            inUse = processes.contains {
-                (Self.readUInt32($0, Self.runningInputAddress) ?? 0) != 0 && Self.recordsFromDevice($0)
-            }
-        } else {
-            inUse = (Self.readUInt32(input, Self.deviceRunningAddress) ?? 0) != 0
+        if clients == nil {
+            let inUse = (Self.readUInt32(input, Self.deviceRunningAddress) ?? 0) != 0
+            if micInUse != inUse { micInUse = inUse }
         }
         let muted = currentlyMuted()
         let present = input != kAudioObjectUnknown
-        if micInUse != inUse { micInUse = inUse }
         if isMuted != muted { isMuted = muted }
         if hasInput != present { hasInput = present }
     }
@@ -274,7 +264,7 @@ final class MicMonitor: ObservableObject {
             && AudioObjectIsPropertySettable(object, &address, &settable) == noErr && settable.boolValue
     }
 
-    private static func readUInt32(_ object: AudioObjectID, _ address: AudioObjectPropertyAddress) -> UInt32? {
+    nonisolated fileprivate static func readUInt32(_ object: AudioObjectID, _ address: AudioObjectPropertyAddress) -> UInt32? {
         var address = address
         var value: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
@@ -303,7 +293,7 @@ final class MicMonitor: ObservableObject {
         AudioObjectSetPropertyData(object, &address, 0, nil, UInt32(MemoryLayout<Float32>.size), &value)
     }
 
-    private static func objectList(_ object: AudioObjectID, _ address: AudioObjectPropertyAddress) -> [AudioObjectID] {
+    nonisolated fileprivate static func objectList(_ object: AudioObjectID, _ address: AudioObjectPropertyAddress) -> [AudioObjectID] {
         var address = address
         var size: UInt32 = 0
         guard AudioObjectHasProperty(object, &address),
@@ -315,7 +305,7 @@ final class MicMonitor: ObservableObject {
 
     /// Whether `process` records from an input device. Siri's listener (corespeechd) and audio taps
     /// run input on no device, and macOS's own microphone indicator leaves them out too.
-    private static func recordsFromDevice(_ process: AudioObjectID) -> Bool {
+    nonisolated fileprivate static func recordsFromDevice(_ process: AudioObjectID) -> Bool {
         var address = processInputDevicesAddress
         guard AudioObjectHasProperty(process, &address) else { return true }
         return !objectList(process, processInputDevicesAddress).isEmpty
@@ -349,4 +339,167 @@ final class MicMonitor: ObservableObject {
         self.cameraInUse = cameraInUse
         hasInput = true
     }
+}
+
+/// Which of the Mac's audio clients record from an input device, for the on-air ring. Everything
+/// here runs on a queue of its own, so a busy `coreaudiod` never holds up the main thread.
+///
+/// A change to the list of clients comes in bursts (a browser opening its helpers, an app
+/// launching, earbuds connecting, waking from sleep), so it's taken `debounce` after the last of
+/// a burst, and only clients that came or went are touched. A client that starts or stops
+/// recording has only itself read again.
+final class AudioClientWatcher: @unchecked Sendable {
+    /// The Core Audio calls, apart so that tests can stand in for the audio system.
+    struct System: @unchecked Sendable {
+        var processes: @Sendable () -> [AudioObjectID]
+        var pid: @Sendable (AudioObjectID) -> pid_t?
+        /// Running input from an input device.
+        var isRecording: @Sendable (AudioObjectID) -> Bool
+        /// Calls `changed` on `queue` from now on whenever the list of clients changes.
+        var watchList: @Sendable (_ queue: DispatchQueue, _ changed: @escaping @Sendable () -> Void) -> Void
+        /// Calls `changed` on `queue` whenever the client starts or stops input or changes devices.
+        /// Returns what `unwatch` needs to stop that.
+        var watch: @Sendable (AudioObjectID, _ queue: DispatchQueue, _ changed: @escaping @Sendable () -> Void) -> AnyObject
+        var unwatch: @Sendable (AudioObjectID, _ token: AnyObject, _ queue: DispatchQueue) -> Void
+    }
+
+    private struct Client {
+        let token: AnyObject
+        var recording: Bool
+    }
+
+    let queue = DispatchQueue(label: "app.dynotch.mic.clients", qos: .userInitiated)
+    private let system: System
+    private let ownPID: pid_t
+    private let debounce: TimeInterval
+    /// Whether any client records, and a number that grows with each answer. On `queue`.
+    private let publish: @Sendable (_ inUse: Bool, _ answer: Int) -> Void
+
+    // All on `queue`.
+    private var clients: [AudioObjectID: Client] = [:]
+    /// Clients never watched: Dynotch's own. Kept so their PID isn't read again.
+    private var ignored: Set<AudioObjectID> = []
+    private var pendingList: DispatchWorkItem?
+    private var published: Bool?
+    private var answers = 0
+
+    init(system: System, ownPID: pid_t = getpid(), debounce: TimeInterval = 0.25,
+         publish: @escaping @Sendable (_ inUse: Bool, _ answer: Int) -> Void) {
+        self.system = system
+        self.ownPID = ownPID
+        self.debounce = debounce
+        self.publish = publish
+    }
+
+    /// Watches the list, and reads it once now.
+    func start() {
+        queue.async { [self] in
+            system.watchList(queue) { [weak self] in self?.listChanged() }
+            rebind()
+        }
+    }
+
+    /// Which clients came and which went, from the ones known and the list now.
+    static func diff(known: Set<AudioObjectID>, ignored: Set<AudioObjectID>,
+                     current: [AudioObjectID]) -> (added: [AudioObjectID], removed: [AudioObjectID]) {
+        let now = Set(current)
+        var seen: Set<AudioObjectID> = []
+        let added = current.filter { !known.contains($0) && !ignored.contains($0) && seen.insert($0).inserted }
+        let removed = known.filter { !now.contains($0) }.sorted()
+        return (added, removed)
+    }
+
+    // MARK: On the queue
+
+    private func listChanged() {
+        pendingList?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.rebind() }
+        pendingList = work
+        queue.asyncAfter(deadline: .now() + debounce, execute: work)
+    }
+
+    private func rebind() {
+        pendingList = nil
+        let current = system.processes()
+        let (added, removed) = Self.diff(known: Set(clients.keys), ignored: ignored, current: current)
+        for process in removed {
+            if let client = clients.removeValue(forKey: process) { system.unwatch(process, client.token, queue) }
+        }
+        ignored.formIntersection(current)
+        for process in added {
+            // Dynotch itself never counts.
+            if system.pid(process) == ownPID {
+                ignored.insert(process)
+                continue
+            }
+            // Watched before it's read, so a change in between isn't missed.
+            let token = system.watch(process, queue) { [weak self] in self?.clientChanged(process) }
+            clients[process] = Client(token: token, recording: system.isRecording(process))
+        }
+        answer()
+    }
+
+    private func clientChanged(_ process: AudioObjectID) {
+        guard clients[process] != nil else { return }
+        clients[process]?.recording = system.isRecording(process)
+        answer()
+    }
+
+    private func answer() {
+        let inUse = clients.values.contains { $0.recording }
+        guard inUse != published else { return }
+        published = inUse
+        answers += 1
+        publish(inUse, answers)
+    }
+
+    // MARK: For tests
+
+    /// The clients watched now, once everything already asked of the queue is done. Blocks.
+    func watchedClients() -> Set<AudioObjectID> {
+        queue.sync { Set(clients.keys) }
+    }
+}
+
+extension AudioClientWatcher.System {
+    /// A listener block and the properties it was added for, to take it off again.
+    private final class Listener {
+        let block: AudioObjectPropertyListenerBlock
+        var addresses: [AudioObjectPropertyAddress] = []
+
+        init(block: @escaping AudioObjectPropertyListenerBlock) {
+            self.block = block
+        }
+    }
+
+    static let live = AudioClientWatcher.System(
+        processes: {
+            MicMonitor.objectList(AudioObjectID(kAudioObjectSystemObject), MicMonitor.processListAddress)
+        },
+        pid: { process in
+            MicMonitor.readUInt32(process, MicMonitor.processIDAddress).map { pid_t(bitPattern: $0) }
+        },
+        isRecording: { process in
+            (MicMonitor.readUInt32(process, MicMonitor.runningInputAddress) ?? 0) != 0 && MicMonitor.recordsFromDevice(process)
+        },
+        watchList: { queue, changed in
+            var address = MicMonitor.processListAddress
+            AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &address, queue) { _, _ in changed() }
+        },
+        watch: { process, queue, changed in
+            let listener = Listener { _, _ in changed() }
+            for property in [MicMonitor.runningInputAddress, MicMonitor.processInputDevicesAddress] {
+                var address = property
+                guard AudioObjectHasProperty(process, &address),
+                      AudioObjectAddPropertyListenerBlock(process, &address, queue, listener.block) == noErr else { continue }
+                listener.addresses.append(property)
+            }
+            return listener
+        },
+        unwatch: { process, token, queue in
+            guard let listener = token as? Listener else { return }
+            for var address in listener.addresses {
+                AudioObjectRemovePropertyListenerBlock(process, &address, queue, listener.block)
+            }
+        })
 }

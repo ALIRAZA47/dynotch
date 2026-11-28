@@ -133,65 +133,54 @@ final class FocusHistory: ObservableObject {
     }
 }
 
-/// How the week's going, beside the switch on the Focus tab's second card: today and the week in
-/// numbers, and a bar for each day of the week, with today's in the Pomodoro's color. Nothing shows
-/// until there's a session this week, but it still takes the row's room, which keeps what's after it
-/// on the right.
+/// How the week's going, beside the Pomodoro's figure on Focus: a bar for each day of this week,
+/// today's in the accent, and the days' letters under them.
 struct FocusStrip: View {
+    var barHeight: CGFloat = 40
+    var barWidth: CGFloat = 11
+    var title = "THIS WEEK · MINUTES"
     @ObservedObject private var history = FocusHistory.shared
     @Environment(\.notchTheme) private var theme
 
     var body: some View {
         let summary = history.summary()
-        Group {
-            if summary.sessionsThisWeek > 0 {
-                // The notes' buttons share the row and keep their size, and the smallest notch has less of it.
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 6) {
-                        numbers(summary)
-                        bars(summary)
-                    }
-                    bars(summary)
-                    Color.clear.frame(width: 0, height: 0)
-                }
-                .help(Self.spoken(summary))
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel(Self.spoken(summary))
-            } else {
-                Color.clear.frame(height: 0)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .trailing)
-    }
-
-    private func numbers(_ summary: FocusHistory.Summary) -> some View {
-        Grid(alignment: .leading, horizontalSpacing: 4, verticalSpacing: 0) {
-            GridRow {
-                Text("Today").foregroundStyle(theme.tertiary)
-                Text("\(summary.sessionsToday) · \(Self.time(summary.minutesToday))")
-            }
-            GridRow {
-                Text("Week").foregroundStyle(theme.tertiary)
-                Text("\(summary.sessionsThisWeek) · \(Self.time(summary.minutesThisWeek))")
-            }
-        }
-        .font(NotchFont.numeric(9.5, .medium))
-        .foregroundStyle(theme.secondary)
-        .lineLimit(1)
-        .fixedSize()
-    }
-
-    private func bars(_ summary: FocusHistory.Summary) -> some View {
         let highest = max(summary.days.max() ?? 0, 1)
-        return HStack(alignment: .bottom, spacing: 1.5) {
-            ForEach(summary.days.indices, id: \.self) { day in
-                let isToday = day == summary.today
-                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
-                    .fill(isToday ? PomodoroTimer.Phase.focus.color : theme.primary.opacity(summary.days[day] > 0 ? 0.45 : 0.14))
-                    .frame(width: 3.5, height: max(3, 22 * CGFloat(summary.days[day]) / CGFloat(highest)))
+        let letters = Self.dayLetters(calendar: .current)
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(NotchFont.label)
+                .tracking(0.66)
+                .foregroundStyle(theme.secondary)
+                .lineLimit(1)
+                .fixedSize()
+            HStack(alignment: .bottom, spacing: barWidth < 11 ? 4 : 5) {
+                ForEach(summary.days.indices, id: \.self) { day in
+                    let minutes = summary.days[day]
+                    VStack(spacing: 4) {
+                        // Days with minutes are bright enough to read as bars; empty ones are a stub.
+                        RoundedRectangle(cornerRadius: 1, style: .continuous)
+                            .fill(day == summary.today ? theme.accent : minutes > 0 ? theme.tertiary : theme.hover)
+                            .frame(height: minutes > 0 ? max(4, barHeight * CGFloat(minutes) / CGFloat(highest)) : 3)
+                            .frame(height: barHeight, alignment: .bottom)
+                        Text(letters[day])
+                            .font(NotchFont.time(10.5, .medium))
+                            .foregroundStyle(day == summary.today ? theme.primary : theme.secondary)
+                    }
+                    .frame(width: barWidth)
+                }
             }
         }
-        .frame(height: 22, alignment: .bottom)
+        .fixedSize()
+        .help(Self.spoken(summary))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Self.spoken(summary))
+    }
+
+    /// The week's days as single letters, from its first day.
+    static func dayLetters(calendar: Calendar) -> [String] {
+        let symbols = calendar.veryShortStandaloneWeekdaySymbols
+        guard symbols.count == 7 else { return Array(repeating: "", count: 7) }
+        return (0..<7).map { symbols[(calendar.firstWeekday - 1 + $0) % 7] }
     }
 
     /// "50m", "3h 45m".
